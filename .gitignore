@@ -1,0 +1,70 @@
+# Binaries for programs and plugins
+*.exe
+*.exe~
+*.dll
+*.so
+*.dylib
+
+# Test binary, built with `go test -c`
+*.test
+
+# Output of the go coverage tool, specifically when used with -o flag
+*.out
+*.cover
+*.html
+
+# Go workspace file
+go.work
+go.work.sum
+
+# Dependency directories (remove the comment below if you do not use Go modules)
+# vendor/
+
+# Environment variables specific to the project
+.env
+.env.local
+*.env
+
+# OS-specific files
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+*~
+
+# IDE files
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# Build artifacts
+/dist/
+/build/
+/bin/
+/tmp/
+
+# Log files
+*.log
+logs/
+
+# Walgo specific output
+walgo
+walgo.exe
+walgo-*
+
+# Test artifacts
+coverage.txt
+coverage.out
+
+# Development files
+usefull-scripts/
+walrus-docs/
+
+# Temporary files
+.tmp/
+*.tmp
