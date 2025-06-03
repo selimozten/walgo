@@ -2,7 +2,7 @@
 
 [![Go Version](https://img.shields.io/badge/Go-1.22+-blue.svg)](https://golang.org)
 [![License](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
-[![Build Status](https://img.shields.io/badge/Build-Passing-brightgreen.svg)](#)
+[![Build Status](https://github.com/selimozten/walgo/actions/workflows/ci.yml/badge.svg)](https://github.com/selimozten/walgo/actions/workflows/ci.yml)
 
 Walgo is a powerful command-line tool that seamlessly bridges [Hugo](https://gohugo.io/) static site generation with [Walrus Sites](https://docs.walrus.site/walrus-sites/intro.html) decentralized storage. Deploy your Hugo sites to the decentralized web with ease, import content from Obsidian vaults, and manage your entire workflow from a single CLI.
 
