@@ -10,16 +10,27 @@ import (
 
 // TestWalgoCLIIntegration tests that the walgo CLI builds and basic commands work
 func TestWalgoCLIIntegration(t *testing.T) {
+	// Get the current working directory (should be the tests directory)
+	cwd, err := os.Getwd()
+	if err != nil {
+		t.Fatalf("Failed to get current working directory: %v", err)
+	}
+
+	// Get the parent directory (the walgo project root)
+	projectRoot := filepath.Dir(cwd)
+
 	// Build the walgo binary for testing
 	walgoBinary := filepath.Join(t.TempDir(), "walgo")
 	buildCmd := exec.Command("go", "build", "-o", walgoBinary, ".")
-	if err := buildCmd.Run(); err != nil {
-		t.Fatalf("Failed to build walgo binary: %v", err)
+	buildCmd.Dir = projectRoot // Build from the project root directory
+	output, err := buildCmd.CombinedOutput()
+	if err != nil {
+		t.Fatalf("Failed to build walgo binary: %v\nOutput: %s", err, string(output))
 	}
 
 	// Test that the binary runs and shows help
 	helpCmd := exec.Command(walgoBinary, "--help")
-	output, err := helpCmd.CombinedOutput()
+	output, err = helpCmd.CombinedOutput()
 	if err != nil {
 		t.Fatalf("Failed to run walgo --help: %v", err)
 	}
@@ -44,11 +55,22 @@ func TestWalgoCLIIntegration(t *testing.T) {
 
 // TestWalgoInitCommand tests the init command creates proper directory structure
 func TestWalgoInitCommand(t *testing.T) {
+	// Get the current working directory (should be the tests directory)
+	cwd, err := os.Getwd()
+	if err != nil {
+		t.Fatalf("Failed to get current working directory: %v", err)
+	}
+
+	// Get the parent directory (the walgo project root)
+	projectRoot := filepath.Dir(cwd)
+
 	// Build the walgo binary
 	walgoBinary := filepath.Join(t.TempDir(), "walgo")
 	buildCmd := exec.Command("go", "build", "-o", walgoBinary, ".")
-	if err := buildCmd.Run(); err != nil {
-		t.Fatalf("Failed to build walgo binary: %v", err)
+	buildCmd.Dir = projectRoot // Build from the project root directory
+	output, err := buildCmd.CombinedOutput()
+	if err != nil {
+		t.Fatalf("Failed to build walgo binary: %v\nOutput: %s", err, string(output))
 	}
 
 	// Create a temporary directory for the test site
@@ -58,7 +80,7 @@ func TestWalgoInitCommand(t *testing.T) {
 	// Run walgo init
 	initCmd := exec.Command(walgoBinary, "init", siteName)
 	initCmd.Dir = testDir
-	output, err := initCmd.CombinedOutput()
+	output, err = initCmd.CombinedOutput()
 
 	// Note: This may fail if Hugo is not installed, which is OK for integration testing
 	if err != nil {
@@ -102,11 +124,22 @@ func TestWalgoInitCommand(t *testing.T) {
 
 // TestWalgoBuildCommand tests the build command validation
 func TestWalgoBuildCommand(t *testing.T) {
+	// Get the current working directory (should be the tests directory)
+	cwd, err := os.Getwd()
+	if err != nil {
+		t.Fatalf("Failed to get current working directory: %v", err)
+	}
+
+	// Get the parent directory (the walgo project root)
+	projectRoot := filepath.Dir(cwd)
+
 	// Build the walgo binary
 	walgoBinary := filepath.Join(t.TempDir(), "walgo")
 	buildCmd := exec.Command("go", "build", "-o", walgoBinary, ".")
-	if err := buildCmd.Run(); err != nil {
-		t.Fatalf("Failed to build walgo binary: %v", err)
+	buildCmd.Dir = projectRoot // Build from the project root directory
+	output, err := buildCmd.CombinedOutput()
+	if err != nil {
+		t.Fatalf("Failed to build walgo binary: %v\nOutput: %s", err, string(output))
 	}
 
 	// Create a temporary directory
@@ -115,7 +148,7 @@ func TestWalgoBuildCommand(t *testing.T) {
 	// Run walgo build in empty directory (should fail gracefully)
 	buildTestCmd := exec.Command(walgoBinary, "build")
 	buildTestCmd.Dir = testDir
-	output, err := buildTestCmd.CombinedOutput()
+	output, err = buildTestCmd.CombinedOutput()
 
 	// Should fail because there's no walgo.yaml or Hugo site
 	if err == nil {
@@ -131,16 +164,27 @@ func TestWalgoBuildCommand(t *testing.T) {
 
 // TestWalgoCommandsExist tests that all expected commands are available
 func TestWalgoCommandsExist(t *testing.T) {
+	// Get the current working directory (should be the tests directory)
+	cwd, err := os.Getwd()
+	if err != nil {
+		t.Fatalf("Failed to get current working directory: %v", err)
+	}
+
+	// Get the parent directory (the walgo project root)
+	projectRoot := filepath.Dir(cwd)
+
 	// Build the walgo binary
 	walgoBinary := filepath.Join(t.TempDir(), "walgo")
 	buildCmd := exec.Command("go", "build", "-o", walgoBinary, ".")
-	if err := buildCmd.Run(); err != nil {
-		t.Fatalf("Failed to build walgo binary: %v", err)
+	buildCmd.Dir = projectRoot // Build from the project root directory
+	output, err := buildCmd.CombinedOutput()
+	if err != nil {
+		t.Fatalf("Failed to build walgo binary: %v\nOutput: %s", err, string(output))
 	}
 
 	// Test that all expected commands are available
 	helpCmd := exec.Command(walgoBinary, "--help")
-	output, err := helpCmd.CombinedOutput()
+	output, err = helpCmd.CombinedOutput()
 	if err != nil {
 		t.Fatalf("Failed to run walgo --help: %v", err)
 	}

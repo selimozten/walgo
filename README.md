@@ -92,6 +92,23 @@ go install github.com/selimozten/walgo@latest
 walgo --help
 ```
 
+### Method 3: Docker
+
+```bash
+# Build the Docker image
+docker build -t walgo .
+
+# Run walgo in a container
+docker run --rm walgo --help
+
+# Mount your site directory to work with local files
+docker run --rm -v $(pwd):/workspace -w /workspace walgo init my-site
+
+# For interactive use, create an alias
+alias walgo-docker='docker run --rm -v $(pwd):/workspace -w /workspace walgo'
+walgo-docker build
+```
+
 ### Install Required Dependencies
 
 #### Hugo Installation
@@ -881,6 +898,17 @@ We're always interested in new ideas! Please:
 - [Walrus CLI](https://github.com/MystenLabs/walrus-sites) - Direct Walrus interaction
 
 ---
+
+## 📦 Releases
+
+- **Latest Release**: [v0.1.0](https://github.com/selimozten/walgo/releases/tag/v0.1.0)
+- **All Releases**: [GitHub Releases](https://github.com/selimozten/walgo/releases)
+
+Each release includes:
+- Pre-built binaries for Linux, macOS, and Windows
+- Docker image
+- Complete changelog
+- Upgrade instructions
 
 ## 📄 License
 
