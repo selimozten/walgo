@@ -194,7 +194,8 @@ walgo build --clean
 
 On-chain (requires site-builder setup and a funded wallet):
 ```bash
-walgo setup --network testnet   # writes ~/.config/walrus/sites-config.yaml
+walgo setup-deps --with-site-builder --with-walrus --network testnet
+walgo setup --network testnet --force   # writes ~/.config/walrus/sites-config.yaml
 walgo deploy --epochs 5
 ```
 
@@ -280,7 +281,12 @@ theme = 'your-theme'
 
 The site-builder tool uses its own configuration at `~/.config/walrus/sites-config.yaml`:
 
-Walgo writes `~/.config/walrus/sites-config.yaml` with absolute paths if you run `walgo setup --force`. Network selection for on-chain deploys happens there.
+Walgo writes `~/.config/walrus/sites-config.yaml` with absolute paths if you run `walgo setup --force`. Network selection for on-chain deploys happens there. You can install and wire dependencies automatically via:
+
+```bash
+walgo setup-deps --with-site-builder --with-walrus --network testnet
+walgo doctor --fix-paths
+```
 
 ---
 
@@ -354,6 +360,45 @@ walgo deploy -e 10                   # Deploy for 10 epochs
 - `--force, -f`: Force deploy even if no changes detected
 
 Save the object ID from the deployment output.
+#### `walgo deploy-http [flags]`
+Publish built files via Walrus HTTP APIs on Testnet. Returns a quiltId and per-file patchIds.
+
+```bash
+walgo deploy-http \
+  --publisher https://publisher.walrus-testnet.walrus.space \
+  --aggregator https://aggregator.walrus-testnet.walrus.space \
+  --epochs 1
+```
+
+**Flags:**
+- `--publisher string` Testnet publisher base URL
+- `--aggregator string` Testnet aggregator base URL
+- `--epochs, -e int` Storage epochs (default: 1)
+
+#### `walgo setup-deps [flags]`
+Download and install `site-builder` and `walrus` to a managed bin dir and wire `walrus_binary` in `sites-config.yaml`.
+
+```bash
+walgo setup-deps --with-site-builder --with-walrus --network testnet
+```
+
+**Flags:**
+- `--bin-dir string` Install dir (default: ~/.config/walgo/bin)
+- `--with-site-builder` Install site-builder (default: true)
+- `--with-walrus` Install walrus (default: true)
+- `--with-hugo` Ensure Hugo is installed (prints guidance if missing)
+- `--network string` Network for downloads (testnet or mainnet; default: testnet)
+
+#### `walgo doctor [flags]`
+Diagnose environment issues (binaries, Sui env/address, gas). Can expand tildes in `sites-config.yaml` to absolute paths.
+
+```bash
+walgo doctor --fix-paths
+```
+
+**Flags:**
+- `--fix-paths` Rewrite tildes to absolute paths in `sites-config.yaml`
+
 
 #### `walgo update [object-id] [flags]`
 Update an existing Walrus Site.

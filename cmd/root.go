@@ -13,27 +13,29 @@ var cfgFile string
 // rootCmd represents the base command when called without any subcommands
 var rootCmd = &cobra.Command{
 	Use:   "walgo",
-	Short: "Walgo is a CLI tool to integrate Hugo with Walrus Sites.",
-	Long: `Walgo provides a seamless bridge for Hugo users to build and deploy 
-static sites to the Walrus decentralized storage protocol.
+	Short: "Walgo ships static sites to Walrus (on-chain and HTTP paths).",
+	Long: `Walgo is an opinionated CLI for publishing static sites to Walrus.
 
-Key Features:
-• Initialize Hugo sites pre-configured for Walrus deployment
-• Build and serve Hugo sites locally  
-• Deploy sites to Walrus decentralized storage
-• Import content from Obsidian vaults
-• Manage SuiNS domains for your sites
-• Update existing sites efficiently
+What you can do:
+• init/new/build/serve
+• optimize HTML/CSS/JS
+• On-chain: deploy, update, status, convert, domain
+• HTTP (Testnet): deploy-http to publisher and fetch via aggregator (no wallet)
+• doctor: diagnose config, gas, and PATH issues
+• setup: write sites-config.yaml; setup-deps: install site-builder/walrus
 
-Quick Start:
-  walgo init my-site      # Create a new Hugo site configured for Walrus
-  cd my-site             # Navigate to your site directory
-  walgo new posts/hello  # Create new content
-  walgo build            # Build your site
-  walgo serve            # Preview locally (optional)
-  walgo deploy           # Deploy to Walrus Sites
+Quick start:
+  walgo init my-site
+  cd my-site
+  walgo build
+  # HTTP (no wallet)
+  walgo deploy-http \
+    --publisher https://publisher.walrus-testnet.walrus.space \
+    --aggregator https://aggregator.walrus-testnet.walrus.space --epochs 1
+  # On-chain (requires wallet & funds)
+  walgo setup --network testnet --force && walgo doctor --fix-paths && walgo deploy
 
-Learn more: https://github.com/selimozten/walgo`,
+Docs: https://github.com/selimozten/walgo`,
 	// Uncomment the following line if your bare application
 	// has an action associated with it:
 	// Run: func(cmd *cobra.Command, args []string) { },

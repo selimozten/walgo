@@ -9,6 +9,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 - New `deploy-http` command to publish the built site via Walrus HTTP APIs (publisher/aggregator) on Testnet. No wallet/funds required; returns quiltId and patchIds.
+- New `doctor` command to diagnose environment issues (binaries, Sui env/address, gas), and optionally fix tildes in `sites-config.yaml` with `--fix-paths`.
+- New `setup-deps` command to download and install `site-builder` and `walrus` to a managed bin dir and wire `walrus_binary` in `sites-config.yaml`.
 - `walgo setup --force` flag to overwrite an existing `sites-config.yaml` with absolute wallet/config paths.
 - Optional `--network devnet` to scaffold config for HTTP-only workflows. (On-chain deploy on devnet still requires proper Walrus client objects.)
 
