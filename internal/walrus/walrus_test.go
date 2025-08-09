@@ -33,7 +33,7 @@ func TestDeploySite(t *testing.T) {
 			siteBuilderFound: true,
 			configExists:     true,
 			expectedError:    false,
-			expectedInArgs:   []string{"publish", "/path/to/public", "--epochs", "5", "--context", "testnet"},
+			expectedInArgs:   []string{"publish", "/path/to/public", "--epochs", "5"},
 		},
 		{
 			name:      "Zero epochs",
@@ -45,7 +45,7 @@ func TestDeploySite(t *testing.T) {
 			siteBuilderFound: true,
 			configExists:     true,
 			expectedError:    false,
-			expectedInArgs:   []string{"publish", "/path/to/public", "--epochs", "0", "--context", "testnet"},
+			expectedInArgs:   []string{"publish", "/path/to/public", "--epochs", "0"},
 		},
 		{
 			name:      "site-builder not found",
@@ -158,7 +158,7 @@ func TestUpdateSite(t *testing.T) {
 			siteBuilderFound: true,
 			configExists:     true,
 			expectedError:    false,
-			expectedInArgs:   []string{"update", "--epochs", "3", "/path/to/public", "0xe674c144119a37a0ed9cef26a962c3fdfbdbfd86a3b3db562ee81d5542a4eccf", "--context", "testnet"},
+			expectedInArgs:   []string{"update", "--epochs", "3", "/path/to/public", "0xe674c144119a37a0ed9cef26a962c3fdfbdbfd86a3b3db562ee81d5542a4eccf"},
 		},
 		{
 			name:             "Default epochs",
@@ -168,7 +168,7 @@ func TestUpdateSite(t *testing.T) {
 			siteBuilderFound: true,
 			configExists:     true,
 			expectedError:    false,
-			expectedInArgs:   []string{"update", "--epochs", "0", "/path/to/public", "0xe674c144119a37a0ed9cef26a962c3fdfbdbfd86a3b3db562ee81d5542a4eccf", "--context", "testnet"},
+			expectedInArgs:   []string{"update", "--epochs", "0", "/path/to/public", "0xe674c144119a37a0ed9cef26a962c3fdfbdbfd86a3b3db562ee81d5542a4eccf"},
 		},
 		{
 			name:          "Empty object ID",
@@ -269,7 +269,7 @@ func TestGetSiteStatus(t *testing.T) {
 			siteBuilderFound: true,
 			configExists:     true,
 			expectedError:    false,
-			expectedInArgs:   []string{"sitemap", "0xe674c144119a37a0ed9cef26a962c3fdfbdbfd86a3b3db562ee81d5542a4eccf", "--context", "testnet"},
+			expectedInArgs:   []string{"sitemap", "0xe674c144119a37a0ed9cef26a962c3fdfbdbfd86a3b3db562ee81d5542a4eccf"},
 		},
 		{
 			name:          "Empty object ID",
@@ -366,7 +366,7 @@ func TestConvertObjectID(t *testing.T) {
 			siteBuilderFound: true,
 			configExists:     true,
 			expectedError:    false,
-			expectedInArgs:   []string{"convert", "0xe674c144119a37a0ed9cef26a962c3fdfbdbfd86a3b3db562ee81d5542a4eccf", "--context", "testnet"},
+			expectedInArgs:   []string{"convert", "0xe674c144119a37a0ed9cef26a962c3fdfbdbfd86a3b3db562ee81d5542a4eccf"},
 		},
 		{
 			name:             "Short object ID",
@@ -374,7 +374,7 @@ func TestConvertObjectID(t *testing.T) {
 			siteBuilderFound: true,
 			configExists:     true,
 			expectedError:    false,
-			expectedInArgs:   []string{"convert", "0x123abc", "--context", "testnet"},
+			expectedInArgs:   []string{"convert", "0x123abc"},
 		},
 		{
 			name:          "Empty object ID",

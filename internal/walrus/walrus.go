@@ -100,7 +100,7 @@ func CheckSiteBuilderSetup() error {
 }
 
 // SetupSiteBuilder helps users set up the site-builder configuration
-func SetupSiteBuilder(network string) error {
+func SetupSiteBuilder(network string, force bool) error {
 	if network == "" {
 		network = "testnet" // Default to testnet for development
 	}
@@ -117,9 +117,9 @@ func SetupSiteBuilder(network string) error {
 
 	configPath := filepath.Join(configDir, "sites-config.yaml")
 
-	// Check if config already exists
-	if _, err := os.Stat(configPath); err == nil {
-		return fmt.Errorf("site-builder config already exists at %s. Remove it first if you want to recreate it", configPath)
+	// If config exists and not forcing, stop. If forcing, proceed to overwrite
+	if _, err := os.Stat(configPath); err == nil && !force {
+		return fmt.Errorf("site-builder config already exists at %s. Use --force to overwrite", configPath)
 	}
 
 	// Create default configuration based on network
@@ -132,22 +132,31 @@ func SetupSiteBuilder(network string) error {
 	case "testnet":
 		packageID = "0xf99aee9f21493e1590e7e5a9aea6f343a1f381031a04a732724871fc294be799"
 		rpcURL = "https://fullnode.testnet.sui.io:443"
+	case "devnet":
+		// Devnet package may change frequently; using testnet package as a placeholder is not ideal,
+		// but allows configuration to proceed for HTTP-only workflows.
+		packageID = "0xf99aee9f21493e1590e7e5a9aea6f343a1f381031a04a732724871fc294be799"
+		rpcURL = "https://fullnode.devnet.sui.io:443"
 	default:
-		return fmt.Errorf("unsupported network: %s. Use 'mainnet' or 'testnet'", network)
+		return fmt.Errorf("unsupported network: %s. Use 'mainnet', 'testnet' or 'devnet'", network)
 	}
+
+	walletPath := filepath.Join(homeDir, ".sui", "sui_config", "client.yaml")
+	walrusConfig := filepath.Join(homeDir, ".config", "walrus", "client_config.yaml")
+	walrusBinary := "/usr/local/bin/walrus"
 
 	configContent := fmt.Sprintf(`contexts:
   %s:
     package: %s
-    # general:
-    #   rpc_url: %s
-    #   wallet: /path/to/.sui/sui_config/client.yaml
-    #   walrus_binary: /path/to/walrus
-    #   walrus_config: /path/to/%s/client_config.yaml
-    #   gas_budget: 500000000
+    general:
+      rpc_url: %s
+      wallet: %s
+      walrus_binary: %s
+      walrus_config: %s
+      gas_budget: 500000000
 
 default_context: %s
-`, network, packageID, rpcURL, network, network)
+`, network, packageID, rpcURL, walletPath, walrusBinary, walrusConfig, network)
 
 	if err := os.WriteFile(configPath, []byte(configContent), 0644); err != nil {
 		return fmt.Errorf("failed to write site-builder config: %w", err)
@@ -181,12 +190,11 @@ func DeploySite(deployDir string, walrusCfg config.WalrusConfig, epochs int) (*S
 	}
 
 	// For new sites, use 'site-builder publish'
-	// site-builder publish <directory> --epochs <number> --context testnet
+	// site-builder publish <directory> --epochs <number>
 	args := []string{
 		"publish",
 		deployDir,
 		"--epochs", fmt.Sprintf("%d", epochs),
-		"--context", "testnet",
 	}
 
 	fmt.Printf("Executing: %s %s\n", builderPath, strings.Join(args, " "))
@@ -261,13 +269,12 @@ func UpdateSite(deployDir, objectID string, epochs int) (*SiteBuilderOutput, err
 		return nil, fmt.Errorf("'%s' CLI not found. Please install it and ensure it's in your PATH", siteBuilderCmd)
 	}
 
-	// site-builder update --epochs <number> <directory> <object-id> --context testnet
+	// site-builder update --epochs <number> <directory> <object-id>
 	args := []string{
 		"update",
 		"--epochs", fmt.Sprintf("%d", epochs),
 		deployDir,
 		objectID,
-		"--context", "testnet",
 	}
 
 	fmt.Printf("Executing: %s %s\n", builderPath, strings.Join(args, " "))
@@ -331,7 +338,6 @@ func GetSiteStatus(objectID string) (*SiteBuilderOutput, error) {
 	args := []string{
 		"sitemap",
 		objectID,
-		"--context", "testnet",
 	}
 
 	fmt.Printf("Executing: %s %s\n", builderPath, strings.Join(args, " "))
@@ -389,7 +395,6 @@ func ConvertObjectID(objectID string) (string, error) {
 	args := []string{
 		"convert",
 		objectID,
-		"--context", "testnet",
 	}
 
 	fmt.Printf("Executing: %s %s\n", builderPath, strings.Join(args, " "))
@@ -412,14 +417,34 @@ func ConvertObjectID(objectID string) (string, error) {
 
 	var base36ID string
 	if stdout.Len() > 0 {
-		base36ID = strings.TrimSpace(stdout.String())
-		fmt.Printf("Base36 representation: %s\n", base36ID)
+		// Extract the last non-empty token that looks like base36 (lowercase letters and digits)
+		out := stdout.String()
+		lines := strings.Split(out, "\n")
+		for i := len(lines) - 1; i >= 0; i-- {
+			candidate := strings.TrimSpace(lines[i])
+			if candidate == "" {
+				continue
+			}
+			// If line contains spaces, take the last whitespace-separated token
+			if strings.Contains(candidate, " ") {
+				parts := strings.Fields(candidate)
+				candidate = parts[len(parts)-1]
+			}
+			lower := strings.ToLower(candidate)
+			if lower == candidate && regexp.MustCompile(`^[0-9a-z]+$`).MatchString(candidate) {
+				base36ID = candidate
+				break
+			}
+		}
 
-		// Try to generate portal URLs
 		if base36ID != "" {
+			fmt.Printf("Base36 representation: %s\n", base36ID)
 			fmt.Printf("\n🌐 Direct access URLs:\n")
 			fmt.Printf("   https://%s.wal.app\n", base36ID)
 			fmt.Printf("   http://%s.localhost:3000 (local portal)\n", base36ID)
+		} else {
+			// Fallback: show raw output for debugging
+			fmt.Printf("Warning: could not parse Base36 ID from output. Raw output follows:\n%s\n", out)
 		}
 	}
 

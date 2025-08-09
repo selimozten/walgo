@@ -7,6 +7,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- New `deploy-http` command to publish the built site via Walrus HTTP APIs (publisher/aggregator) on Testnet. No wallet/funds required; returns quiltId and patchIds.
+- `walgo setup --force` flag to overwrite an existing `sites-config.yaml` with absolute wallet/config paths.
+- Optional `--network devnet` to scaffold config for HTTP-only workflows. (On-chain deploy on devnet still requires proper Walrus client objects.)
+
+### Changed
+- Removed deprecated `--context` flag usage in site-builder calls. Network selection now comes from `~/.config/walrus/sites-config.yaml`.
+- Improved `init` guidance to show HTTP vs on-chain deployment options.
+
+### Fixed
+- `convert` command now parses Base36 cleanly even when `site-builder` prints log lines; outputs proper Base36 IDs and URLs.
+
+### Known limitations
+- On-chain `deploy`/`update` still require a correctly configured Walrus client and a funded Sui wallet on the selected network. Testnet HTTP publishing can be used as a no-funds alternative.
+
 ## [0.1.0] - 2024-12-19
 
 ### Added

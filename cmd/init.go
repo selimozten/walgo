@@ -60,7 +60,9 @@ file tailored for Walrus Sites deployment.`,
 		fmt.Println("- Customize your Hugo site configuration (e.g., config.toml or hugo.toml in themes). A hugo.toml has been created.")
 		fmt.Printf("- Review and update %s/walgo.yaml with your Walrus project details.\n", siteName)
 		fmt.Printf("- cd %s\n", siteName)
-		fmt.Println("- Start adding content and then run 'walgo build' and 'walgo deploy'.")
+		fmt.Println("- Start adding content and then run 'walgo build'.")
+		fmt.Println("- Option A (HTTP): 'walgo deploy-http --publisher https://publisher.walrus-testnet.walrus.space --aggregator https://aggregator.walrus-testnet.walrus.space' (no funds required)")
+		fmt.Println("- Option B (On-chain): 'walgo setup --network testnet' then 'walgo deploy' (requires funded Sui wallet)")
 	},
 }
 

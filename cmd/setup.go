@@ -37,15 +37,20 @@ The configuration will be created at ~/.config/walrus/sites-config.yaml`,
 
 		fmt.Printf("Setting up site-builder configuration for %s...\n", network)
 
-		// Check if already configured
-		if err := walrus.CheckSiteBuilderSetup(); err == nil {
-			fmt.Println("✓ site-builder is already configured!")
-			fmt.Println("If you want to reconfigure, delete ~/.config/walrus/sites-config.yaml first")
-			return
+		// Determine if forcing overwrite
+		force, _ := cmd.Flags().GetBool("force")
+
+		// Check if already configured (and not forcing)
+		if !force {
+			if err := walrus.CheckSiteBuilderSetup(); err == nil {
+				fmt.Println("✓ site-builder is already configured!")
+				fmt.Println("Use --force to overwrite the configuration, or delete ~/.config/walrus/sites-config.yaml")
+				return
+			}
 		}
 
 		// Setup site-builder configuration
-		if err := walrus.SetupSiteBuilder(network); err != nil {
+		if err := walrus.SetupSiteBuilder(network, force); err != nil {
 			fmt.Fprintf(os.Stderr, "Error setting up site-builder: %v\n", err)
 			os.Exit(1)
 		}
@@ -59,4 +64,5 @@ func init() {
 	rootCmd.AddCommand(setupCmd)
 
 	setupCmd.Flags().StringP("network", "n", "testnet", "Network to configure (testnet or mainnet)")
+	setupCmd.Flags().Bool("force", false, "Overwrite existing site-builder configuration if present")
 }

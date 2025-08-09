@@ -1,34 +1,25 @@
-# Walgo - Hugo & Walrus Sites Integration CLI
+# Walgo
 
 [![Go Version](https://img.shields.io/badge/Go-1.22+-blue.svg)](https://golang.org)
 [![License](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
 [![Build Status](https://github.com/selimozten/walgo/actions/workflows/ci.yml/badge.svg)](https://github.com/selimozten/walgo/actions/workflows/ci.yml)
 
-Walgo is a powerful command-line tool that seamlessly bridges [Hugo](https://gohugo.io/) static site generation with [Walrus Sites](https://docs.walrus.site/walrus-sites/intro.html) decentralized storage. Deploy your Hugo sites to the decentralized web with ease, import content from Obsidian vaults, and manage your entire workflow from a single CLI.
+Walgo is an opinionated CLI for shipping static sites to Walrus. It handles builds, asset optimization, and two deployment paths: on-chain (via site-builder) and HTTP (via public Testnet endpoints). The goal is practical defaults, fast iteration, and a clean developer experience.
 
-## 🚀 Project Status
+## Project status
 
-✅ **Complete & Production Ready** - All core functionality has been implemented, tested, and is ready for use.
+Stable core; actively evolving UX. On-chain deploy/update works with a correctly configured Walrus client and a funded Sui wallet. For quick trials and CI-friendly previews, use the built-in HTTP publish path on Testnet (no wallet required).
 
 ---
 
-## 🌟 Features
+## What you can do
 
-### Core Functionality
-- ✅ **Hugo Integration**: Initialize, build, and serve Hugo sites with enhanced workflows
-- ✅ **Walrus Deployment**: Deploy and update sites on Walrus decentralized storage
-- ✅ **Obsidian Import**: Convert Obsidian vaults to Hugo-compatible markdown
-- ✅ **SuiNS Domain Management**: Get step-by-step domain configuration guidance
-- ✅ **Site Management**: Check status, convert object IDs, and manage resources
-
-### Advanced Features
-- 🔧 **Wikilink Conversion**: Automatically convert `[[wikilinks]]` to Hugo-compatible markdown
-- 📁 **Asset Management**: Handle images, PDFs, and other attachments seamlessly  
-- ⚙️ **Flexible Configuration**: YAML-based configuration with sensible defaults
-- 🔄 **Efficient Updates**: Update existing sites without full redeployment
-- 📊 **Resource Monitoring**: Check site status and resource utilization
-- 🎯 **Multi-format Support**: Support for YAML, TOML, and JSON frontmatter
-- ⚡ **Asset Optimization**: Built-in HTML, CSS, and JavaScript minification and optimization
+- Init a site and create content
+- Build and optimize assets (HTML/CSS/JS)
+- Publish to Walrus in two ways:
+  - On-chain: `deploy`, `update`, `status`, `convert`, `domain`
+  - HTTP (Testnet): `deploy-http` to a publisher; fetch via aggregator
+- Import from Obsidian vaults (wikilinks, attachments)
 
 ---
 
@@ -65,7 +56,7 @@ Walgo is a powerful command-line tool that seamlessly bridges [Hugo](https://goh
 
 ## 📦 Installation
 
-### Method 1: Build from Source (Recommended)
+### Build from source
 
 ```bash
 # Clone the repository
@@ -82,7 +73,7 @@ sudo mv walgo /usr/local/bin/
 walgo --help
 ```
 
-### Method 2: Go Install
+### Go install
 
 ```bash
 # Install directly with Go
@@ -92,7 +83,7 @@ go install github.com/selimozten/walgo@latest
 walgo --help
 ```
 
-### Method 3: Docker
+### Docker
 
 ```bash
 # Build the Docker image
@@ -154,7 +145,7 @@ walgo --help
 
 ---
 
-## 🚀 Quick Start
+## Quick start
 
 ### 1. Create Your First Site
 
@@ -199,21 +190,24 @@ walgo serve
 walgo build --clean
 ```
 
-### 4. Deploy to Walrus
+### 4. Deploy
 
+On-chain (requires site-builder setup and a funded wallet):
 ```bash
-# Deploy to Walrus Sites (stores for 1 epoch by default)
-walgo deploy
-
-# Deploy for multiple epochs (longer storage duration)
+walgo setup --network testnet   # writes ~/.config/walrus/sites-config.yaml
 walgo deploy --epochs 5
-
-# The output will show your site's object ID - save this!
-# Example output:
-# New site object ID: 0xe674c144119a37a0ed9cef26a962c3fdfbdbfd86a3b3db562ee81d5542a4eccf
 ```
 
-### 5. Configure Domain and Update Site
+HTTP (Testnet, no wallet required):
+```bash
+walgo deploy-http \
+  --publisher https://publisher.walrus-testnet.walrus.space \
+  --aggregator https://aggregator.walrus-testnet.walrus.space \
+  --epochs 1
+```
+This prints a quiltId and per-file patchIds. You can fetch files back from the aggregator using the patchIds.
+
+### 5. Configure domain and update site
 
 ```bash
 # Update walgo.yaml with your site's object ID
@@ -231,7 +225,7 @@ walgo update --epochs 3
 
 ---
 
-## ⚙️ Configuration
+## Configuration
 
 ### Primary Configuration (`walgo.yaml`)
 
@@ -282,20 +276,15 @@ theme = 'your-theme'
       unsafe = true  # Allow HTML in markdown
 ```
 
-### Walrus site-builder Configuration
+### Walrus site-builder configuration
 
 The site-builder tool uses its own configuration at `~/.config/walrus/sites-config.yaml`:
 
-```yaml
-package: "0x..."  # Walrus Sites package object ID
-rpc_url: "https://fullnode.mainnet.sui.io:443"
-wallet: "~/.sui/sui_config/client.yaml"
-gas_budget: 50000000
-```
+Walgo writes `~/.config/walrus/sites-config.yaml` with absolute paths if you run `walgo setup --force`. Network selection for on-chain deploys happens there.
 
 ---
 
-## 📖 Command Reference
+## Command reference
 
 ### Core Site Management
 
@@ -349,7 +338,7 @@ walgo new docs/api/overview.md       # Documentation
 walgo new about.md                   # Top-level page
 ```
 
-### Walrus Deployment
+### Walrus deployment
 
 #### `walgo deploy [flags]`
 Deploy a new site to Walrus Sites.
@@ -364,7 +353,7 @@ walgo deploy -e 10                   # Deploy for 10 epochs
 - `--epochs, -e int`: Number of epochs to store data (default: 1)
 - `--force, -f`: Force deploy even if no changes detected
 
-**Important:** Save the object ID from the deployment output!
+Save the object ID from the deployment output.
 
 #### `walgo update [object-id] [flags]`
 Update an existing Walrus Site.
@@ -447,7 +436,7 @@ walgo import ~/Vault --convert-wikilinks=false
 
 ---
 
-## 🔄 Workflows
+## Workflows
 
 ### Blog Publishing Workflow
 
@@ -523,7 +512,7 @@ walgo domain projectdocs
 
 ---
 
-## 🔬 Advanced Usage
+## Advanced usage
 
 ### Multiple Environment Configuration
 
@@ -607,7 +596,7 @@ echo "Deployment complete!"
 
 ---
 
-## 🐛 Troubleshooting
+## Troubleshooting
 
 ### Common Issues
 
@@ -643,7 +632,7 @@ sudo apt install hugo
 hugo version
 ```
 
-#### `ProjectID not set` Error
+#### `ProjectID not set`
 **Problem:** The walgo.yaml file doesn't have a valid Walrus project ID.
 
 **Solution:**
@@ -663,7 +652,7 @@ walgo build
 walgo deploy
 ```
 
-#### Import Issues
+#### Import issues
 **Problem:** Obsidian import fails or produces unexpected results.
 
 **Solutions:**
@@ -681,7 +670,7 @@ chmod -R 755 /path/to/vault
 walgo import /path/to/vault --overwrite
 ```
 
-### Debug Mode
+### Debug mode
 
 Enable verbose output for debugging:
 
@@ -694,7 +683,7 @@ walgo deploy
 hugo --verbose
 ```
 
-### Log Files
+### Log files
 
 Check logs for more information:
 
@@ -709,7 +698,7 @@ site-builder --help  # Check for log options
 tail -f /var/log/system.log | grep walgo
 ```
 
-### Performance Issues
+### Performance issues
 
 If experiencing slow performance:
 
@@ -727,9 +716,9 @@ df -h
 
 ---
 
-## 🛠️ Development
+## Development
 
-### Building from Source
+### Building from source
 
 ```bash
 # Clone repository
@@ -811,7 +800,7 @@ walgo/
 
 ---
 
-## 🤝 Contributing
+## Contributing
 
 We welcome contributions! Here's how to get started:
 
@@ -856,7 +845,7 @@ We're always interested in new ideas! Please:
 
 ---
 
-## 📊 Performance & Best Practices
+## Performance & best practices
 
 ### Site Performance
 
@@ -899,7 +888,7 @@ We're always interested in new ideas! Please:
 
 ---
 
-## 📦 Releases
+## Releases
 
 - **Latest Release**: [v0.1.0](https://github.com/selimozten/walgo/releases/tag/v0.1.0)
 - **All Releases**: [GitHub Releases](https://github.com/selimozten/walgo/releases)
