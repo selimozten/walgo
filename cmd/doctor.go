@@ -29,56 +29,205 @@ type sitesConfig struct {
 var doctorCmd = &cobra.Command{
 	Use:   "doctor",
 	Short: "Check environment and configuration for on-chain and HTTP deploys.",
+	Long: `Diagnose your Walgo environment and check for common issues.
+
+This command checks:
+- Required binaries (hugo, site-builder, walrus, sui)
+- Sui client configuration and active address
+- Wallet gas balance
+- Configuration files
+- Provides auto-fix suggestions
+
+Examples:
+  walgo doctor              # Run diagnostics
+  walgo doctor --fix-paths  # Fix tilde paths in config
+  walgo doctor --fix-all    # Auto-fix all issues`,
 	Run: func(cmd *cobra.Command, args []string) {
-		fmt.Println("Walgo doctor")
+		fixAll, _ := cmd.Flags().GetBool("fix-all")
+		fixPaths, _ := cmd.Flags().GetBool("fix-paths")
+		verbose, _ := cmd.Flags().GetBool("verbose")
+
+		fmt.Println("╔═══════════════════════════════════════════════════════════╗")
+		fmt.Println("║                     Walgo Doctor                          ║")
+		fmt.Println("║             Environment Diagnostics                       ║")
+		fmt.Println("╚═══════════════════════════════════════════════════════════╝")
+		fmt.Println()
+
+		issues := 0
+		warnings := 0
 
 		// Check binaries
-		checkBin("hugo")
-		checkBin("site-builder")
-		checkBin("walrus")
-		checkBin("sui")
+		fmt.Println("📦 Checking dependencies...")
+		fmt.Println()
 
-		// Sui client: active env and address
-		activeEnv := runQuiet("sui", "client", "envs")
-		fmt.Print(activeEnv)
-		address := strings.TrimSpace(runQuiet("sui", "client", "active-address"))
-		if address != "" {
-			fmt.Println("Active Sui address:", address)
-		}
-		gas := runQuiet("sui", "client", "gas")
-		if strings.Contains(gas, "No gas coins are owned") {
-			fmt.Println("⚠️  No SUI gas coins detected for the active address.")
-			if strings.Contains(activeEnv, "testnet") {
-				fmt.Printf("Get testnet tokens: https://faucet.sui.io/?address=%s\n", address)
-			} else if strings.Contains(activeEnv, "devnet") {
-				fmt.Println("Try: sui client faucet")
-			}
-		} else {
-			fmt.Println("✓ SUI gas coins found (or gas query returned data).")
+		binaries := map[string]struct {
+			name     string
+			required bool
+			purpose  string
+			install  string
+		}{
+			"hugo":         {"hugo", true, "Static site generation", "brew install hugo (macOS) or https://gohugo.io/installation/"},
+			"site-builder": {"site-builder", false, "On-chain deployment", "walgo setup-deps --with-site-builder"},
+			"walrus":       {"walrus", false, "Walrus CLI operations", "walgo setup-deps --with-walrus"},
+			"sui":          {"sui", false, "On-chain wallet management", "https://docs.sui.io/guides/developer/getting-started/sui-install"},
 		}
 
-		// Fix sites-config.yaml tildes if requested
-		fixPaths, _ := cmd.Flags().GetBool("fix-paths")
-		home, _ := os.UserHomeDir()
-		scPath := filepath.Join(home, ".config", "walrus", "sites-config.yaml")
-		if _, err := os.Stat(scPath); err == nil {
-			if fixPaths {
-				if err := ensureAbsolutePaths(scPath, home); err != nil {
-					fmt.Fprintf(os.Stderr, "Failed to fix paths in %s: %v\n", scPath, err)
+		for _, bin := range []string{"hugo", "site-builder", "walrus", "sui"} {
+			info := binaries[bin]
+			if path, err := exec.LookPath(bin); err != nil {
+				if info.required {
+					fmt.Printf("  ✗ %s not found (REQUIRED)\n", info.name)
+					fmt.Printf("    Purpose: %s\n", info.purpose)
+					fmt.Printf("    Install: %s\n", info.install)
+					issues++
 				} else {
-					fmt.Println("✓ Updated sites-config.yaml to use absolute paths")
+					fmt.Printf("  ⚠ %s not found (optional for %s)\n", info.name, info.purpose)
+					fmt.Printf("    Install: %s\n", info.install)
+					warnings++
 				}
 			} else {
-				fmt.Println("Found:", scPath)
-				fmt.Println("Tip: run 'walgo doctor --fix-paths' to expand any '~/' to absolute paths.")
+				fmt.Printf("  ✓ %s found", info.name)
+				if verbose {
+					fmt.Printf(" at %s", path)
+				}
+				fmt.Println()
+
+				// Get version info if available
+				if verbose {
+					switch bin {
+					case "hugo":
+						version := strings.TrimSpace(runQuiet("hugo", "version"))
+						if version != "" {
+							fmt.Printf("    Version: %s\n", version)
+						}
+					case "sui":
+						version := strings.TrimSpace(runQuiet("sui", "--version"))
+						if version != "" {
+							fmt.Printf("    Version: %s\n", version)
+						}
+					}
+				}
 			}
-		} else {
-			fmt.Println("ℹ️  sites-config.yaml not found; run 'walgo setup' to create it.")
 		}
 
-		fmt.Println("\nHTTP Testnet publish (no wallet needed):")
-		fmt.Println("  walgo deploy-http --publisher https://publisher.walrus-testnet.walrus.space \\")
-		fmt.Println("    --aggregator https://aggregator.walrus-testnet.walrus.space --epochs 1")
+		fmt.Println()
+
+		// Check Sui environment if sui is available
+		if _, err := exec.LookPath("sui"); err == nil {
+			fmt.Println("🔐 Checking Sui configuration...")
+			fmt.Println()
+
+			activeEnv := runQuiet("sui", "client", "active-env")
+			activeEnv = strings.TrimSpace(activeEnv)
+			if activeEnv != "" {
+				fmt.Printf("  ✓ Active network: %s\n", activeEnv)
+			}
+
+			address := strings.TrimSpace(runQuiet("sui", "client", "active-address"))
+			if address != "" {
+				fmt.Printf("  ✓ Active address: %s\n", address)
+
+				// Check gas balance
+				gas := runQuiet("sui", "client", "gas")
+				if strings.Contains(gas, "No gas coins are owned") || strings.Contains(gas, "Error") {
+					fmt.Println("  ✗ No SUI gas coins found")
+					fmt.Println("    On-chain deployment requires SUI for gas fees")
+					if strings.Contains(activeEnv, "testnet") {
+						fmt.Printf("    Get testnet tokens: https://faucet.sui.io/?address=%s\n", address)
+					} else if strings.Contains(activeEnv, "devnet") {
+						fmt.Println("    Get devnet tokens: sui client faucet")
+					}
+					issues++
+				} else {
+					fmt.Println("  ✓ SUI gas coins available")
+					if verbose {
+						fmt.Printf("    %s\n", strings.TrimSpace(gas))
+					}
+				}
+			} else {
+				fmt.Println("  ✗ No active Sui address configured")
+				fmt.Println("    Run: sui client")
+				issues++
+			}
+
+			fmt.Println()
+		}
+
+		// Check configuration files
+		fmt.Println("⚙️  Checking configuration files...")
+		fmt.Println()
+
+		home, _ := os.UserHomeDir()
+		scPath := filepath.Join(home, ".config", "walrus", "sites-config.yaml")
+
+		if _, err := os.Stat(scPath); err == nil {
+			fmt.Printf("  ✓ sites-config.yaml found at %s\n", scPath)
+
+			// Check for tilde paths
+			data, _ := os.ReadFile(scPath)
+			if strings.Contains(string(data), "~/") {
+				fmt.Println("  ⚠ Configuration contains tilde paths (~)")
+				fmt.Println("    Run: walgo doctor --fix-paths")
+				warnings++
+
+				if fixPaths || fixAll {
+					if err := ensureAbsolutePaths(scPath, home); err != nil {
+						fmt.Printf("  ✗ Failed to fix paths: %v\n", err)
+						issues++
+					} else {
+						fmt.Println("  ✓ Fixed tilde paths to absolute paths")
+					}
+				}
+			}
+		} else {
+			fmt.Println("  ⚠ sites-config.yaml not found")
+			fmt.Println("    For on-chain deployment, run: walgo setup --network testnet --force")
+			warnings++
+		}
+
+		// Check for walgo.yaml in current directory
+		if _, err := os.Stat("walgo.yaml"); err == nil {
+			fmt.Println("  ✓ walgo.yaml found in current directory")
+		} else {
+			fmt.Println("  ⚠ walgo.yaml not found in current directory")
+			fmt.Println("    Initialize a site: walgo init my-site")
+			warnings++
+		}
+
+		fmt.Println()
+
+		// Show deployment options
+		fmt.Println("🚀 Deployment options:")
+		fmt.Println()
+		fmt.Println("  Option 1: HTTP Testnet (No wallet required)")
+		fmt.Println("    walgo deploy-http \\")
+		fmt.Println("      --publisher https://publisher.walrus-testnet.walrus.space \\")
+		fmt.Println("      --aggregator https://aggregator.walrus-testnet.walrus.space \\")
+		fmt.Println("      --epochs 1")
+		fmt.Println()
+		fmt.Println("  Option 2: On-chain (Requires wallet and SUI)")
+		fmt.Println("    walgo setup --network testnet --force")
+		fmt.Println("    walgo doctor --fix-paths")
+		fmt.Println("    walgo deploy --epochs 5")
+		fmt.Println()
+
+		// Summary
+		fmt.Println("═══════════════════════════════════════════════════════════")
+		if issues == 0 && warnings == 0 {
+			fmt.Println("✅ All checks passed! Your environment is ready.")
+		} else {
+			fmt.Printf("Summary: %d issue(s), %d warning(s)\n", issues, warnings)
+			if issues > 0 {
+				fmt.Println("\n❌ Please fix the issues above before deploying on-chain.")
+			}
+			if warnings > 0 {
+				fmt.Println("\n⚠️  Warnings indicate optional features that may not work.")
+			}
+			if !fixAll && warnings > 0 {
+				fmt.Println("\n💡 Tip: Run 'walgo doctor --fix-all' to auto-fix some issues")
+			}
+		}
+		fmt.Println("═══════════════════════════════════════════════════════════")
 	},
 }
 
@@ -123,4 +272,6 @@ func ensureAbsolutePaths(scPath, home string) error {
 func init() {
 	rootCmd.AddCommand(doctorCmd)
 	doctorCmd.Flags().Bool("fix-paths", false, "Rewrite tildes in sites-config.yaml to absolute paths")
+	doctorCmd.Flags().Bool("fix-all", false, "Automatically fix all detected issues")
+	doctorCmd.Flags().BoolP("verbose", "v", false, "Show detailed output including versions and paths")
 }

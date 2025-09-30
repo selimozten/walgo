@@ -14,7 +14,8 @@ var cfgFile string
 var rootCmd = &cobra.Command{
 	Use:   "walgo",
 	Short: "Walgo ships static sites to Walrus (on-chain and HTTP paths).",
-	Long: `Walgo is an opinionated CLI for publishing static sites to Walrus.
+	Long: `Walgo provides a seamless bridge for Hugo users to build and deploy
+static sites to Walrus decentralized storage.
 
 What you can do:
 • init/new/build/serve
@@ -24,7 +25,7 @@ What you can do:
 • doctor: diagnose config, gas, and PATH issues
 • setup: write sites-config.yaml; setup-deps: install site-builder/walrus
 
-Quick start:
+Quick Start:
   walgo init my-site
   cd my-site
   walgo build

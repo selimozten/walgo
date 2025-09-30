@@ -110,48 +110,48 @@ func CheckSiteBuilderSetup() error {
 func handleSiteBuilderError(err error, errorOutput string) error {
 	// Detect common issues and provide helpful guidance
 	if strings.Contains(errorOutput, "could not retrieve enough confirmations") {
-		return fmt.Errorf("\n❌ Walrus testnet is experiencing network issues\n\n" +
-			"The storage nodes couldn't provide enough confirmations.\n" +
-			"This is typically temporary. You can:\n\n" +
-			"  1. Wait 5-10 minutes and retry: walgo deploy --epochs 5\n" +
-			"  2. Check Walrus status: walrus info\n" +
-			"  3. Try with fewer epochs: walgo deploy --epochs 1\n" +
-			"  4. Join Discord for help: https://discord.gg/walrus\n\n" +
+		return fmt.Errorf("\n❌ Walrus testnet is experiencing network issues\n\n"+
+			"The storage nodes couldn't provide enough confirmations.\n"+
+			"This is typically temporary. You can:\n\n"+
+			"  1. Wait 5-10 minutes and retry: walgo deploy --epochs 5\n"+
+			"  2. Check Walrus status: walrus info\n"+
+			"  3. Try with fewer epochs: walgo deploy --epochs 1\n"+
+			"  4. Join Discord for help: https://discord.gg/walrus\n\n"+
 			"Technical error: %v", err)
 	}
 
 	if strings.Contains(errorOutput, "insufficient funds") || strings.Contains(errorOutput, "InsufficientGas") {
-		return fmt.Errorf("\n❌ Insufficient SUI balance\n\n" +
-			"Your wallet doesn't have enough SUI for this transaction.\n\n" +
-			"  Check balance: sui client gas\n" +
-			"  Get testnet SUI: https://discord.com/channels/916379725201563759/971488439931392130\n\n" +
+		return fmt.Errorf("\n❌ Insufficient SUI balance\n\n"+
+			"Your wallet doesn't have enough SUI for this transaction.\n\n"+
+			"  Check balance: sui client gas\n"+
+			"  Get testnet SUI: https://discord.com/channels/916379725201563759/971488439931392130\n\n"+
 			"Technical error: %v", err)
 	}
 
 	if strings.Contains(errorOutput, "data did not match any variant") {
-		return fmt.Errorf("\n❌ Configuration format error\n\n" +
-			"The Walrus client config file has incorrect formatting.\n" +
-			"Please ensure object IDs are in hex format (starting with 0x).\n\n" +
-			"Config location: ~/.config/walrus/client_config.yaml\n\n" +
+		return fmt.Errorf("\n❌ Configuration format error\n\n"+
+			"The Walrus client config file has incorrect formatting.\n"+
+			"Please ensure object IDs are in hex format (starting with 0x).\n\n"+
+			"Config location: ~/.config/walrus/client_config.yaml\n\n"+
 			"Technical error: %v", err)
 	}
 
 	if strings.Contains(errorOutput, "wallet not found") || strings.Contains(errorOutput, "Cannot open wallet") {
-		return fmt.Errorf("\n❌ Wallet configuration error\n\n" +
-			"Cannot find or open the Sui wallet.\n\n" +
-			"  Setup wallet: sui client\n" +
-			"  Check config: cat ~/.sui/sui_config/client.yaml\n\n" +
+		return fmt.Errorf("\n❌ Wallet configuration error\n\n"+
+			"Cannot find or open the Sui wallet.\n\n"+
+			"  Setup wallet: sui client\n"+
+			"  Check config: cat ~/.sui/sui_config/client.yaml\n\n"+
 			"Technical error: %v", err)
 	}
 
 	if strings.Contains(errorOutput, "Request rejected `429`") || strings.Contains(errorOutput, "rate limit") {
-		return fmt.Errorf("\n❌ Rate limit error\n\n" +
-			"The Sui RPC node is rate limiting requests.\n" +
-			"This is common on public RPC endpoints.\n\n" +
-			"Solutions:\n" +
-			"  1. Wait 30-60 seconds and retry: walgo deploy --epochs 5\n" +
-			"  2. Use a private RPC endpoint (update sites-config.yaml)\n" +
-			"  3. Try again during off-peak hours\n\n" +
+		return fmt.Errorf("\n❌ Rate limit error\n\n"+
+			"The Sui RPC node is rate limiting requests.\n"+
+			"This is common on public RPC endpoints.\n\n"+
+			"Solutions:\n"+
+			"  1. Wait 30-60 seconds and retry: walgo deploy --epochs 5\n"+
+			"  2. Use a private RPC endpoint (update sites-config.yaml)\n"+
+			"  3. Try again during off-peak hours\n\n"+
 			"Technical error: %v", err)
 	}
 
@@ -201,7 +201,7 @@ func PreflightCheck() error {
 		}
 	}
 
-	fmt.Println("✅ Pre-flight checks passed\n")
+	fmt.Println("✅ Pre-flight checks passed")
 	return nil
 }
 
