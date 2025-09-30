@@ -43,6 +43,10 @@ Example: walgo deploy --epochs 5`,
 		// Get flags
 		epochs, _ := cmd.Flags().GetInt("epochs")
 		force, _ := cmd.Flags().GetBool("force")
+		verbose, _ := cmd.Flags().GetBool("verbose")
+
+		// Set verbose mode in walrus package
+		walrus.SetVerbose(verbose)
 
 		// Check if public directory exists
 		publishDir := filepath.Join(sitePath, walgoCfg.HugoConfig.PublishDir)
@@ -78,4 +82,5 @@ func init() {
 
 	deployCmd.Flags().IntP("epochs", "e", 1, "Number of epochs to store the site")
 	deployCmd.Flags().BoolP("force", "f", false, "Deploy even if public directory doesn't exist")
+	deployCmd.Flags().BoolP("verbose", "v", false, "Show detailed output for debugging")
 }

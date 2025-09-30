@@ -3,6 +3,7 @@ package walrus
 import (
 	"bytes"
 	"fmt"
+	"io"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -46,7 +47,13 @@ const siteBuilderCmd = "site-builder"
 var (
 	execLookPath = exec.LookPath
 	execCommand  = exec.Command
+	verboseMode  = false
 )
+
+// SetVerbose enables or disables verbose output
+func SetVerbose(verbose bool) {
+	verboseMode = verbose
+}
 
 // SiteBuilderOutput represents parsed output from site-builder commands
 type SiteBuilderOutput struct {
@@ -96,6 +103,105 @@ func CheckSiteBuilderSetup() error {
 	}
 
 	fmt.Printf("✓ site-builder config found at: %s\n", configPath)
+	return nil
+}
+
+// handleSiteBuilderError analyzes error output and returns user-friendly messages
+func handleSiteBuilderError(err error, errorOutput string) error {
+	// Detect common issues and provide helpful guidance
+	if strings.Contains(errorOutput, "could not retrieve enough confirmations") {
+		return fmt.Errorf("\n❌ Walrus testnet is experiencing network issues\n\n" +
+			"The storage nodes couldn't provide enough confirmations.\n" +
+			"This is typically temporary. You can:\n\n" +
+			"  1. Wait 5-10 minutes and retry: walgo deploy --epochs 5\n" +
+			"  2. Check Walrus status: walrus info\n" +
+			"  3. Try with fewer epochs: walgo deploy --epochs 1\n" +
+			"  4. Join Discord for help: https://discord.gg/walrus\n\n" +
+			"Technical error: %v", err)
+	}
+
+	if strings.Contains(errorOutput, "insufficient funds") || strings.Contains(errorOutput, "InsufficientGas") {
+		return fmt.Errorf("\n❌ Insufficient SUI balance\n\n" +
+			"Your wallet doesn't have enough SUI for this transaction.\n\n" +
+			"  Check balance: sui client gas\n" +
+			"  Get testnet SUI: https://discord.com/channels/916379725201563759/971488439931392130\n\n" +
+			"Technical error: %v", err)
+	}
+
+	if strings.Contains(errorOutput, "data did not match any variant") {
+		return fmt.Errorf("\n❌ Configuration format error\n\n" +
+			"The Walrus client config file has incorrect formatting.\n" +
+			"Please ensure object IDs are in hex format (starting with 0x).\n\n" +
+			"Config location: ~/.config/walrus/client_config.yaml\n\n" +
+			"Technical error: %v", err)
+	}
+
+	if strings.Contains(errorOutput, "wallet not found") || strings.Contains(errorOutput, "Cannot open wallet") {
+		return fmt.Errorf("\n❌ Wallet configuration error\n\n" +
+			"Cannot find or open the Sui wallet.\n\n" +
+			"  Setup wallet: sui client\n" +
+			"  Check config: cat ~/.sui/sui_config/client.yaml\n\n" +
+			"Technical error: %v", err)
+	}
+
+	if strings.Contains(errorOutput, "Request rejected `429`") || strings.Contains(errorOutput, "rate limit") {
+		return fmt.Errorf("\n❌ Rate limit error\n\n" +
+			"The Sui RPC node is rate limiting requests.\n" +
+			"This is common on public RPC endpoints.\n\n" +
+			"Solutions:\n" +
+			"  1. Wait 30-60 seconds and retry: walgo deploy --epochs 5\n" +
+			"  2. Use a private RPC endpoint (update sites-config.yaml)\n" +
+			"  3. Try again during off-peak hours\n\n" +
+			"Technical error: %v", err)
+	}
+
+	// Generic error fallback
+	return fmt.Errorf("failed to execute site-builder: %v", err)
+}
+
+// PreflightCheck runs validation checks before deployment
+func PreflightCheck() error {
+	fmt.Println("🔍 Running pre-flight checks...")
+
+	// Check if walrus binary is accessible
+	walrusPath, err := execLookPath("walrus")
+	if err != nil {
+		return fmt.Errorf("⚠️  Walrus CLI not found in PATH. Please install it first")
+	}
+	fmt.Printf("   ✓ Walrus CLI found at: %s\n", walrusPath)
+
+	// Check Walrus network connectivity
+	infoCmd := execCommand("walrus", "info")
+	infoCmd.Stdout = nil
+	infoCmd.Stderr = nil
+	if err := infoCmd.Run(); err != nil {
+		return fmt.Errorf("⚠️  Cannot connect to Walrus network. Check your internet connection and try again")
+	}
+	fmt.Println("   ✓ Walrus network is reachable")
+
+	// Check if sui CLI is available
+	suiPath, err := execLookPath("sui")
+	if err != nil {
+		return fmt.Errorf("⚠️  Sui CLI not found. Please install it from https://docs.sui.io/build/install")
+	}
+	fmt.Printf("   ✓ Sui CLI found at: %s\n", suiPath)
+
+	// Check wallet balance
+	gasCmd := execCommand("sui", "client", "gas", "--json")
+	output, err := gasCmd.Output()
+	if err != nil {
+		fmt.Println("   ⚠️  Could not check wallet balance (continuing anyway)")
+	} else {
+		// Simple check if there's any gas output
+		if len(output) < 10 || !strings.Contains(string(output), "balance") {
+			fmt.Println("   ⚠️  Warning: No SUI balance detected. You may need testnet SUI from:")
+			fmt.Println("      https://discord.com/channels/916379725201563759/971488439931392130")
+		} else {
+			fmt.Println("   ✓ Wallet has SUI balance")
+		}
+	}
+
+	fmt.Println("✅ Pre-flight checks passed\n")
 	return nil
 }
 
@@ -176,13 +282,47 @@ default_context: %s
 // DeploySite handles the deployment of the site to Walrus.
 // It executes the `site-builder publish` command for new sites.
 func DeploySite(deployDir string, walrusCfg config.WalrusConfig, epochs int) (*SiteBuilderOutput, error) {
-	// Check setup first
+	// Run pre-flight checks
+	if err := PreflightCheck(); err != nil {
+		return nil, err
+	}
+
+	// Check setup
 	if err := CheckSiteBuilderSetup(); err != nil {
 		return nil, fmt.Errorf("site-builder setup issue: %w\n\nRun 'walgo setup' to configure site-builder", err)
 	}
 
 	// For new deployments, we don't need the ProjectID to be set yet
 	// (it will be set after successful deployment)
+
+	// Analyze deployment directory
+	fmt.Println("📊 Analyzing deployment directory...")
+	fileCount := 0
+	totalSize := int64(0)
+
+	err := filepath.Walk(deployDir, func(path string, info os.FileInfo, err error) error {
+		if err != nil {
+			return err
+		}
+		if !info.IsDir() {
+			fileCount++
+			totalSize += info.Size()
+		}
+		return nil
+	})
+
+	if err != nil {
+		fmt.Printf("   ⚠️  Warning: Could not analyze directory: %v\n", err)
+	} else {
+		sizeMB := float64(totalSize) / (1024 * 1024)
+		fmt.Printf("   Files to upload: %d\n", fileCount)
+		fmt.Printf("   Total size: %.2f MB\n", sizeMB)
+		fmt.Printf("   Storage duration: %d epochs (~%d days)\n", epochs, epochs)
+
+		// Rough cost estimate (this is approximate)
+		estimatedCost := sizeMB * 0.01 * float64(epochs)
+		fmt.Printf("   Estimated cost: ~%.4f SUI\n\n", estimatedCost)
+	}
 
 	builderPath, err := execLookPath(siteBuilderCmd)
 	if err != nil {
@@ -197,37 +337,33 @@ func DeploySite(deployDir string, walrusCfg config.WalrusConfig, epochs int) (*S
 		"--epochs", fmt.Sprintf("%d", epochs),
 	}
 
+	if verboseMode {
+		fmt.Printf("🔧 Verbose mode enabled\n")
+		fmt.Printf("🔧 Builder path: %s\n", builderPath)
+		fmt.Printf("🔧 Arguments: %v\n", args)
+	}
+
 	fmt.Printf("Executing: %s %s\n", builderPath, strings.Join(args, " "))
+	fmt.Println("📤 Uploading site files to Walrus...")
+	fmt.Println("⏳ This may take several minutes depending on file count and network conditions...")
+	fmt.Println()
 
 	cmd := execCommand(builderPath, args...)
 	var stdout, stderr bytes.Buffer
-	cmd.Stdout = &stdout
-	cmd.Stderr = &stderr
+
+	// Stream output in real-time while also capturing it for parsing
+	cmd.Stdout = io.MultiWriter(os.Stdout, &stdout)
+	cmd.Stderr = io.MultiWriter(os.Stderr, &stderr)
 
 	if err := cmd.Run(); err != nil {
-		errorMsg := fmt.Sprintf("failed to execute %s: %v", siteBuilderCmd, err)
-		if stderr.Len() > 0 {
-			errorMsg += fmt.Sprintf("\nstderr:\n%s", stderr.String())
-		}
-		if stdout.Len() > 0 {
-			errorMsg += fmt.Sprintf("\nstdout:\n%s", stdout.String())
-		}
-		return nil, fmt.Errorf("%s", errorMsg)
+		return nil, handleSiteBuilderError(err, stderr.String())
 	}
 
-	fmt.Println("Site deployment command executed successfully.")
+	fmt.Println("\n✅ Site deployment command executed successfully.")
 
 	// Parse the output
 	output := parseSiteBuilderOutput(stdout.String())
 	output.Success = true
-
-	if stdout.Len() > 0 {
-		fmt.Printf("Output from %s:\n%s\n", siteBuilderCmd, stdout.String())
-	}
-
-	if stderr.Len() > 0 {
-		fmt.Printf("Stderr from %s (may contain warnings or informational messages):\n%s\n", siteBuilderCmd, stderr.String())
-	}
 
 	// Provide helpful guidance
 	if output.ObjectID != "" {
@@ -278,37 +414,27 @@ func UpdateSite(deployDir, objectID string, epochs int) (*SiteBuilderOutput, err
 	}
 
 	fmt.Printf("Executing: %s %s\n", builderPath, strings.Join(args, " "))
+	fmt.Println("📤 Updating site files on Walrus...")
+	fmt.Println("⏳ This may take several minutes depending on file count and network conditions...")
+	fmt.Println()
 
 	cmd := execCommand(builderPath, args...)
 	var stdout, stderr bytes.Buffer
-	cmd.Stdout = &stdout
-	cmd.Stderr = &stderr
+
+	// Stream output in real-time while also capturing it for parsing
+	cmd.Stdout = io.MultiWriter(os.Stdout, &stdout)
+	cmd.Stderr = io.MultiWriter(os.Stderr, &stderr)
 
 	if err := cmd.Run(); err != nil {
-		errorMsg := fmt.Sprintf("failed to execute %s: %v", siteBuilderCmd, err)
-		if stderr.Len() > 0 {
-			errorMsg += fmt.Sprintf("\nstderr:\n%s", stderr.String())
-		}
-		if stdout.Len() > 0 {
-			errorMsg += fmt.Sprintf("\nstdout:\n%s", stdout.String())
-		}
-		return nil, fmt.Errorf("%s", errorMsg)
+		return nil, handleSiteBuilderError(err, stderr.String())
 	}
 
-	fmt.Println("Site update command executed successfully.")
+	fmt.Println("\n✅ Site update command executed successfully.")
 
 	// Parse the output
 	output := parseSiteBuilderOutput(stdout.String())
 	output.Success = true
 	output.ObjectID = objectID // For updates, we know the object ID
-
-	if stdout.Len() > 0 {
-		fmt.Printf("Output from %s:\n%s\n", siteBuilderCmd, stdout.String())
-	}
-
-	if stderr.Len() > 0 {
-		fmt.Printf("Stderr from %s:\n%s\n", siteBuilderCmd, stderr.String())
-	}
 
 	fmt.Println("\n✅ Site updated successfully!")
 	fmt.Printf("📋 Object ID: %s\n", objectID)

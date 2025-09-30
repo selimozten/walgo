@@ -64,6 +64,7 @@ coverage.out
 # Development files
 usefull-scripts/
 walrus-docs/
+test-blog/
 
 # Temporary files
 .tmp/
