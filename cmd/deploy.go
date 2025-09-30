@@ -24,19 +24,18 @@ your site and configure domain names.
 
 Example: walgo deploy --epochs 5`,
 	Run: func(cmd *cobra.Command, args []string) {
-		fmt.Println("Deploying site to Walrus Sites...")
-
 		// Get current working directory
 		sitePath, err := os.Getwd()
 		if err != nil {
-			fmt.Fprintf(os.Stderr, "Error getting current directory: %v\n", err)
+			fmt.Fprintf(os.Stderr, "❌ Error: Cannot determine current directory: %v\n", err)
 			os.Exit(1)
 		}
 
 		// Load Walgo configuration
 		walgoCfg, err := config.LoadConfig()
 		if err != nil {
-			fmt.Fprintf(os.Stderr, "%v\n", err)
+			fmt.Fprintf(os.Stderr, "❌ Error: %v\n", err)
+			fmt.Fprintf(os.Stderr, "\n💡 Tip: Run 'walgo init <site-name>' to create a new site\n")
 			os.Exit(1)
 		}
 
@@ -51,27 +50,40 @@ Example: walgo deploy --epochs 5`,
 		// Check if public directory exists
 		publishDir := filepath.Join(sitePath, walgoCfg.HugoConfig.PublishDir)
 		if _, err := os.Stat(publishDir); os.IsNotExist(err) {
-			fmt.Fprintf(os.Stderr, "Public directory '%s' not found. Please run 'walgo build' first.\n", publishDir)
+			fmt.Fprintf(os.Stderr, "❌ Error: Build directory '%s' not found\n\n", publishDir)
+			fmt.Fprintf(os.Stderr, "💡 Run this first:\n")
+			fmt.Fprintf(os.Stderr, "   walgo build\n")
 			if !force {
 				os.Exit(1)
 			}
 		}
 
+		fmt.Println("🚀 Deploying to Walrus Sites...")
+		fmt.Println("  [1/3] Checking environment...")
+
 		// Deploy the site
+		fmt.Println("  [2/3] Uploading site...")
 		output, err := walrus.DeploySite(publishDir, walgoCfg.WalrusConfig, epochs)
 		if err != nil {
-			fmt.Fprintf(os.Stderr, "Error deploying site: %v\n", err)
+			fmt.Fprintf(os.Stderr, "\n❌ Deployment failed: %v\n\n", err)
+			fmt.Fprintf(os.Stderr, "💡 Troubleshooting:\n")
+			fmt.Fprintf(os.Stderr, "  - Check setup: walgo doctor\n")
+			fmt.Fprintf(os.Stderr, "  - Verify wallet: sui client active-address\n")
+			fmt.Fprintf(os.Stderr, "  - Check gas: sui client gas\n")
+			fmt.Fprintf(os.Stderr, "  - Try HTTP deploy: walgo deploy-http --help\n")
 			os.Exit(1)
 		}
 
 		if output.Success && output.ObjectID != "" {
-			fmt.Printf("\n🎉 Deployment successful!\n")
+			fmt.Println("  [3/3] Confirming deployment...")
+			fmt.Println("  ✓ Deployment confirmed")
+			fmt.Printf("\n🎉 Deployment successful!\n\n")
 			fmt.Printf("📋 Site Object ID: %s\n", output.ObjectID)
 			fmt.Printf("\n💡 Next steps:\n")
 			fmt.Printf("1. Update walgo.yaml with this Object ID:\n")
 			fmt.Printf("   walrus:\n")
 			fmt.Printf("     projectID: \"%s\"\n", output.ObjectID)
-			fmt.Printf("2. Configure a domain: walgo domain <your-domain>\n")
+			fmt.Printf("\n2. Configure a domain: walgo domain <your-domain>\n")
 			fmt.Printf("3. Check status: walgo status\n")
 		}
 	},

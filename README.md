@@ -147,7 +147,26 @@ walgo --help
 
 ## Quick start
 
-### 1. Create Your First Site
+### Instant Deploy a test site (Fastest Way)
+
+Get a site live in under 2 minutes with one command:
+
+```bash
+# Create, build, and deploy in one step (no wallet needed!)
+walgo quickstart my-blog
+
+# That's it! Your site is live on Walrus testnet 🎉
+```
+
+The `quickstart` command:
+- ✓ Creates a new Hugo site
+- ✓ Adds sample content
+- ✓ Builds the site
+- ✓ Deploys to Walrus HTTP testnet (no wallet required)
+
+### Manual Setup (Step by Step)
+
+#### 1. Create Your First Site
 
 ```bash
 # Initialize a new Hugo site configured for Walrus
@@ -163,7 +182,7 @@ cd my-awesome-blog
 # └── walgo.yaml        # Walgo configuration
 ```
 
-### 2. Create Content
+#### 2. Create Content
 
 ```bash
 # Create a blog post
@@ -176,7 +195,7 @@ walgo new projects/my-cool-project.md
 walgo new blog/tech/hugo-tips.md
 ```
 
-### 3. Build and Preview
+#### 3. Build and Preview
 
 ```bash
 # Build your site
@@ -190,7 +209,7 @@ walgo serve
 walgo build --clean
 ```
 
-### 4. Deploy
+#### 4. Deploy
 
 On-chain (requires site-builder setup and a funded wallet):
 ```bash
@@ -208,7 +227,7 @@ walgo deploy-http \
 ```
 This prints a quiltId and per-file patchIds. You can fetch files back from the aggregator using the patchIds.
 
-### 5. Configure domain and update site
+#### 5. Configure domain and update site
 
 ```bash
 # Update walgo.yaml with your site's object ID

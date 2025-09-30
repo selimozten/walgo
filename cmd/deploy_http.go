@@ -140,19 +140,47 @@ Example:
 		}
 
 		fmt.Println("\n✅ HTTP deploy complete!")
+		fmt.Println()
+
+		aggregatorBase := strings.TrimRight(aggregator, "/")
+
 		if quiltID != "" {
-			fmt.Printf("quiltId: %s\n", quiltID)
-		}
-		if len(qResp.StoredQuiltBlobs) > 0 {
-			fmt.Println("patchIds:")
-			for _, e := range qResp.StoredQuiltBlobs {
-				fmt.Printf("  %s: %s\n", e.Identifier, e.QuiltPatchId)
-			}
+			fmt.Printf("📦 Quilt ID: %s\n", quiltID)
 		}
 
-		fmt.Println("\nFetch examples:")
-		fmt.Printf("  Aggregator: %s/v1/blobs/by-quilt-patch-id/<patchId>\n", strings.TrimRight(aggregator, "/"))
-		fmt.Println("  (Use a patchId printed above to fetch a file)")
+		if len(qResp.StoredQuiltBlobs) > 0 {
+			fmt.Println()
+			fmt.Println("📂 Files stored on Walrus:")
+			for _, e := range qResp.StoredQuiltBlobs {
+				displayName := strings.ReplaceAll(e.Identifier, "__", "/")
+				displayName = strings.ReplaceAll(displayName, "_", " ")
+				fmt.Printf("  ✓ %s\n", displayName)
+			}
+
+			fmt.Println()
+			fmt.Println("⚠️  Important: HTTP testnet stores raw files only.")
+			fmt.Println("   Clicking links will download files, not render as a website.")
+			fmt.Println()
+			fmt.Println("📍 To view your site properly in a browser:")
+			fmt.Println()
+			fmt.Println("  Deploy on-chain for full website experience:")
+			fmt.Println("    1. walgo setup --network testnet --force")
+			fmt.Println("    2. walgo doctor --fix-paths")
+			fmt.Println("    3. walgo deploy --epochs 5")
+			fmt.Println()
+			fmt.Println("  Your site will then be accessible via Walrus Sites portal")
+			fmt.Println("  with proper HTML rendering and navigation.")
+			fmt.Println()
+			fmt.Println("📥 To fetch individual files (for testing):")
+			for _, e := range qResp.StoredQuiltBlobs {
+				url := fmt.Sprintf("%s/v1/blobs/by-quilt-patch-id/%s", aggregatorBase, e.QuiltPatchId)
+				displayName := strings.ReplaceAll(e.Identifier, "__", "/")
+				fmt.Printf("    curl %s > %s\n", url, displayName)
+				if strings.HasPrefix(e.Identifier, "index") {
+					break
+				}
+			}
+		}
 	},
 }
 
