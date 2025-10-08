@@ -1,11 +1,9 @@
-# GoReleaser configuration for Walgo
+# Simple GoReleaser configuration - just build binaries
 version: 2
 
 before:
   hooks:
-    # Clean up any previous builds
     - go mod tidy
-    - go mod verify
 
 builds:
   - id: walgo
@@ -20,7 +18,6 @@ builds:
     goarch:
       - amd64
       - arm64
-    # Exclude incompatible combinations
     ignore:
       - goos: windows
         goarch: arm64
@@ -29,16 +26,10 @@ builds:
       - -X main.version={{.Version}}
       - -X main.commit={{.Commit}}
       - -X main.date={{.Date}}
-    flags:
-      - -trimpath
 
 archives:
   - id: walgo-archives
-    format: tar.gz
     name_template: "{{ .ProjectName }}_{{ .Version }}_{{ .Os }}_{{ .Arch }}"
-    format_overrides:
-      - goos: windows
-        format: zip
     files:
       - README.md
       - LICENSE
@@ -47,30 +38,6 @@ archives:
 checksum:
   name_template: "{{ .ProjectName }}_{{ .Version }}_checksums.txt"
   algorithm: sha256
-
-changelog:
-  sort: asc
-  use: github
-  filters:
-    exclude:
-      - "^docs:"
-      - "^test:"
-      - "^ci:"
-      - "^chore:"
-      - Merge pull request
-      - Merge branch
-  groups:
-    - title: "New Features"
-      regexp: "^.*feat[(\\w)]*:+.*$"
-      order: 0
-    - title: "Bug Fixes"
-      regexp: "^.*fix[(\\w)]*:+.*$"
-      order: 1
-    - title: "Performance Improvements"
-      regexp: "^.*perf[(\\w)]*:+.*$"
-      order: 2
-    - title: "Other Changes"
-      order: 999
 
 release:
   github:
@@ -82,114 +49,7 @@ release:
   header: |
     ## Walgo {{ .Tag }}
 
-    Welcome to this new release of Walgo!
-
-    ### Installation
-
-    #### Quick Install (Linux/macOS)
+    Installation:
     ```bash
     curl -fsSL https://raw.githubusercontent.com/selimozten/walgo/main/install.sh | bash
     ```
-
-    #### Manual Download
-    Download the appropriate binary for your platform below.
-
-    #### Package Managers
-    ```bash
-    # Homebrew (macOS/Linux)
-    brew install selimozten/tap/walgo
-
-    # Go
-    go install github.com/selimozten/walgo@latest
-    ```
-
-  footer: |
-    **Full Changelog**: https://github.com/selimozten/walgo/compare/{{ .PreviousTag }}...{{ .Tag }}
-
-    ## Verify Installation
-
-    After installing, verify with:
-    ```bash
-    walgo --version
-    walgo --help
-    ```
-
-    ## Documentation
-
-    - [README](https://github.com/selimozten/walgo/blob/main/README.md)
-    - [Changelog](https://github.com/selimozten/walgo/blob/main/CHANGELOG.md)
-    - [Issues](https://github.com/selimozten/walgo/issues)
-
-# Homebrew tap configuration
-brews:
-  - name: walgo
-    repository:
-      owner: selimozten
-      name: homebrew-tap
-      token: "{{ .Env.HOMEBREW_TAP_GITHUB_TOKEN }}"
-    homepage: https://github.com/selimozten/walgo
-    description: "CLI tool for shipping static sites to Walrus decentralized storage"
-    license: MIT
-    dependencies:
-      - name: hugo
-        type: optional
-    install: |
-      bin.install "walgo"
-    test: |
-      system "#{bin}/walgo", "--version"
-
-# Snapcraft configuration for Linux
-# Disabled for now - uncomment when snapcraft is available in CI
-# snapcrafts:
-#   - name: walgo
-#     summary: Ship static sites to Walrus
-#     description: |
-#       Walgo is a CLI tool that provides a seamless bridge for Hugo users to
-#       build and deploy static sites to Walrus decentralized storage.
-#     grade: stable
-#     confinement: strict
-#     publish: false
-#     license: MIT
-#     base: core22
-
-# Docker images
-dockers:
-  - image_templates:
-      - "ghcr.io/selimozten/walgo:{{ .Version }}-amd64"
-      - "ghcr.io/selimozten/walgo:latest-amd64"
-    use: buildx
-    dockerfile: Dockerfile
-    build_flag_templates:
-      - "--platform=linux/amd64"
-      - "--label=org.opencontainers.image.created={{.Date}}"
-      - "--label=org.opencontainers.image.title={{.ProjectName}}"
-      - "--label=org.opencontainers.image.revision={{.FullCommit}}"
-      - "--label=org.opencontainers.image.version={{.Version}}"
-
-  - image_templates:
-      - "ghcr.io/selimozten/walgo:{{ .Version }}-arm64"
-      - "ghcr.io/selimozten/walgo:latest-arm64"
-    use: buildx
-    goarch: arm64
-    dockerfile: Dockerfile
-    build_flag_templates:
-      - "--platform=linux/arm64"
-      - "--label=org.opencontainers.image.created={{.Date}}"
-      - "--label=org.opencontainers.image.title={{.ProjectName}}"
-      - "--label=org.opencontainers.image.revision={{.FullCommit}}"
-      - "--label=org.opencontainers.image.version={{.Version}}"
-
-docker_manifests:
-  - name_template: "ghcr.io/selimozten/walgo:{{ .Version }}"
-    image_templates:
-      - "ghcr.io/selimozten/walgo:{{ .Version }}-amd64"
-      - "ghcr.io/selimozten/walgo:{{ .Version }}-arm64"
-
-  - name_template: "ghcr.io/selimozten/walgo:latest"
-    image_templates:
-      - "ghcr.io/selimozten/walgo:latest-amd64"
-      - "ghcr.io/selimozten/walgo:latest-arm64"
-
-# Announce releases
-announce:
-  skip: "{{gt .Patch 0}}" # Only announce major and minor releases
