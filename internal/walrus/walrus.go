@@ -48,6 +48,8 @@ var (
 	execLookPath = exec.LookPath
 	execCommand  = exec.Command
 	verboseMode  = false
+	runPreflight = true // Can be disabled in tests
+	osStat       = os.Stat
 )
 
 // SetVerbose enables or disables verbose output
@@ -91,7 +93,7 @@ func CheckSiteBuilderSetup() error {
 	var configFound bool
 	var configPath string
 	for _, path := range configPaths {
-		if _, err := os.Stat(path); err == nil {
+		if _, err := osStat(path); err == nil {
 			configFound = true
 			configPath = path
 			break
@@ -282,9 +284,11 @@ default_context: %s
 // DeploySite handles the deployment of the site to Walrus.
 // It executes the `site-builder publish` command for new sites.
 func DeploySite(deployDir string, walrusCfg config.WalrusConfig, epochs int) (*SiteBuilderOutput, error) {
-	// Run pre-flight checks
-	if err := PreflightCheck(); err != nil {
-		return nil, err
+	// Run pre-flight checks (can be disabled in tests)
+	if runPreflight {
+		if err := PreflightCheck(); err != nil {
+			return nil, err
+		}
 	}
 
 	// Check setup

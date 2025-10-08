@@ -2,6 +2,7 @@ package walrus
 
 import (
 	"fmt"
+	"os"
 	"os/exec"
 	"strings"
 	"testing"
@@ -13,6 +14,13 @@ import (
 // Note: execLookPath and execCommand are defined in walrus.go for dependency injection
 
 func TestDeploySite(t *testing.T) {
+	// Save original runPreflight setting
+	originalRunPreflight := runPreflight
+	// Disable preflight checks for all tests
+	runPreflight = false
+	// Restore after all tests
+	defer func() { runPreflight = originalRunPreflight }()
+
 	tests := []struct {
 		name             string
 		deployDir        string
@@ -76,6 +84,19 @@ func TestDeploySite(t *testing.T) {
 			// Save original functions
 			originalLookPath := execLookPath
 			originalCommand := execCommand
+			originalOsStat := osStat
+
+			// Mock osStat for config file checking
+			osStat = func(name string) (os.FileInfo, error) {
+				if strings.Contains(name, "sites-config.yaml") {
+					if tt.configExists {
+						// Return nil to indicate file exists
+						return nil, nil
+					}
+					return nil, os.ErrNotExist
+				}
+				return originalOsStat(name)
+			}
 
 			// Mock execLookPath
 			execLookPath = func(file string) (string, error) {
@@ -100,6 +121,7 @@ func TestDeploySite(t *testing.T) {
 			defer func() {
 				execLookPath = originalLookPath
 				execCommand = originalCommand
+				osStat = originalOsStat
 			}()
 
 			output, err := DeploySite(tt.deployDir, tt.walrusCfg, tt.epochs)
