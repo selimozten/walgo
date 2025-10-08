@@ -231,14 +231,6 @@ Examples:
 	},
 }
 
-func checkBin(name string) {
-	if _, err := exec.LookPath(name); err != nil {
-		fmt.Printf("✗ %s not found in PATH\n", name)
-	} else {
-		fmt.Printf("✓ %s found\n", name)
-	}
-}
-
 func runQuiet(name string, args ...string) string {
 	out, _ := exec.Command(name, args...).CombinedOutput()
 	return string(out)

@@ -55,8 +55,14 @@ func (c *CSSOptimizer) compressColors(content []byte) []byte {
 	css := string(content)
 
 	// Compress 6-digit hex colors to 3-digit when possible
-	hexColorRegex := regexp.MustCompile(`#([0-9a-fA-F])\1([0-9a-fA-F])\2([0-9a-fA-F])\3`)
-	css = hexColorRegex.ReplaceAllString(css, "#$1$2$3")
+	// e.g., #aabbcc -> #abc
+	hexColorRegex := regexp.MustCompile(`#([0-9a-fA-F])([0-9a-fA-F])([0-9a-fA-F])([0-9a-fA-F])([0-9a-fA-F])([0-9a-fA-F])`)
+	css = hexColorRegex.ReplaceAllStringFunc(css, func(match string) string {
+		if len(match) == 7 && match[1] == match[2] && match[3] == match[4] && match[5] == match[6] {
+			return "#" + string(match[1]) + string(match[3]) + string(match[5])
+		}
+		return match
+	})
 
 	// Convert named colors to shorter equivalents
 	colorMap := map[string]string{

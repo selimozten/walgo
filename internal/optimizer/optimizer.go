@@ -199,11 +199,7 @@ func (e *Engine) shouldSkipFile(filePath string) bool {
 
 	// Skip already minified files
 	fileName := filepath.Base(filePath)
-	if strings.Contains(fileName, ".min.") {
-		return true
-	}
-
-	return false
+	return strings.Contains(fileName, ".min.")
 }
 
 // updateHTMLStats updates HTML-specific statistics

@@ -3,7 +3,6 @@ package cmd
 import (
 	"fmt"
 	"os"
-	"os/exec"
 	"path/filepath"
 
 	"walgo/internal/config"
@@ -72,11 +71,4 @@ func init() {
 	// Here you will define your flags and configuration settings.
 	// Example:
 	// initCmd.Flags().StringP("theme", "t", "", "Hugo theme to use")
-}
-
-// Helper function to check if Hugo is installed
-// This might be moved to internal/hugo later
-func isHugoInstalled() bool {
-	_, err := exec.LookPath("hugo")
-	return err == nil
 }

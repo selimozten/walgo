@@ -15,7 +15,8 @@ import (
 // Future enhancements might explore direct Hugo library integration for more
 // granular control or performance benefits where applicable.
 func InitializeSite(sitePath string) error {
-	if !isHugoInstalled() {
+	// Check if Hugo is installed
+	if _, err := exec.LookPath("hugo"); err != nil {
 		return fmt.Errorf("Hugo is not installed or not found in PATH. Please install Hugo first.")
 	}
 
@@ -37,19 +38,14 @@ func InitializeSite(sitePath string) error {
 	return nil
 }
 
-// isHugoInstalled checks if the Hugo CLI is available.
-func isHugoInstalled() bool {
-	_, err := exec.LookPath("hugo")
-	return err == nil
-}
-
 // BuildSite runs the Hugo build process in the given site path.
 // It assumes that the current working directory is the site's root or sitePath is absolute.
 // For Phase 1, Walgo interacts with Hugo via `exec.Command`. This approach is chosen
 // for its simplicity and broad compatibility. Future enhancements might explore direct
 // Hugo library integration.
 func BuildSite(sitePath string) error {
-	if !isHugoInstalled() {
+	// Check if Hugo is installed
+	if _, err := exec.LookPath("hugo"); err != nil {
 		return fmt.Errorf("Hugo is not installed or not found in PATH. Please install Hugo first.")
 	}
 
