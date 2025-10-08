@@ -5,6 +5,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"regexp"
 
 	"github.com/spf13/cobra"
 )
@@ -19,6 +20,13 @@ Example: walgo new posts/my-first-post.md`,
 	Args: cobra.ExactArgs(1), // Expects exactly one argument: content-type/slug
 	Run: func(cmd *cobra.Command, args []string) {
 		contentPathArg := args[0]
+
+		// Validate content path to prevent command injection
+		if !isValidContentPath(contentPathArg) {
+			fmt.Fprintf(os.Stderr, "Error: Invalid content path. Use only alphanumeric, hyphens, underscores, slashes and .md extension\n")
+			os.Exit(1)
+		}
+
 		fmt.Printf("Creating new content: %s\n", contentPathArg)
 
 		// Determine site path (current directory by default)
@@ -53,6 +61,13 @@ Example: walgo new posts/my-first-post.md`,
 		fmt.Printf("Successfully initiated content creation (see Hugo output above for exact path, e.g., %s).\n", createdFilePath)
 		fmt.Println("Remember to edit the new file!")
 	},
+}
+
+// isValidContentPath validates that content path only contains safe characters
+func isValidContentPath(path string) bool {
+	// Allow alphanumeric, hyphens, underscores, slashes, and .md/.html extensions
+	validPath := regexp.MustCompile(`^[a-zA-Z0-9/_-]+\.(md|html|htm)?$`)
+	return validPath.MatchString(path) && len(path) > 0 && len(path) < 200
 }
 
 func init() {

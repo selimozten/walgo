@@ -5,18 +5,19 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"regexp"
 
 	"github.com/spf13/cobra"
 )
 
+// quickstartCmd represents the quickstart command
 var quickstartCmd = &cobra.Command{
 	Use:   "quickstart <site-name>",
-	Short: "Create and deploy a site in one command (HTTP testnet, no wallet needed)",
-	Long: `Quickstart creates a new Hugo site, builds it, and deploys to Walrus HTTP testnet.
-This is the fastest way to get started - no wallet or on-chain setup required.
+	Short: "Quick start: init, build, and deploy in one command",
+	Long: `Creates a new Hugo site, adds sample content, builds it, and deploys to Walrus.
 
-The command will:
-1. Create a new Hugo site
+This command will:
+1. Initialize a new Hugo site
 2. Add sample content
 3. Build the site
 4. Deploy to Walrus HTTP testnet
@@ -29,6 +30,12 @@ Example:
 		siteName := args[0]
 		skipDeploy, _ := cmd.Flags().GetBool("skip-deploy")
 		skipBuild, _ := cmd.Flags().GetBool("skip-build")
+
+		// Validate site name to prevent command injection
+		if !isValidSiteName(siteName) {
+			fmt.Fprintf(os.Stderr, "❌ Invalid site name. Use only letters, numbers, hyphens and underscores\n")
+			os.Exit(1)
+		}
 
 		fmt.Println("🚀 Walgo Quickstart")
 		fmt.Println("═══════════════════════════════════════════════════════════")
@@ -58,52 +65,59 @@ Example:
 		fmt.Println("  ✓ Site created")
 
 		// Change to site directory
-		siteDir := siteName
-		if err := os.Chdir(siteDir); err != nil {
-			fmt.Fprintf(os.Stderr, "❌ Failed to enter site directory: %v\n", err)
+		if err := os.Chdir(siteName); err != nil {
+			fmt.Fprintf(os.Stderr, "\n❌ Failed to enter site directory: %v\n", err)
 			os.Exit(1)
 		}
 
-		// Step 3: Create sample content
-		fmt.Println("\n[3/5] Creating sample content...")
+		// Step 3: Fetch and apply a theme
+		fmt.Println("\n[3/5] Setting up theme...")
+		themeURL := "https://github.com/theNewDynamic/gohugo-theme-ananke.git"
+		themeName := "ananke"
 
-		// Create a welcome post
-		welcomeContent := `---
-title: "Welcome to Walrus Sites"
-date: %s
-draft: false
----
+		// Clone theme
+		cloneCmd := exec.Command("git", "clone", "--depth", "1", themeURL, filepath.Join("themes", themeName))
+		cloneCmd.Stdout = os.Stdout
+		cloneCmd.Stderr = os.Stderr
+		if err := cloneCmd.Run(); err != nil {
+			fmt.Fprintf(os.Stderr, "  ⚠ Warning: Failed to clone theme: %v\n", err)
+			fmt.Fprintf(os.Stderr, "    You can add a theme manually later\n")
+		} else {
+			// Update hugo config to use theme
+			fmt.Println("  ✓ Theme installed")
+			// Add theme to config (assuming hugo.toml)
+			configCmd := exec.Command("sh", "-c", fmt.Sprintf(`echo 'theme = "%s"' >> hugo.toml`, themeName))
+			if err := configCmd.Run(); err != nil {
+				fmt.Fprintf(os.Stderr, "  ⚠ Warning: Could not update config: %v\n", err)
+			}
+		}
 
-# Welcome!
-
-This is your first post on Walrus decentralized storage.
-
-## What is Walrus?
-
-Walrus is a decentralized storage network that provides:
-- **Permanent storage**: Your content persists without relying on centralized servers
-- **Censorship resistance**: No single entity can take down your site
-- **Fast delivery**: Content is distributed across the network
-
-## Next Steps
-
-1. Edit this post: ` + "`content/posts/welcome.md`" + `
-2. Add more content: ` + "`walgo new posts/my-post.md`" + `
-3. Customize your site: Edit ` + "`hugo.toml`" + `
-4. Rebuild and deploy: ` + "`walgo build && walgo deploy-http ...`" + `
-
-Happy publishing! 🚀
-`
-		// Create content directory
+		// Step 4: Create sample content
+		fmt.Println("\n[4/5] Creating sample content...")
 		contentDir := filepath.Join("content", "posts")
 		if err := os.MkdirAll(contentDir, 0755); err != nil {
 			fmt.Fprintf(os.Stderr, "  ⚠ Warning: Could not create content directory: %v\n", err)
 		} else {
 			welcomePath := filepath.Join(contentDir, "welcome.md")
-			date := exec.Command("date", "+%Y-%m-%d")
-			dateOut, _ := date.Output()
-			content := fmt.Sprintf(welcomeContent, string(dateOut))
+			content := `---
+title: "Welcome to Walrus Sites"
+date: 2024-01-01T00:00:00Z
+draft: false
+---
 
+Welcome to your new decentralized website powered by Walrus!
+
+This site is hosted on the Walrus decentralized storage network, making it censorship-resistant and always available.
+
+## Next Steps
+
+1. Edit this content in ` + "`content/posts/welcome.md`" + `
+2. Add more posts to ` + "`content/posts/`" + `
+3. Customize your theme
+4. Deploy updates with ` + "`walgo deploy`" + `
+
+Happy building! 🚀
+`
 			if err := os.WriteFile(welcomePath, []byte(content), 0644); err != nil {
 				fmt.Fprintf(os.Stderr, "  ⚠ Warning: Could not create welcome post: %v\n", err)
 			} else {
@@ -111,71 +125,65 @@ Happy publishing! 🚀
 			}
 		}
 
-		if skipBuild {
-			fmt.Println("\n✅ Site created successfully!")
-			fmt.Printf("\nNext steps:\n")
-			fmt.Printf("  cd %s\n", siteName)
-			fmt.Printf("  walgo build\n")
-			fmt.Printf("  walgo serve  # Preview locally\n")
-			return
+		if !skipBuild {
+			// Step 5: Build the site
+			fmt.Println("\n[5/5] Building site...")
+			buildCmd := exec.Command("walgo", "build")
+			buildCmd.Stdout = os.Stdout
+			buildCmd.Stderr = os.Stderr
+			if err := buildCmd.Run(); err != nil {
+				fmt.Fprintf(os.Stderr, "\n❌ Build failed: %v\n", err)
+				os.Exit(1)
+			}
+			fmt.Println("  ✓ Site built")
 		}
 
-		// Step 4: Build site
-		fmt.Println("\n[4/5] Building site...")
-		buildCmd := exec.Command("walgo", "build")
-		buildCmd.Stdout = os.Stdout
-		buildCmd.Stderr = os.Stderr
-		if err := buildCmd.Run(); err != nil {
-			fmt.Fprintf(os.Stderr, "\n❌ Build failed: %v\n", err)
-			fmt.Fprintf(os.Stderr, "\nYou can manually build later with: walgo build\n")
-			os.Exit(1)
+		if !skipDeploy {
+			// Step 6: Deploy
+			fmt.Println("\n🌐 Deploying to Walrus (HTTP mode)...")
+			deployCmd := exec.Command("walgo", "deploy-http")
+			deployCmd.Stdout = os.Stdout
+			deployCmd.Stderr = os.Stderr
+			if err := deployCmd.Run(); err != nil {
+				fmt.Fprintf(os.Stderr, "\n❌ Deploy failed: %v\n", err)
+				fmt.Fprintf(os.Stderr, "\nYou can try deploying manually with:\n")
+				fmt.Fprintf(os.Stderr, "  cd %s && walgo deploy-http\n", siteName)
+				os.Exit(1)
+			}
 		}
 
-		if skipDeploy {
-			fmt.Println("\n✅ Site created and built successfully!")
-			fmt.Printf("\nNext steps:\n")
-			fmt.Printf("  cd %s\n", siteName)
-			fmt.Printf("  walgo serve  # Preview locally\n")
-			fmt.Printf("  walgo deploy-http --publisher https://publisher.walrus-testnet.walrus.space \\\n")
-			fmt.Printf("    --aggregator https://aggregator.walrus-testnet.walrus.space --epochs 1\n")
-			return
-		}
-
-		// Step 5: Deploy via HTTP (no wallet needed)
-		fmt.Println("\n[5/5] Deploying to Walrus HTTP testnet...")
-		fmt.Println("  (This may take a minute...)")
-
-		deployCmd := exec.Command("walgo", "deploy-http",
-			"--publisher", "https://publisher.walrus-testnet.walrus.space",
-			"--aggregator", "https://aggregator.walrus-testnet.walrus.space",
-			"--epochs", "1")
-		deployCmd.Stdout = os.Stdout
-		deployCmd.Stderr = os.Stderr
-
-		if err := deployCmd.Run(); err != nil {
-			fmt.Fprintf(os.Stderr, "\n❌ Deployment failed: %v\n\n", err)
-			fmt.Fprintf(os.Stderr, "💡 You can deploy manually:\n")
-			fmt.Fprintf(os.Stderr, "  cd %s\n", siteName)
-			fmt.Fprintf(os.Stderr, "  walgo deploy-http --publisher https://publisher.walrus-testnet.walrus.space \\\n")
-			fmt.Fprintf(os.Stderr, "    --aggregator https://aggregator.walrus-testnet.walrus.space --epochs 1\n")
-			os.Exit(1)
-		}
-
+		// Success message
 		fmt.Println("\n═══════════════════════════════════════════════════════════")
-		fmt.Println("🎉 Quickstart complete!")
-		fmt.Println("═══════════════════════════════════════════════════════════")
-		fmt.Printf("\nYour site is now live on Walrus!\n\n")
-		fmt.Printf("💡 What's next?\n")
-		fmt.Printf("  • Preview locally: walgo serve\n")
-		fmt.Printf("  • Add content: walgo new posts/my-post.md\n")
-		fmt.Printf("  • Rebuild & redeploy: walgo build && walgo deploy-http ...\n")
-		fmt.Printf("  • On-chain deploy: walgo setup --network testnet --force\n")
-		fmt.Printf("\n📚 Documentation: https://github.com/selimozten/walgo\n")
+		fmt.Println("✨ Success! Your site is ready.")
+		fmt.Printf("\n📁 Site location: %s/\n", siteName)
+		if !skipBuild {
+			fmt.Println("📦 Built files: public/")
+		}
+		if !skipDeploy {
+			fmt.Println("🌐 Your site is now live on Walrus!")
+		}
+		fmt.Println("\n🎯 Next steps:")
+		fmt.Println("  1. Edit content in content/posts/")
+		fmt.Println("  2. Rebuild: walgo build")
+		if skipDeploy {
+			fmt.Println("  3. Deploy: walgo deploy-http")
+		} else {
+			fmt.Println("  3. Update: walgo update <object-id>")
+		}
+		fmt.Println("\n📖 Learn more: https://github.com/selimozten/walgo")
 	},
+}
+
+// isValidSiteName validates that site name only contains safe characters
+func isValidSiteName(name string) bool {
+	// Only allow alphanumeric, hyphens, and underscores
+	validName := regexp.MustCompile(`^[a-zA-Z0-9_-]+$`)
+	return validName.MatchString(name) && len(name) > 0 && len(name) < 100
 }
 
 func init() {
 	rootCmd.AddCommand(quickstartCmd)
+
 	quickstartCmd.Flags().Bool("skip-deploy", false, "Skip deployment step")
-	quickstartCmd.Flags().Bool("skip-build", false, "Skip build and deploy steps")
+	quickstartCmd.Flags().Bool("skip-build", false, "Skip build step")
 }
