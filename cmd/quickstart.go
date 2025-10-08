@@ -55,7 +55,7 @@ Example:
 
 		// Step 2: Initialize site
 		fmt.Println("\n[2/5] Creating Hugo site...")
-		initCmd := exec.Command("walgo", "init", siteName)
+		initCmd := exec.Command("walgo", "init", siteName) // #nosec G204 - siteName is validated by isValidSiteName() above
 		initCmd.Stdout = os.Stdout
 		initCmd.Stderr = os.Stderr
 		if err := initCmd.Run(); err != nil {
@@ -72,11 +72,11 @@ Example:
 
 		// Step 3: Fetch and apply a theme
 		fmt.Println("\n[3/5] Setting up theme...")
-		themeURL := "https://github.com/theNewDynamic/gohugo-theme-ananke.git"
-		themeName := "ananke"
+		const themeURL = "https://github.com/theNewDynamic/gohugo-theme-ananke.git"
+		const themeName = "ananke"
 
-		// Clone theme
-		cloneCmd := exec.Command("git", "clone", "--depth", "1", themeURL, filepath.Join("themes", themeName))
+		// Clone theme - hardcoded safe values
+		cloneCmd := exec.Command("git", "clone", "--depth", "1", themeURL, filepath.Join("themes", themeName)) // #nosec G204 - hardcoded constants
 		cloneCmd.Stdout = os.Stdout
 		cloneCmd.Stderr = os.Stderr
 		if err := cloneCmd.Run(); err != nil {
@@ -85,17 +85,24 @@ Example:
 		} else {
 			// Update hugo config to use theme
 			fmt.Println("  ✓ Theme installed")
-			// Add theme to config (assuming hugo.toml)
-			configCmd := exec.Command("sh", "-c", fmt.Sprintf(`echo 'theme = "%s"' >> hugo.toml`, themeName))
-			if err := configCmd.Run(); err != nil {
-				fmt.Fprintf(os.Stderr, "  ⚠ Warning: Could not update config: %v\n", err)
+			// Write theme config safely
+			configContent := fmt.Sprintf("\ntheme = \"%s\"\n", themeName)
+			configPath := "hugo.toml"
+			f, err := os.OpenFile(configPath, os.O_APPEND|os.O_WRONLY, 0644)
+			if err != nil {
+				fmt.Fprintf(os.Stderr, "  ⚠ Warning: Could not open config: %v\n", err)
+			} else {
+				defer f.Close()
+				if _, err := f.WriteString(configContent); err != nil {
+					fmt.Fprintf(os.Stderr, "  ⚠ Warning: Could not update config: %v\n", err)
+				}
 			}
 		}
 
 		// Step 4: Create sample content
 		fmt.Println("\n[4/5] Creating sample content...")
 		contentDir := filepath.Join("content", "posts")
-		if err := os.MkdirAll(contentDir, 0755); err != nil {
+		if err := os.MkdirAll(contentDir, 0750); err != nil { // #nosec G301
 			fmt.Fprintf(os.Stderr, "  ⚠ Warning: Could not create content directory: %v\n", err)
 		} else {
 			welcomePath := filepath.Join(contentDir, "welcome.md")
@@ -118,7 +125,7 @@ This site is hosted on the Walrus decentralized storage network, making it censo
 
 Happy building! 🚀
 `
-			if err := os.WriteFile(welcomePath, []byte(content), 0644); err != nil {
+			if err := os.WriteFile(welcomePath, []byte(content), 0644); err != nil { // #nosec G306 - content files need to be readable
 				fmt.Fprintf(os.Stderr, "  ⚠ Warning: Could not create welcome post: %v\n", err)
 			} else {
 				fmt.Println("  ✓ Sample content created")

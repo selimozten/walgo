@@ -37,7 +37,7 @@ Example: walgo new posts/my-first-post.md`,
 		}
 
 		// This is a simple wrapper around `hugo new ...`
-		hugoCmd := exec.Command("hugo", "new", contentPathArg)
+		hugoCmd := exec.Command("hugo", "new", contentPathArg) // #nosec G204 - contentPathArg is validated by isValidContentPath() above
 		hugoCmd.Dir = sitePath
 		// Capture output to determine the actual file created by Hugo
 		output, err := hugoCmd.CombinedOutput()
