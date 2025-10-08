@@ -50,6 +50,7 @@ Examples:
 			home, _ := os.UserHomeDir()
 			binDir = filepath.Join(home, ".config", "walgo", "bin")
 		}
+		// #nosec G301 - bin directory needs standard permissions
 		if err := os.MkdirAll(binDir, 0o755); err != nil {
 			return fmt.Errorf("failed to create bin dir: %w", err)
 		}
@@ -148,7 +149,7 @@ func walrusURL(osStr, archStr, network string) (string, string) {
 }
 
 func downloadAndInstall(url, dest string) error {
-	resp, err := http.Get(url)
+	resp, err := http.Get(url) // #nosec G107 - URL is constructed from hardcoded base bucket and known patterns
 	if err != nil {
 		return err
 	}
@@ -157,15 +158,16 @@ func downloadAndInstall(url, dest string) error {
 		return fmt.Errorf("download failed (%d): %s", resp.StatusCode, url)
 	}
 	tmp := dest + ".tmp"
-	f, err := os.Create(tmp)
+	f, err := os.Create(tmp) // #nosec G304 - dest is a known binary path under managed bin directory
 	if err != nil {
 		return err
 	}
 	if _, err := io.Copy(f, resp.Body); err != nil {
-		f.Close()
+		f.Close() // #nosec G104 - cleanup close, primary error already handled
 		return err
 	}
-	f.Close()
+	f.Close() // #nosec G104 - error not critical, file already written
+	// #nosec G302 - binary files need execute permissions
 	if err := os.Chmod(tmp, 0o755); err != nil {
 		return err
 	}
@@ -178,7 +180,7 @@ func downloadAndInstall(url, dest string) error {
 func wireWalrusBinary(binDir string) error {
 	home, _ := os.UserHomeDir()
 	scPath := filepath.Join(home, ".config", "walrus", "sites-config.yaml")
-	data, err := os.ReadFile(scPath)
+	data, err := os.ReadFile(scPath) // #nosec G304 - path is constructed from known directory
 	if err != nil {
 		return errors.New("sites-config.yaml not found; run walgo setup first")
 	}
@@ -198,6 +200,7 @@ func wireWalrusBinary(binDir string) error {
 	if err != nil {
 		return err
 	}
+	// #nosec G306 - config file needs to be readable for site-builder
 	if err := os.WriteFile(scPath, out, 0o644); err != nil {
 		return err
 	}

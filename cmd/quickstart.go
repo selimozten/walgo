@@ -88,6 +88,7 @@ Example:
 			// Write theme config safely
 			configContent := fmt.Sprintf("\ntheme = \"%s\"\n", themeName)
 			configPath := "hugo.toml"
+			// #nosec G302 - config file needs to be writable
 			f, err := os.OpenFile(configPath, os.O_APPEND|os.O_WRONLY, 0644)
 			if err != nil {
 				fmt.Fprintf(os.Stderr, "  ⚠ Warning: Could not open config: %v\n", err)
@@ -125,7 +126,8 @@ This site is hosted on the Walrus decentralized storage network, making it censo
 
 Happy building! 🚀
 `
-			if err := os.WriteFile(welcomePath, []byte(content), 0644); err != nil { // #nosec G306 - content files need to be readable
+			// #nosec G306 - content files need to be readable
+			if err := os.WriteFile(welcomePath, []byte(content), 0644); err != nil {
 				fmt.Fprintf(os.Stderr, "  ⚠ Warning: Could not create welcome post: %v\n", err)
 			} else {
 				fmt.Println("  ✓ Sample content created")

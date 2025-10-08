@@ -33,7 +33,8 @@ file tailored for Walrus Sites deployment.`,
 		sitePath := filepath.Join(cwd, siteName)
 
 		// 1. Create site directory
-		if err := os.MkdirAll(sitePath, os.ModePerm); err != nil {
+		// #nosec G301 - site directory needs standard permissions
+		if err := os.MkdirAll(sitePath, 0755); err != nil {
 			fmt.Fprintf(os.Stderr, "Error creating site directory %s: %v\n", sitePath, err)
 			os.Exit(1)
 		}

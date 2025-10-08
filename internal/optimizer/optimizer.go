@@ -85,7 +85,7 @@ func (e *Engine) optimizeFile(filePath string, stats *OptimizationStats) error {
 	ext := strings.ToLower(filepath.Ext(filePath))
 
 	// Read the file
-	originalContent, err := os.ReadFile(filePath)
+	originalContent, err := os.ReadFile(filePath) // #nosec G304 - filePath comes from controlled directory walk
 	if err != nil {
 		return fmt.Errorf("failed to read file: %w", err)
 	}
@@ -129,7 +129,7 @@ func (e *Engine) optimizeFile(filePath string, stats *OptimizationStats) error {
 
 	// Only write if content changed
 	if len(optimizedContent) != len(originalContent) || string(optimizedContent) != string(originalContent) {
-		err = os.WriteFile(filePath, optimizedContent, 0644)
+		err = os.WriteFile(filePath, optimizedContent, 0644) // #nosec G306 - HTML/CSS/JS files need to be readable by web servers
 		if err != nil {
 			return fmt.Errorf("failed to write optimized file: %w", err)
 		}
@@ -152,7 +152,7 @@ func (e *Engine) collectHTMLContent(sourceDir string) error {
 
 		ext := strings.ToLower(filepath.Ext(path))
 		if ext == ".html" || ext == ".htm" {
-			content, err := os.ReadFile(path)
+			content, err := os.ReadFile(path) // #nosec G304 - path comes from controlled directory walk
 			if err != nil {
 				return err
 			}

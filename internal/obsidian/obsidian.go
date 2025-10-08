@@ -30,12 +30,14 @@ func ImportVault(vaultPath, hugoContentDir string, cfg config.ObsidianConfig) (*
 	}
 
 	// Create content directory if it doesn't exist
+	// #nosec G301 - content directory needs standard permissions
 	if err := os.MkdirAll(hugoContentDir, 0755); err != nil {
 		return nil, fmt.Errorf("failed to create Hugo content directory: %w", err)
 	}
 
 	// Create attachments directory
 	staticDir := filepath.Join(filepath.Dir(hugoContentDir), "static", cfg.AttachmentDir)
+	// #nosec G301 - static directory needs standard permissions
 	if err := os.MkdirAll(staticDir, 0755); err != nil {
 		return nil, fmt.Errorf("failed to create attachments directory: %w", err)
 	}
@@ -107,19 +109,19 @@ func copyAttachment(srcPath, vaultPath, staticDir, attachmentDir string) error {
 	destPath := filepath.Join(staticDir, filepath.Base(relPath))
 
 	// Read source file
-	data, err := os.ReadFile(srcPath)
+	data, err := os.ReadFile(srcPath) // #nosec G304 - srcPath comes from controlled directory walk
 	if err != nil {
 		return err
 	}
 
 	// Write to destination
-	return os.WriteFile(destPath, data, 0644)
+	return os.WriteFile(destPath, data, 0644) // #nosec G306 - attachment files need to be readable by web servers
 }
 
 // processMarkdownFile processes a single markdown file
 func processMarkdownFile(srcPath, vaultPath, hugoContentDir string, cfg config.ObsidianConfig) error {
 	// Read the file
-	content, err := os.ReadFile(srcPath)
+	content, err := os.ReadFile(srcPath) // #nosec G304 - srcPath comes from controlled directory walk
 	if err != nil {
 		return err
 	}
@@ -146,12 +148,13 @@ func processMarkdownFile(srcPath, vaultPath, hugoContentDir string, cfg config.O
 	destDir := filepath.Dir(destPath)
 
 	// Create directory structure if needed
+	// #nosec G301 - directory structure needs standard permissions
 	if err := os.MkdirAll(destDir, 0755); err != nil {
 		return err
 	}
 
 	// Write converted content
-	return os.WriteFile(destPath, []byte(convertedContent), 0644)
+	return os.WriteFile(destPath, []byte(convertedContent), 0644) // #nosec G306 - markdown files need to be readable by web servers
 }
 
 // convertWikilinks converts Obsidian [[wikilinks]] to Hugo markdown links

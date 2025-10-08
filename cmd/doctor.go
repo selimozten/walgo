@@ -164,7 +164,7 @@ Examples:
 			fmt.Printf("  ✓ sites-config.yaml found at %s\n", scPath)
 
 			// Check for tilde paths
-			data, _ := os.ReadFile(scPath)
+			data, _ := os.ReadFile(scPath) // #nosec G304 - path is constructed from known directory
 			if strings.Contains(string(data), "~/") {
 				fmt.Println("  ⚠ Configuration contains tilde paths (~)")
 				fmt.Println("    Run: walgo doctor --fix-paths")
@@ -237,7 +237,7 @@ func runQuiet(name string, args ...string) string {
 }
 
 func ensureAbsolutePaths(scPath, home string) error {
-	data, err := os.ReadFile(scPath)
+	data, err := os.ReadFile(scPath) // #nosec G304 - scPath is a known config file path
 	if err != nil {
 		return err
 	}
@@ -258,7 +258,7 @@ func ensureAbsolutePaths(scPath, home string) error {
 	if err != nil {
 		return err
 	}
-	return os.WriteFile(scPath, out, 0644)
+	return os.WriteFile(scPath, out, 0644) // #nosec G306 - config file needs to be readable for site-builder
 }
 
 func init() {

@@ -30,6 +30,7 @@ func CreateDefaultWalgoConfig(sitePath string) error {
 		return fmt.Errorf("failed to marshal default config to YAML: %w", err)
 	}
 
+	// #nosec G306 - config file needs to be readable
 	if err := os.WriteFile(configFilePath, data, 0644); err != nil {
 		return fmt.Errorf("failed to write default config file %s: %w", configFilePath, err)
 	}
@@ -86,6 +87,7 @@ func SaveConfig(configDir string, cfg *WalgoConfig) error {
 		return fmt.Errorf("failed to marshal config to YAML: %w", err)
 	}
 
+	// #nosec G306 - config file needs to be readable
 	if err := os.WriteFile(configFilePath, data, 0644); err != nil {
 		return fmt.Errorf("failed to write config file %s: %w", configFilePath, err)
 	}

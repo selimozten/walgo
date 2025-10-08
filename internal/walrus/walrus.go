@@ -219,6 +219,7 @@ func SetupSiteBuilder(network string, force bool) error {
 	}
 
 	configDir := filepath.Join(homeDir, ".config", "walrus")
+	// #nosec G301 - config directory needs standard permissions
 	if err := os.MkdirAll(configDir, 0755); err != nil {
 		return fmt.Errorf("failed to create config directory: %w", err)
 	}
@@ -266,6 +267,7 @@ func SetupSiteBuilder(network string, force bool) error {
 default_context: %s
 `, network, packageID, rpcURL, walletPath, walrusBinary, walrusConfig, network)
 
+	// #nosec G306 - config file needs to be readable for site-builder
 	if err := os.WriteFile(configPath, []byte(configContent), 0644); err != nil {
 		return fmt.Errorf("failed to write site-builder config: %w", err)
 	}

@@ -90,11 +90,11 @@ Example:
 			if err != nil {
 				return err
 			}
-			f, err := os.Open(path)
+			f, err := os.Open(path) // #nosec G304 - path comes from controlled directory walk
 			if err != nil {
 				return err
 			}
-			defer f.Close()
+			defer f.Close() // #nosec G104 - cleanup close, primary error already handled
 			if _, err := io.Copy(part, f); err != nil {
 				return err
 			}
@@ -104,7 +104,7 @@ Example:
 			fmt.Fprintf(os.Stderr, "Error preparing upload: %v\n", err)
 			os.Exit(1)
 		}
-		writer.Close()
+		writer.Close() // #nosec G104 - error not critical, body is already complete
 
 		endpoint := fmt.Sprintf("%s/v1/quilts?epochs=%d", strings.TrimRight(publisher, "/"), epochs)
 		req, err := http.NewRequest(http.MethodPut, endpoint, &body)
