@@ -130,7 +130,6 @@ brews:
     homepage: https://github.com/selimozten/walgo
     description: "CLI tool for shipping static sites to Walrus decentralized storage"
     license: MIT
-    folder: Formula
     dependencies:
       - name: hugo
         type: optional
@@ -140,17 +139,18 @@ brews:
       system "#{bin}/walgo", "--version"
 
 # Snapcraft configuration for Linux
-snapcrafts:
-  - name: walgo
-    summary: Ship static sites to Walrus
-    description: |
-      Walgo is a CLI tool that provides a seamless bridge for Hugo users to
-      build and deploy static sites to Walrus decentralized storage.
-    grade: stable
-    confinement: strict
-    publish: false
-    license: MIT
-    base: core22
+# Disabled for now - uncomment when snapcraft is available in CI
+# snapcrafts:
+#   - name: walgo
+#     summary: Ship static sites to Walrus
+#     description: |
+#       Walgo is a CLI tool that provides a seamless bridge for Hugo users to
+#       build and deploy static sites to Walrus decentralized storage.
+#     grade: stable
+#     confinement: strict
+#     publish: false
+#     license: MIT
+#     base: core22
 
 # Docker images
 dockers:
