@@ -1,12 +1,15 @@
 package cmd
 
 import (
+	"context"
 	"fmt"
 	"os"
 	"path/filepath"
+	"time"
 
 	"walgo/internal/config"
-	"walgo/internal/walrus"
+	"walgo/internal/deployer"
+	sb "walgo/internal/deployer/sitebuilder"
 
 	"github.com/spf13/cobra"
 )
@@ -44,8 +47,8 @@ Example: walgo deploy --epochs 5`,
 		force, _ := cmd.Flags().GetBool("force")
 		verbose, _ := cmd.Flags().GetBool("verbose")
 
-		// Set verbose mode in walrus package
-		walrus.SetVerbose(verbose)
+		// Prepare deployer
+		d := sb.New()
 
 		// Check if public directory exists
 		publishDir := filepath.Join(sitePath, walgoCfg.HugoConfig.PublishDir)
@@ -61,9 +64,11 @@ Example: walgo deploy --epochs 5`,
 		fmt.Println("🚀 Deploying to Walrus Sites...")
 		fmt.Println("  [1/3] Checking environment...")
 
-		// Deploy the site
+		// Deploy the site via adapter interface
 		fmt.Println("  [2/3] Uploading site...")
-		output, err := walrus.DeploySite(publishDir, walgoCfg.WalrusConfig, epochs)
+		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Minute)
+		defer cancel()
+		output, err := d.Deploy(ctx, publishDir, deployer.DeployOptions{Epochs: epochs, Verbose: verbose})
 		if err != nil {
 			fmt.Fprintf(os.Stderr, "\n❌ Deployment failed: %v\n\n", err)
 			fmt.Fprintf(os.Stderr, "💡 Troubleshooting:\n")

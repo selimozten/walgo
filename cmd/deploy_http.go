@@ -1,17 +1,15 @@
 package cmd
 
 import (
-	"bytes"
-	"encoding/json"
+	"context"
 	"fmt"
-	"io"
-	"mime/multipart"
-	"net/http"
 	"os"
 	"path/filepath"
-	"strings"
+	"time"
 
 	"walgo/internal/config"
+	"walgo/internal/deployer"
+	httpdep "walgo/internal/deployer/http"
 
 	"github.com/spf13/cobra"
 )
@@ -72,114 +70,26 @@ Example:
 			os.Exit(1)
 		}
 
-		var body bytes.Buffer
-		writer := multipart.NewWriter(&body)
-
-		err = filepath.Walk(publishDir, func(path string, info os.FileInfo, err error) error {
-			if err != nil {
-				return err
-			}
-			if info.IsDir() {
-				return nil
-			}
-			rel, _ := filepath.Rel(publishDir, path)
-			field := strings.ReplaceAll(rel, string(os.PathSeparator), "__")
-			field = strings.ReplaceAll(field, " ", "_")
-
-			part, err := writer.CreateFormFile(field, filepath.Base(path))
-			if err != nil {
-				return err
-			}
-			f, err := os.Open(path) // #nosec G304 - path comes from controlled directory walk
-			if err != nil {
-				return err
-			}
-			defer f.Close() // #nosec G104 - cleanup close, primary error already handled
-			if _, err := io.Copy(part, f); err != nil {
-				return err
-			}
-			return nil
+		// Use new HTTP deployer with quilt (single request) by default
+		d := httpdep.New()
+		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Minute)
+		defer cancel()
+		res, err := d.Deploy(ctx, publishDir, deployer.DeployOptions{
+			Epochs:            epochs,
+			PublisherBaseURL:  publisher,
+			AggregatorBaseURL: aggregator,
+			Mode:              "quilt",
+			Workers:           10,
+			MaxRetries:        5,
 		})
 		if err != nil {
-			fmt.Fprintf(os.Stderr, "Error preparing upload: %v\n", err)
+			fmt.Fprintf(os.Stderr, "HTTP deploy failed: %v\n", err)
 			os.Exit(1)
-		}
-		writer.Close() // #nosec G104 - error not critical, body is already complete
-
-		endpoint := fmt.Sprintf("%s/v1/quilts?epochs=%d", strings.TrimRight(publisher, "/"), epochs)
-		req, err := http.NewRequest(http.MethodPut, endpoint, &body)
-		if err != nil {
-			fmt.Fprintf(os.Stderr, "Error creating request: %v\n", err)
-			os.Exit(1)
-		}
-		req.Header.Set("Accept", "application/json")
-		req.Header.Set("Content-Type", writer.FormDataContentType())
-
-		resp, err := http.DefaultClient.Do(req)
-		if err != nil {
-			fmt.Fprintf(os.Stderr, "HTTP error: %v\n", err)
-			os.Exit(1)
-		}
-		defer resp.Body.Close()
-
-		respBytes, _ := io.ReadAll(resp.Body)
-		if resp.StatusCode < 200 || resp.StatusCode >= 300 {
-			fmt.Fprintf(os.Stderr, "Publisher responded %d: %s\n", resp.StatusCode, string(respBytes))
-			os.Exit(1)
-		}
-
-		var qResp quiltUploadResponse
-		if err := json.Unmarshal(respBytes, &qResp); err != nil {
-			fmt.Fprintf(os.Stderr, "Failed to parse response: %v\nBody: %s\n", err, string(respBytes))
-			os.Exit(1)
-		}
-
-		quiltID := qResp.BlobStoreResult.NewlyCreated.BlobObject.BlobId
-		if quiltID == "" {
-			quiltID = qResp.BlobStoreResult.AlreadyCertified.BlobId
 		}
 
 		fmt.Println("\n✅ HTTP deploy complete!")
-		fmt.Println()
-
-		aggregatorBase := strings.TrimRight(aggregator, "/")
-
-		if quiltID != "" {
-			fmt.Printf("📦 Quilt ID: %s\n", quiltID)
-		}
-
-		if len(qResp.StoredQuiltBlobs) > 0 {
-			fmt.Println()
-			fmt.Println("📂 Files stored on Walrus:")
-			for _, e := range qResp.StoredQuiltBlobs {
-				displayName := strings.ReplaceAll(e.Identifier, "__", "/")
-				displayName = strings.ReplaceAll(displayName, "_", " ")
-				fmt.Printf("  ✓ %s\n", displayName)
-			}
-
-			fmt.Println()
-			fmt.Println("⚠️  Important: HTTP testnet stores raw files only.")
-			fmt.Println("   Clicking links will download files, not render as a website.")
-			fmt.Println()
-			fmt.Println("📍 To view your site properly in a browser:")
-			fmt.Println()
-			fmt.Println("  Deploy on-chain for full website experience:")
-			fmt.Println("    1. walgo setup --network testnet --force")
-			fmt.Println("    2. walgo doctor --fix-paths")
-			fmt.Println("    3. walgo deploy --epochs 5")
-			fmt.Println()
-			fmt.Println("  Your site will then be accessible via Walrus Sites portal")
-			fmt.Println("  with proper HTML rendering and navigation.")
-			fmt.Println()
-			fmt.Println("📥 To fetch individual files (for testing):")
-			for _, e := range qResp.StoredQuiltBlobs {
-				url := fmt.Sprintf("%s/v1/blobs/by-quilt-patch-id/%s", aggregatorBase, e.QuiltPatchId)
-				displayName := strings.ReplaceAll(e.Identifier, "__", "/")
-				fmt.Printf("    curl %s > %s\n", url, displayName)
-				if strings.HasPrefix(e.Identifier, "index") {
-					break
-				}
-			}
+		if res.ObjectID != "" {
+			fmt.Printf("📦 Quilt ID: %s\n", res.ObjectID)
 		}
 	},
 }
