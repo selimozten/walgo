@@ -1,4 +1,4 @@
-package http
+package httpdeployer
 
 import (
 	"bytes"
@@ -93,7 +93,8 @@ func (a *Adapter) deployQuilt(ctx context.Context, siteDir, publisher string, ep
 	req.Header.Set("Accept", "application/json")
 	req.Header.Set("Content-Type", writer.FormDataContentType())
 
-	resp, err := http.DefaultClient.Do(req)
+	client := &http.Client{Timeout: 20 * time.Second}
+	resp, err := client.Do(req)
 	if err != nil {
 		return nil, err
 	}
@@ -115,6 +116,10 @@ func (a *Adapter) deployQuilt(ctx context.Context, siteDir, publisher string, ep
 				BlobId string `json:"blobId"`
 			} `json:"alreadyCertified"`
 		} `json:"blobStoreResult"`
+		StoredQuiltBlobs []struct {
+			Identifier   string `json:"identifier"`
+			QuiltPatchId string `json:"quiltPatchId"`
+		} `json:"storedQuiltBlobs"`
 	}
 	if err := json.Unmarshal(respBytes, &qResp); err != nil {
 		return nil, fmt.Errorf("failed to parse response: %w", err)
@@ -124,7 +129,11 @@ func (a *Adapter) deployQuilt(ctx context.Context, siteDir, publisher string, ep
 	if quiltID == "" {
 		quiltID = qResp.BlobStoreResult.AlreadyCertified.BlobId
 	}
-	return &deployer.Result{Success: true, ObjectID: quiltID}, nil
+	patches := make(map[string]string, len(qResp.StoredQuiltBlobs))
+	for _, p := range qResp.StoredQuiltBlobs {
+		patches[p.Identifier] = p.QuiltPatchId
+	}
+	return &deployer.Result{Success: true, ObjectID: quiltID, QuiltPatches: patches}, nil
 }
 
 // Blobs upload: concurrent workers with exponential backoff
@@ -184,11 +193,16 @@ send:
 func uploadWithRetry(ctx context.Context, endpoint, filePath string, maxRetries int) (string, error) {
 	backoff := 250 * time.Millisecond
 	for attempt := 0; attempt <= maxRetries; attempt++ {
-		blobID, err := putBlob(ctx, endpoint, filePath)
+		blobID, status, err := putBlob(ctx, endpoint, filePath)
 		if err == nil && blobID != "" {
 			return blobID, nil
 		}
-		// Retry on error or empty blobID
+		if ctx.Err() != nil {
+			return "", ctx.Err()
+		}
+		if err == nil && (status < 500 && status != 429) {
+			return "", fmt.Errorf("non-retryable status %d", status)
+		}
 		select {
 		case <-time.After(backoff + time.Duration(attempt)*50*time.Millisecond):
 			backoff *= 2
@@ -202,27 +216,28 @@ func uploadWithRetry(ctx context.Context, endpoint, filePath string, maxRetries 
 	return "", fmt.Errorf("max retries reached for %s", filepath.Base(filePath))
 }
 
-func putBlob(ctx context.Context, endpoint, filePath string) (string, error) {
+func putBlob(ctx context.Context, endpoint, filePath string) (string, int, error) {
 	f, err := os.Open(filePath)
 	if err != nil {
-		return "", err
+		return "", 0, err
 	}
 	defer f.Close()
 
 	req, err := http.NewRequestWithContext(ctx, http.MethodPut, endpoint, f)
 	if err != nil {
-		return "", err
+		return "", 0, err
 	}
 	req.Header.Set("Accept", "application/json")
 
-	resp, err := http.DefaultClient.Do(req)
+	client := &http.Client{Timeout: 20 * time.Second}
+	resp, err := client.Do(req)
 	if err != nil {
-		return "", err
+		return "", 0, err
 	}
 	defer resp.Body.Close()
 	b, _ := io.ReadAll(resp.Body)
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
-		return "", fmt.Errorf("publisher responded %d: %s", resp.StatusCode, string(b))
+		return "", resp.StatusCode, fmt.Errorf("publisher responded %d: %s", resp.StatusCode, string(b))
 	}
 	var parsed struct {
 		NewlyCreated struct {
@@ -235,11 +250,11 @@ func putBlob(ctx context.Context, endpoint, filePath string) (string, error) {
 		} `json:"alreadyCertified"`
 	}
 	if err := json.Unmarshal(b, &parsed); err != nil {
-		return "", err
+		return "", resp.StatusCode, err
 	}
 	id := parsed.NewlyCreated.BlobObject.BlobId
 	if id == "" {
 		id = parsed.AlreadyCertified.BlobId
 	}
-	return id, nil
+	return id, resp.StatusCode, nil
 }

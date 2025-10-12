@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 	"time"
 
 	"walgo/internal/config"
@@ -13,23 +14,6 @@ import (
 
 	"github.com/spf13/cobra"
 )
-
-type quiltUploadResponse struct {
-	BlobStoreResult struct {
-		NewlyCreated struct {
-			BlobObject struct {
-				BlobId string `json:"blobId"`
-			} `json:"blobObject"`
-		} `json:"newlyCreated"`
-		AlreadyCertified struct {
-			BlobId string `json:"blobId"`
-		} `json:"alreadyCertified"`
-	} `json:"blobStoreResult"`
-	StoredQuiltBlobs []struct {
-		Identifier   string `json:"identifier"`
-		QuiltPatchId string `json:"quiltPatchId"`
-	} `json:"storedQuiltBlobs"`
-}
 
 var deployHTTPCmd = &cobra.Command{
 	Use:   "deploy-http",
@@ -44,6 +28,11 @@ Example:
 		publisher, _ := cmd.Flags().GetString("publisher")
 		aggregator, _ := cmd.Flags().GetString("aggregator")
 		epochs, _ := cmd.Flags().GetInt("epochs")
+		mode, _ := cmd.Flags().GetString("mode")
+		workers, _ := cmd.Flags().GetInt("workers")
+		retries, _ := cmd.Flags().GetInt("retries")
+		jsonLogs, _ := cmd.Flags().GetBool("json")
+		verbose, _ := cmd.Flags().GetBool("verbose")
 
 		if publisher == "" || aggregator == "" {
 			fmt.Fprintln(os.Stderr, "--publisher and --aggregator are required")
@@ -70,17 +59,29 @@ Example:
 			os.Exit(1)
 		}
 
-		// Use new HTTP deployer with quilt (single request) by default
+		// Use HTTP deployer; default to quilt (single request)
 		d := httpdep.New()
 		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Minute)
 		defer cancel()
+		if mode == "" {
+			mode = "quilt"
+		}
+		if workers <= 0 {
+			workers = 10
+		}
+		if retries <= 0 {
+			retries = 5
+		}
+
 		res, err := d.Deploy(ctx, publishDir, deployer.DeployOptions{
 			Epochs:            epochs,
 			PublisherBaseURL:  publisher,
 			AggregatorBaseURL: aggregator,
-			Mode:              "quilt",
-			Workers:           10,
-			MaxRetries:        5,
+			Mode:              mode,
+			Workers:           workers,
+			MaxRetries:        retries,
+			JSONLogs:          jsonLogs,
+			Verbose:           verbose,
 		})
 		if err != nil {
 			fmt.Fprintf(os.Stderr, "HTTP deploy failed: %v\n", err)
@@ -91,6 +92,27 @@ Example:
 		if res.ObjectID != "" {
 			fmt.Printf("📦 Quilt ID: %s\n", res.ObjectID)
 		}
+
+		// Show per-file info and aggregator fetch hints when available
+		if len(res.QuiltPatches) > 0 {
+			fmt.Println()
+			fmt.Println("📂 Files stored on Walrus:")
+			for ident := range res.QuiltPatches {
+				display := ident
+				display = strings.ReplaceAll(display, "__", "/")
+				display = strings.ReplaceAll(display, "_", " ")
+				fmt.Printf("  ✓ %s\n", display)
+			}
+
+			fmt.Println()
+			fmt.Println("📥 To fetch individual files (for testing):")
+			for ident, patch := range res.QuiltPatches {
+				display := ident
+				display = strings.ReplaceAll(display, "__", "/")
+				url := fmt.Sprintf("%s/v1/blobs/by-quilt-patch-id/%s", strings.TrimRight(aggregator, "/"), patch)
+				fmt.Printf("    curl %s > %s\n", url, display)
+			}
+		}
 	},
 }
 
@@ -99,4 +121,9 @@ func init() {
 	deployHTTPCmd.Flags().String("publisher", "", "Walrus publisher base URL (e.g., https://publisher.walrus-testnet.walrus.space)")
 	deployHTTPCmd.Flags().String("aggregator", "", "Walrus aggregator base URL (e.g., https://aggregator.walrus-testnet.walrus.space)")
 	deployHTTPCmd.Flags().IntP("epochs", "e", 1, "Number of epochs to store the quilt")
+	deployHTTPCmd.Flags().String("mode", "quilt", "HTTP deploy mode: quilt or blobs")
+	deployHTTPCmd.Flags().Int("workers", 10, "Concurrent workers for blobs mode")
+	deployHTTPCmd.Flags().Int("retries", 5, "Max retries per file for transient errors")
+	deployHTTPCmd.Flags().Bool("json", false, "Emit structured JSON logs")
+	deployHTTPCmd.Flags().BoolP("verbose", "v", false, "Verbose logging")
 }

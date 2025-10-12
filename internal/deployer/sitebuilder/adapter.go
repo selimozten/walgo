@@ -2,7 +2,6 @@ package sitebuilder
 
 import (
 	"context"
-	"walgo/internal/config"
 	"walgo/internal/deployer"
 	"walgo/internal/walrus"
 )
@@ -14,11 +13,7 @@ func New() *Adapter { return &Adapter{} }
 
 func (a *Adapter) Deploy(ctx context.Context, siteDir string, opts deployer.DeployOptions) (*deployer.Result, error) {
 	walrus.SetVerbose(opts.Verbose)
-	// Load config for walrus settings if available
-	// Note: commands typically load config, but adapter users may pass dir directly.
-	// We construct a minimal config for compatibility; epochs is taken from opts.
-	cfg, _ := config.LoadConfig()
-	out, err := walrus.DeploySite(siteDir, cfg.WalrusConfig, opts.Epochs)
+	out, err := walrus.DeploySite(siteDir, opts.WalrusCfg, opts.Epochs)
 	if err != nil {
 		return nil, err
 	}
@@ -38,5 +33,9 @@ func (a *Adapter) Status(ctx context.Context, objectID string, opts deployer.Dep
 	if err != nil {
 		return nil, err
 	}
-	return &deployer.Result{Success: out.Success, ObjectID: objectID, BrowseURLs: out.BrowseURLs}, nil
+	rc := 0
+	if out != nil {
+		rc = len(out.Resources)
+	}
+	return &deployer.Result{Success: out.Success, ObjectID: objectID, BrowseURLs: out.BrowseURLs, ResourceCount: rc}, nil
 }

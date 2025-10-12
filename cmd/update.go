@@ -85,7 +85,7 @@ Assumes the site has been built using 'walgo build'.`,
 		d := sb.New()
 		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Minute)
 		defer cancel()
-		output, err := d.Update(ctx, deployDir, objectID, deployer.DeployOptions{Epochs: epochs})
+		output, err := d.Update(ctx, deployDir, objectID, deployer.DeployOptions{Epochs: epochs, WalrusCfg: cfg.WalrusConfig})
 		if err != nil {
 			fmt.Fprintf(os.Stderr, "Error updating Walrus Site: %v\n", err)
 			os.Exit(1)

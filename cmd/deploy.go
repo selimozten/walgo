@@ -68,7 +68,7 @@ Example: walgo deploy --epochs 5`,
 		fmt.Println("  [2/3] Uploading site...")
 		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Minute)
 		defer cancel()
-		output, err := d.Deploy(ctx, publishDir, deployer.DeployOptions{Epochs: epochs, Verbose: verbose})
+		output, err := d.Deploy(ctx, publishDir, deployer.DeployOptions{Epochs: epochs, Verbose: verbose, WalrusCfg: walgoCfg.WalrusConfig})
 		if err != nil {
 			fmt.Fprintf(os.Stderr, "\n❌ Deployment failed: %v\n\n", err)
 			fmt.Fprintf(os.Stderr, "💡 Troubleshooting:\n")
