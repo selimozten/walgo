@@ -83,10 +83,10 @@ func runTestCases(t *testing.T, cmd *cobra.Command, cases []TestCase) {
 
 			// Check error expectation
 			if tc.ExpectError && err == nil {
-				t.Errorf("Expected error but got none")
+				t.Errorf("Expected error but got none. Output: %s", output)
 			}
 			if !tc.ExpectError && err != nil {
-				t.Errorf("Unexpected error: %v", err)
+				t.Errorf("Unexpected error: %v. Output: %s", err, output)
 			}
 
 			// Check output contains expected strings
