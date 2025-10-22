@@ -9,6 +9,15 @@
 
 Deploy your Hugo sites to the decentralized web in seconds. No blockchain experience required.
 
+## Supported By
+
+<div style="text-align: center; background: white; padding: 20px; border-radius: 10px; margin: 20px 0; box-shadow: 0 2px 4px rgba(0,0,0,0.1);">
+  <img src="walrus-logo.svg" alt="Walrus Logo" style="background: white; padding: 10px; border-radius: 5px; max-width: 150px; height: auto;" />
+  <br />
+  <p style="margin: 10px 0 0 0; font-weight: bold;">Walrus RFP Winner</p>
+  <p style="margin: 5px 0 0 0;">This project won the Walrus RFP and is supported by Walrus to advance the decentralized web ecosystem.</p>
+</div>
+
 ## Install
 
 ```bash

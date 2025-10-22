@@ -1,10 +1,14 @@
 package cmd
 
 import (
+	"context"
 	"fmt"
 	"os"
+	"time"
 
 	"walgo/internal/config"
+	"walgo/internal/deployer"
+	sb "walgo/internal/deployer/sitebuilder"
 	"walgo/internal/walrus"
 
 	"github.com/spf13/cobra"
@@ -44,8 +48,10 @@ You can provide the object ID as an argument, or the command will look for it in
 			fmt.Printf("Using object ID from walgo.yaml: %s\n", objectID)
 		}
 
-		// Get site status/resources using sitemap
-		output, err := walrus.GetSiteStatus(objectID)
+		d := sb.New()
+		ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
+		defer cancel()
+		output, err := d.Status(ctx, objectID, deployer.DeployOptions{})
 		if err != nil {
 			fmt.Fprintf(os.Stderr, "Error getting site status: %v\n", err)
 			os.Exit(1)
@@ -54,15 +60,17 @@ You can provide the object ID as an argument, or the command will look for it in
 		if output.Success {
 			fmt.Printf("\n📊 Site Status Summary:\n")
 			fmt.Printf("📋 Object ID: %s\n", objectID)
-			if len(output.Resources) > 0 {
-				fmt.Printf("📁 Resources: %d files\n", len(output.Resources))
+			if output.ResourceCount > 0 {
+				fmt.Printf("📁 Resources: %d files\n", output.ResourceCount)
 			}
 		}
 
 		// If the --convert flag is set, also show the Base36 representation
 		if convert, _ := cmd.Flags().GetBool("convert"); convert {
 			fmt.Println("\nConverting to Base36 format:")
-			if base36, err := walrus.ConvertObjectID(objectID); err != nil {
+			// Use the original walrus helper for conversion which wraps site-builder
+			base36, err := convertObjectID(objectID)
+			if err != nil {
 				fmt.Fprintf(os.Stderr, "Error converting object ID: %v\n", err)
 			} else if base36 != "" {
 				fmt.Printf("🔗 Base36 ID: %s\n", base36)
@@ -74,4 +82,9 @@ You can provide the object ID as an argument, or the command will look for it in
 func init() {
 	rootCmd.AddCommand(statusCmd)
 	statusCmd.Flags().BoolP("convert", "c", false, "Also show the Base36 representation of the object ID")
+}
+
+// convertObjectID converts hex object ID to base36 using site-builder via internal/walrus.
+func convertObjectID(objectID string) (string, error) {
+	return walrus.ConvertObjectID(objectID)
 }

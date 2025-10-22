@@ -1,12 +1,15 @@
 package cmd
 
 import (
+	"context"
 	"fmt"
 	"os"
 	"path/filepath"
+	"time"
 
 	"walgo/internal/config"
-	"walgo/internal/walrus"
+	"walgo/internal/deployer"
+	sb "walgo/internal/deployer/sitebuilder"
 
 	"github.com/spf13/cobra"
 )
@@ -79,8 +82,10 @@ Assumes the site has been built using 'walgo build'.`,
 
 		fmt.Printf("Storing for %d epoch(s)\n", epochs)
 
-		// Call Walrus update function
-		output, err := walrus.UpdateSite(deployDir, objectID, epochs)
+		d := sb.New()
+		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Minute)
+		defer cancel()
+		output, err := d.Update(ctx, deployDir, objectID, deployer.DeployOptions{Epochs: epochs, WalrusCfg: cfg.WalrusConfig})
 		if err != nil {
 			fmt.Fprintf(os.Stderr, "Error updating Walrus Site: %v\n", err)
 			os.Exit(1)
