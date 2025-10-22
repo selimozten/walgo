@@ -132,7 +132,9 @@ func TestDeployBlobs_Cancel(t *testing.T) {
 	dir := t.TempDir()
 	for i := 0; i < 50; i++ {
 		name := filepath.Join(dir, "f-"+itoa(i))
-		_ = os.WriteFile(name, []byte(strings.Repeat("x", 8)), 0644)
+		if err := os.WriteFile(name, []byte(strings.Repeat("x", 8)), 0644); err != nil {
+			t.Fatal(err)
+		}
 	}
 
 	a := New()

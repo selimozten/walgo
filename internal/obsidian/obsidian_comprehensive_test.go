@@ -22,9 +22,15 @@ func TestImportVault(t *testing.T) {
 			name: "Import simple vault",
 			setupVault: func(vaultPath string) error {
 				// Create markdown files
-				os.MkdirAll(filepath.Join(vaultPath, "notes"), 0755)
-				os.WriteFile(filepath.Join(vaultPath, "index.md"), []byte("# Home\n\nWelcome"), 0644)
-				os.WriteFile(filepath.Join(vaultPath, "notes", "note1.md"), []byte("# Note 1\n\nContent"), 0644)
+				if err := os.MkdirAll(filepath.Join(vaultPath, "notes"), 0755); err != nil {
+					return err
+				}
+				if err := os.WriteFile(filepath.Join(vaultPath, "index.md"), []byte("# Home\n\nWelcome"), 0644); err != nil {
+					return err
+				}
+				if err := os.WriteFile(filepath.Join(vaultPath, "notes", "note1.md"), []byte("# Note 1\n\nContent"), 0644); err != nil {
+					return err
+				}
 				return nil
 			},
 			cfg: config.ObsidianConfig{
@@ -44,9 +50,15 @@ func TestImportVault(t *testing.T) {
 		{
 			name: "Import vault with attachments",
 			setupVault: func(vaultPath string) error {
-				os.WriteFile(filepath.Join(vaultPath, "note.md"), []byte("# Note\n\n![[image.png]]"), 0644)
-				os.WriteFile(filepath.Join(vaultPath, "image.png"), []byte("fake image data"), 0644)
-				os.WriteFile(filepath.Join(vaultPath, "doc.pdf"), []byte("fake pdf"), 0644)
+				if err := os.WriteFile(filepath.Join(vaultPath, "note.md"), []byte("# Note\n\n![[image.png]]"), 0644); err != nil {
+					return err
+				}
+				if err := os.WriteFile(filepath.Join(vaultPath, "image.png"), []byte("fake image data"), 0644); err != nil {
+					return err
+				}
+				if err := os.WriteFile(filepath.Join(vaultPath, "doc.pdf"), []byte("fake pdf"), 0644); err != nil {
+					return err
+				}
 				return nil
 			},
 			cfg: config.ObsidianConfig{
@@ -71,7 +83,9 @@ This links to [[Other Note]] and [[Another Page|custom text]].
 
 Here's an image: ![[screenshot.png]]
 `
-				os.WriteFile(filepath.Join(vaultPath, "note.md"), []byte(content), 0644)
+				if err := os.WriteFile(filepath.Join(vaultPath, "note.md"), []byte(content), 0644); err != nil {
+					return err
+				}
 				return nil
 			},
 			cfg: config.ObsidianConfig{
@@ -100,8 +114,12 @@ draft: false
 ---
 # Published Note
 `
-				os.WriteFile(filepath.Join(vaultPath, "draft.md"), []byte(draftContent), 0644)
-				os.WriteFile(filepath.Join(vaultPath, "published.md"), []byte(publishedContent), 0644)
+				if err := os.WriteFile(filepath.Join(vaultPath, "draft.md"), []byte(draftContent), 0644); err != nil {
+					return err
+				}
+				if err := os.WriteFile(filepath.Join(vaultPath, "published.md"), []byte(publishedContent), 0644); err != nil {
+					return err
+				}
 				return nil
 			},
 			cfg: config.ObsidianConfig{
@@ -131,10 +149,18 @@ draft: false
 		{
 			name: "Vault with subdirectories",
 			setupVault: func(vaultPath string) error {
-				os.MkdirAll(filepath.Join(vaultPath, "daily", "2024"), 0755)
-				os.MkdirAll(filepath.Join(vaultPath, "projects", "work"), 0755)
-				os.WriteFile(filepath.Join(vaultPath, "daily", "2024", "01-01.md"), []byte("# Daily Note"), 0644)
-				os.WriteFile(filepath.Join(vaultPath, "projects", "work", "project.md"), []byte("# Project"), 0644)
+				if err := os.MkdirAll(filepath.Join(vaultPath, "daily", "2024"), 0755); err != nil {
+					return err
+				}
+				if err := os.MkdirAll(filepath.Join(vaultPath, "projects", "work"), 0755); err != nil {
+					return err
+				}
+				if err := os.WriteFile(filepath.Join(vaultPath, "daily", "2024", "01-01.md"), []byte("# Daily Note"), 0644); err != nil {
+					return err
+				}
+				if err := os.WriteFile(filepath.Join(vaultPath, "projects", "work", "project.md"), []byte("# Project"), 0644); err != nil {
+					return err
+				}
 				return nil
 			},
 			cfg: config.ObsidianConfig{
@@ -161,8 +187,12 @@ title = "TOML Note"
 +++
 # Content
 `
-				os.WriteFile(filepath.Join(vaultPath, "yaml.md"), []byte(yamlContent), 0644)
-				os.WriteFile(filepath.Join(vaultPath, "toml.md"), []byte(tomlContent), 0644)
+				if err := os.WriteFile(filepath.Join(vaultPath, "yaml.md"), []byte(yamlContent), 0644); err != nil {
+					return err
+				}
+				if err := os.WriteFile(filepath.Join(vaultPath, "toml.md"), []byte(tomlContent), 0644); err != nil {
+					return err
+				}
 				return nil
 			},
 			cfg: config.ObsidianConfig{
@@ -222,7 +252,9 @@ func TestCopyAttachment(t *testing.T) {
 			name: "Copy image attachment",
 			setupFiles: func(vaultPath, staticDir string) (string, error) {
 				srcPath := filepath.Join(vaultPath, "image.png")
-				os.WriteFile(srcPath, []byte("image data"), 0644)
+				if err := os.WriteFile(srcPath, []byte("image data"), 0644); err != nil {
+					return "", err
+				}
 				return srcPath, nil
 			},
 			attachmentDir: "images",
@@ -232,8 +264,12 @@ func TestCopyAttachment(t *testing.T) {
 			name: "Copy to nested attachment directory",
 			setupFiles: func(vaultPath, staticDir string) (string, error) {
 				srcPath := filepath.Join(vaultPath, "assets", "photo.jpg")
-				os.MkdirAll(filepath.Dir(srcPath), 0755)
-				os.WriteFile(srcPath, []byte("photo data"), 0644)
+				if err := os.MkdirAll(filepath.Dir(srcPath), 0755); err != nil {
+					return "", err
+				}
+				if err := os.WriteFile(srcPath, []byte("photo data"), 0644); err != nil {
+					return "", err
+				}
 				return srcPath, nil
 			},
 			attachmentDir: "media/images",
@@ -251,7 +287,9 @@ func TestCopyAttachment(t *testing.T) {
 			name: "Copy file with spaces in name",
 			setupFiles: func(vaultPath, staticDir string) (string, error) {
 				srcPath := filepath.Join(vaultPath, "my file.pdf")
-				os.WriteFile(srcPath, []byte("pdf data"), 0644)
+				if err := os.WriteFile(srcPath, []byte("pdf data"), 0644); err != nil {
+					return "", err
+				}
 				return srcPath, nil
 			},
 			attachmentDir: "docs",
@@ -377,7 +415,9 @@ title: Draft Post
 
 			// Create source file
 			srcPath := filepath.Join(vaultPath, "test.md")
-			os.WriteFile(srcPath, []byte(tt.content), 0644)
+			if err := os.WriteFile(srcPath, []byte(tt.content), 0644); err != nil {
+				t.Fatal(err)
+			}
 
 			// Process file
 			err := processMarkdownFile(srcPath, vaultPath, hugoDir, tt.cfg)
@@ -620,9 +660,15 @@ func TestImportStatsTracking(t *testing.T) {
 	hugoDir := t.TempDir()
 
 	// Create various file types
-	os.MkdirAll(filepath.Join(vaultPath, "notes"), 0755)
-	os.MkdirAll(filepath.Join(vaultPath, "daily"), 0755)
-	os.MkdirAll(filepath.Join(vaultPath, "attachments"), 0755)
+	if err := os.MkdirAll(filepath.Join(vaultPath, "notes"), 0755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.MkdirAll(filepath.Join(vaultPath, "daily"), 0755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.MkdirAll(filepath.Join(vaultPath, "attachments"), 0755); err != nil {
+		t.Fatal(err)
+	}
 
 	// Create markdown files
 	files := map[string]string{
@@ -645,12 +691,18 @@ draft: true
 	}
 
 	for path, content := range files {
-		os.WriteFile(filepath.Join(vaultPath, path), []byte(content), 0644)
+		if err := os.WriteFile(filepath.Join(vaultPath, path), []byte(content), 0644); err != nil {
+			t.Fatal(err)
+		}
 	}
 
 	// Create attachments
-	os.WriteFile(filepath.Join(vaultPath, "attachments", "image.png"), []byte("img"), 0644)
-	os.WriteFile(filepath.Join(vaultPath, "document.pdf"), []byte("pdf"), 0644)
+	if err := os.WriteFile(filepath.Join(vaultPath, "attachments", "image.png"), []byte("img"), 0644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(vaultPath, "document.pdf"), []byte("pdf"), 0644); err != nil {
+		t.Fatal(err)
+	}
 
 	// Import with draft skipping
 	cfg := config.ObsidianConfig{

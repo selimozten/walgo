@@ -109,8 +109,10 @@ deploy:
 		// Create temp directory and make it current
 		tempDir := t.TempDir()
 		originalWd, _ := os.Getwd()
-		_ = os.Chdir(tempDir)
-		defer func() { _ = os.Chdir(originalWd) }()
+		if err := os.Chdir(tempDir); err != nil {
+			t.Fatal(err)
+		}
+		defer func() { _ = os.Chdir(originalWd) }() //nolint:errcheck // test cleanup
 
 		// Create config in current directory
 		configFile := filepath.Join(tempDir, "walgo.yaml")
@@ -142,8 +144,10 @@ optimize:
 		// Use a temp directory with no config files
 		tempDir := t.TempDir()
 		originalWd, _ := os.Getwd()
-		_ = os.Chdir(tempDir)
-		defer func() { _ = os.Chdir(originalWd) }()
+		if err := os.Chdir(tempDir); err != nil {
+			t.Fatal(err)
+		}
+		defer func() { _ = os.Chdir(originalWd) }() //nolint:errcheck // test cleanup
 
 		originalHome := os.Getenv("HOME")
 		os.Setenv("HOME", tempDir)

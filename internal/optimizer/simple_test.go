@@ -127,13 +127,19 @@ func TestEngineOptimizeDirectorySimple(t *testing.T) {
 
 	// Create test files
 	htmlFile := filepath.Join(testDir, "index.html")
-	os.WriteFile(htmlFile, []byte(`<html><body>Test</body></html>`), 0644)
+	if err := os.WriteFile(htmlFile, []byte(`<html><body>Test</body></html>`), 0644); err != nil {
+		t.Fatal(err)
+	}
 
 	cssFile := filepath.Join(testDir, "style.css")
-	os.WriteFile(cssFile, []byte(`body { margin: 0; }`), 0644)
+	if err := os.WriteFile(cssFile, []byte(`body { margin: 0; }`), 0644); err != nil {
+		t.Fatal(err)
+	}
 
 	jsFile := filepath.Join(testDir, "script.js")
-	os.WriteFile(jsFile, []byte(`function test() { return true; }`), 0644)
+	if err := os.WriteFile(jsFile, []byte(`function test() { return true; }`), 0644); err != nil {
+		t.Fatal(err)
+	}
 
 	// Create engine with all optimizers enabled
 	config := NewDefaultOptimizerConfig()
@@ -156,7 +162,9 @@ func TestEngineDisabled(t *testing.T) {
 
 	// Create a test file
 	htmlFile := filepath.Join(testDir, "index.html")
-	os.WriteFile(htmlFile, []byte(`<html><body>Test</body></html>`), 0644)
+	if err := os.WriteFile(htmlFile, []byte(`<html><body>Test</body></html>`), 0644); err != nil {
+		t.Fatal(err)
+	}
 
 	// Create engine with optimizer disabled
 	config := OptimizerConfig{
@@ -181,10 +189,14 @@ func TestEngineSkipPatterns(t *testing.T) {
 
 	// Create test files
 	minFile := filepath.Join(testDir, "script.min.js")
-	os.WriteFile(minFile, []byte(`function test(){}`), 0644)
+	if err := os.WriteFile(minFile, []byte(`function test(){}`), 0644); err != nil {
+		t.Fatal(err)
+	}
 
 	regularFile := filepath.Join(testDir, "script.js")
-	os.WriteFile(regularFile, []byte(`function test() { return true; }`), 0644)
+	if err := os.WriteFile(regularFile, []byte(`function test() { return true; }`), 0644); err != nil {
+		t.Fatal(err)
+	}
 
 	// Create engine with skip patterns
 	config := NewDefaultOptimizerConfig()

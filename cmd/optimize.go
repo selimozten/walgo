@@ -83,33 +83,28 @@ The optimization settings can be configured in walgo.yaml under the 'optimizer' 
 
 		// Override config with command line flags
 		if cmd.Flags().Changed("verbose") {
-			if verbose, _ := cmd.Flags().GetBool("verbose"); verbose {
-				optimizerConfig.Verbose = true
-			}
+			verbose, _ := cmd.Flags().GetBool("verbose")
+			optimizerConfig.Verbose = verbose
 		}
 
 		if cmd.Flags().Changed("html") {
-			if html, _ := cmd.Flags().GetBool("html"); !html {
-				optimizerConfig.HTML.Enabled = false
-			}
+			html, _ := cmd.Flags().GetBool("html")
+			optimizerConfig.HTML.Enabled = html
 		}
 
 		if cmd.Flags().Changed("css") {
-			if css, _ := cmd.Flags().GetBool("css"); !css {
-				optimizerConfig.CSS.Enabled = false
-			}
+			css, _ := cmd.Flags().GetBool("css")
+			optimizerConfig.CSS.Enabled = css
 		}
 
 		if cmd.Flags().Changed("js") {
-			if js, _ := cmd.Flags().GetBool("js"); !js {
-				optimizerConfig.JS.Enabled = false
-			}
+			js, _ := cmd.Flags().GetBool("js")
+			optimizerConfig.JS.Enabled = js
 		}
 
 		if cmd.Flags().Changed("remove-unused-css") {
-			if removeUnused, _ := cmd.Flags().GetBool("remove-unused-css"); removeUnused {
-				optimizerConfig.CSS.RemoveUnused = true
-			}
+			removeUnused, _ := cmd.Flags().GetBool("remove-unused-css")
+			optimizerConfig.CSS.RemoveUnused = removeUnused
 		}
 
 		// Create and run optimizer

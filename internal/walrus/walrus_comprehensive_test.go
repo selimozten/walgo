@@ -125,7 +125,9 @@ func TestSetupSiteBuilder(t *testing.T) {
 
 			// Create .config/walrus directory
 			configDir := filepath.Join(tempHome, ".config", "walrus")
-			os.MkdirAll(configDir, 0755)
+			if err := os.MkdirAll(configDir, 0755); err != nil {
+				t.Fatal(err)
+			}
 
 			err := SetupSiteBuilder(tt.network, tt.force)
 

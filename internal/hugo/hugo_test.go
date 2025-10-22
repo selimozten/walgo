@@ -158,10 +158,14 @@ languageCode = "en-us"
 title = "Test Site"
 `
 				configPath := filepath.Join(tmpDir, "hugo.toml")
-				_ = os.WriteFile(configPath, []byte(configContent), 0644)
+				if err := os.WriteFile(configPath, []byte(configContent), 0644); err != nil {
+					t.Fatal(err)
+				}
 
 				// Create content directory
-				_ = os.MkdirAll(filepath.Join(tmpDir, "content"), 0755)
+				if err := os.MkdirAll(filepath.Join(tmpDir, "content"), 0755); err != nil {
+					t.Fatal(err)
+				}
 
 				return tmpDir, func() {}
 			},
@@ -198,10 +202,14 @@ baseURL = "https://example.com/"
 title = "Test Site"
 `
 				configPath := filepath.Join(tmpDir, "config.toml")
-				_ = os.WriteFile(configPath, []byte(configContent), 0644)
+				if err := os.WriteFile(configPath, []byte(configContent), 0644); err != nil {
+					t.Fatal(err)
+				}
 
 				// Create content directory
-				_ = os.MkdirAll(filepath.Join(tmpDir, "content"), 0755)
+				if err := os.MkdirAll(filepath.Join(tmpDir, "content"), 0755); err != nil {
+					t.Fatal(err)
+				}
 
 				return tmpDir, func() {}
 			},
@@ -360,11 +368,17 @@ func TestBuildSiteOutput(t *testing.T) {
 baseURL = "/"
 title = "Test"
 `
-	_ = os.WriteFile(filepath.Join(tmpDir, "hugo.toml"), []byte(configContent), 0644)
+	if err := os.WriteFile(filepath.Join(tmpDir, "hugo.toml"), []byte(configContent), 0644); err != nil {
+		t.Fatal(err)
+	}
 
 	// Create required directories
-	_ = os.MkdirAll(filepath.Join(tmpDir, "content"), 0755)
-	_ = os.MkdirAll(filepath.Join(tmpDir, "layouts"), 0755)
+	if err := os.MkdirAll(filepath.Join(tmpDir, "content"), 0755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.MkdirAll(filepath.Join(tmpDir, "layouts"), 0755); err != nil {
+		t.Fatal(err)
+	}
 
 	// Capture output
 	output := captureOutput(func() {
@@ -457,8 +471,10 @@ func TestPathValidation(t *testing.T) {
 		// Create a temp dir and change to it
 		tmpDir := t.TempDir()
 		origWd, _ := os.Getwd()
-		_ = os.Chdir(tmpDir)
-		defer func() { _ = os.Chdir(origWd) }()
+		if err := os.Chdir(tmpDir); err != nil {
+			t.Fatal(err)
+		}
+		defer func() { _ = os.Chdir(origWd) }() //nolint:errcheck // test cleanup
 
 		// Use relative path
 		err := InitializeSite(".")
@@ -470,11 +486,15 @@ func TestPathValidation(t *testing.T) {
 	t.Run("BuildSite with relative path", func(t *testing.T) {
 		tmpDir := t.TempDir()
 		origWd, _ := os.Getwd()
-		_ = os.Chdir(tmpDir)
-		defer func() { _ = os.Chdir(origWd) }()
+		if err := os.Chdir(tmpDir); err != nil {
+			t.Fatal(err)
+		}
+		defer func() { _ = os.Chdir(origWd) }() //nolint:errcheck // test cleanup
 
 		// Create config
-		_ = os.WriteFile("hugo.toml", []byte("title = \"test\""), 0644)
+		if err := os.WriteFile("hugo.toml", []byte("title = \"test\""), 0644); err != nil {
+			t.Fatal(err)
+		}
 
 		err := BuildSite(".")
 		// Error is expected without hugo installed or without proper setup
@@ -497,7 +517,11 @@ func TestConcurrentExecution(t *testing.T) {
 		for i := 0; i < 3; i++ {
 			go func(index int) {
 				tmpDir := filepath.Join(t.TempDir(), fmt.Sprintf("site%d", index))
-				_ = os.MkdirAll(tmpDir, 0755)
+				if err := os.MkdirAll(tmpDir, 0755); err != nil {
+					t.Logf("Failed to create directory: %v", err)
+					done <- true
+					return
+				}
 
 				err := InitializeSite(tmpDir)
 				if err != nil {

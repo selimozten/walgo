@@ -40,8 +40,10 @@ func TestBuildCommandExecution(t *testing.T) {
 		// Create temp directory without config
 		tempDir := t.TempDir()
 		originalWd, _ := os.Getwd()
-		_ = os.Chdir(tempDir)
-		defer func() { _ = os.Chdir(originalWd) }()
+		if err := os.Chdir(tempDir); err != nil {
+			t.Fatal(err)
+		}
+		defer func() { _ = os.Chdir(originalWd) }() //nolint:errcheck // test cleanup
 
 		// Note: We can't directly mock os.Exit in Go
 		// The command will call os.Exit if config is missing
@@ -66,8 +68,10 @@ func TestBuildCommandExecution(t *testing.T) {
 	t.Run("Build with clean flag", func(t *testing.T) {
 		tempDir := t.TempDir()
 		originalWd, _ := os.Getwd()
-		_ = os.Chdir(tempDir)
-		defer func() { _ = os.Chdir(originalWd) }()
+		if err := os.Chdir(tempDir); err != nil {
+			t.Fatal(err)
+		}
+		defer func() { _ = os.Chdir(originalWd) }() //nolint:errcheck // test cleanup
 
 		// Create a mock walgo.yaml
 		configContent := `
@@ -76,13 +80,19 @@ hugo:
 optimizer:
   enabled: false
 `
-		_ = os.WriteFile("walgo.yaml", []byte(configContent), 0644)
+		if err := os.WriteFile("walgo.yaml", []byte(configContent), 0644); err != nil {
+			t.Fatal(err)
+		}
 
 		// Create public directory to clean
 		publicDir := filepath.Join(tempDir, "public")
-		_ = os.MkdirAll(publicDir, 0755)
+		if err := os.MkdirAll(publicDir, 0755); err != nil {
+			t.Fatal(err)
+		}
 		testFile := filepath.Join(publicDir, "test.html")
-		_ = os.WriteFile(testFile, []byte("test"), 0644)
+		if err := os.WriteFile(testFile, []byte("test"), 0644); err != nil {
+			t.Fatal(err)
+		}
 
 		// Note: We can't mock os.Exit directly
 
@@ -107,8 +117,10 @@ optimizer:
 	t.Run("Build with no-optimize flag", func(t *testing.T) {
 		tempDir := t.TempDir()
 		originalWd, _ := os.Getwd()
-		_ = os.Chdir(tempDir)
-		defer func() { _ = os.Chdir(originalWd) }()
+		if err := os.Chdir(tempDir); err != nil {
+			t.Fatal(err)
+		}
+		defer func() { _ = os.Chdir(originalWd) }() //nolint:errcheck // test cleanup
 
 		// Create a mock walgo.yaml with optimizer enabled
 		configContent := `
@@ -120,7 +132,9 @@ optimizer:
   css: true
   js: true
 `
-		_ = os.WriteFile("walgo.yaml", []byte(configContent), 0644)
+		if err := os.WriteFile("walgo.yaml", []byte(configContent), 0644); err != nil {
+			t.Fatal(err)
+		}
 
 		// Note: We can't mock os.Exit directly
 
@@ -188,8 +202,10 @@ func TestBuildCommandWithMockConfig(t *testing.T) {
 	t.Run("Successful build simulation", func(t *testing.T) {
 		tempDir := t.TempDir()
 		originalWd, _ := os.Getwd()
-		_ = os.Chdir(tempDir)
-		defer func() { _ = os.Chdir(originalWd) }()
+		if err := os.Chdir(tempDir); err != nil {
+			t.Fatal(err)
+		}
+		defer func() { _ = os.Chdir(originalWd) }() //nolint:errcheck // test cleanup
 
 		// Create valid config
 		configContent := `

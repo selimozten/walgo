@@ -39,8 +39,10 @@ func TestInitCommandExecution(t *testing.T) {
 		// Create temp directory for testing
 		tempDir := t.TempDir()
 		originalWd, _ := os.Getwd()
-		_ = os.Chdir(tempDir)
-		defer func() { _ = os.Chdir(originalWd) }()
+		if err := os.Chdir(tempDir); err != nil {
+			t.Fatal(err)
+		}
+		defer func() { _ = os.Chdir(originalWd) }() //nolint:errcheck // test cleanup
 
 		siteName := "test-site"
 
@@ -73,12 +75,16 @@ func TestInitCommandExecution(t *testing.T) {
 	t.Run("Init with existing directory", func(t *testing.T) {
 		tempDir := t.TempDir()
 		originalWd, _ := os.Getwd()
-		_ = os.Chdir(tempDir)
-		defer func() { _ = os.Chdir(originalWd) }()
+		if err := os.Chdir(tempDir); err != nil {
+			t.Fatal(err)
+		}
+		defer func() { _ = os.Chdir(originalWd) }() //nolint:errcheck // test cleanup
 
 		// Create existing directory
 		siteName := "existing-site"
-		_ = os.MkdirAll(siteName, 0755)
+		if err := os.MkdirAll(siteName, 0755); err != nil {
+			t.Fatal(err)
+		}
 
 		// Execute command
 		stdout, stderr := captureOutput(func() {
@@ -97,8 +103,10 @@ func TestInitCommandExecution(t *testing.T) {
 
 		tempDir := t.TempDir()
 		originalWd, _ := os.Getwd()
-		_ = os.Chdir(tempDir)
-		defer func() { _ = os.Chdir(originalWd) }()
+		if err := os.Chdir(tempDir); err != nil {
+			t.Fatal(err)
+		}
+		defer func() { _ = os.Chdir(originalWd) }() //nolint:errcheck // test cleanup
 
 		// Use invalid characters for directory name (on most systems)
 		siteName := "/invalid\x00name"
@@ -128,8 +136,10 @@ func TestInitCommandIntegration(t *testing.T) {
 
 		tempDir := t.TempDir()
 		originalWd, _ := os.Getwd()
-		_ = os.Chdir(tempDir)
-		defer func() { _ = os.Chdir(originalWd) }()
+		if err := os.Chdir(tempDir); err != nil {
+			t.Fatal(err)
+		}
+		defer func() { _ = os.Chdir(originalWd) }() //nolint:errcheck // test cleanup
 
 		siteName := "integration-test-site"
 

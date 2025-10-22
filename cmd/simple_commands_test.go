@@ -263,18 +263,26 @@ func TestCommandExecutionWithMocks(t *testing.T) {
 	t.Run("Optimize command execution", func(t *testing.T) {
 		tempDir := t.TempDir()
 		originalWd, _ := os.Getwd()
-		_ = os.Chdir(tempDir)
-		defer func() { _ = os.Chdir(originalWd) }()
+		if err := os.Chdir(tempDir); err != nil {
+			t.Fatal(err)
+		}
+		defer func() { _ = os.Chdir(originalWd) }() //nolint:errcheck // test cleanup
 
 		// Create test files
 		publicDir := filepath.Join(tempDir, "public")
-		_ = os.MkdirAll(publicDir, 0755)
+		if err := os.MkdirAll(publicDir, 0755); err != nil {
+			t.Fatal(err)
+		}
 
 		htmlFile := filepath.Join(publicDir, "index.html")
-		_ = os.WriteFile(htmlFile, []byte(`<html><body><h1>Test</h1></body></html>`), 0644)
+		if err := os.WriteFile(htmlFile, []byte(`<html><body><h1>Test</h1></body></html>`), 0644); err != nil {
+			t.Fatal(err)
+		}
 
 		cssFile := filepath.Join(publicDir, "style.css")
-		_ = os.WriteFile(cssFile, []byte(`body { margin: 0; padding: 0; }`), 0644)
+		if err := os.WriteFile(cssFile, []byte(`body { margin: 0; padding: 0; }`), 0644); err != nil {
+			t.Fatal(err)
+		}
 
 		// Create config
 		configContent := `
@@ -284,7 +292,9 @@ optimizer:
   css: true
   js: true
 `
-		_ = os.WriteFile("walgo.yaml", []byte(configContent), 0644)
+		if err := os.WriteFile("walgo.yaml", []byte(configContent), 0644); err != nil {
+			t.Fatal(err)
+		}
 
 		// Note: We can't mock os.Exit directly
 		// The command may call os.Exit on error
@@ -312,19 +322,25 @@ optimizer:
 	t.Run("Serve command execution", func(t *testing.T) {
 		tempDir := t.TempDir()
 		originalWd, _ := os.Getwd()
-		_ = os.Chdir(tempDir)
-		defer func() { _ = os.Chdir(originalWd) }()
+		if err := os.Chdir(tempDir); err != nil {
+			t.Fatal(err)
+		}
+		defer func() { _ = os.Chdir(originalWd) }() //nolint:errcheck // test cleanup
 
 		// Create public directory
 		publicDir := filepath.Join(tempDir, "public")
-		_ = os.MkdirAll(publicDir, 0755)
+		if err := os.MkdirAll(publicDir, 0755); err != nil {
+			t.Fatal(err)
+		}
 
 		// Create config
 		configContent := `
 hugo:
   publishDir: public
 `
-		_ = os.WriteFile("walgo.yaml", []byte(configContent), 0644)
+		if err := os.WriteFile("walgo.yaml", []byte(configContent), 0644); err != nil {
+			t.Fatal(err)
+		}
 
 		// Find serve command
 		var serveCmd *cobra.Command
@@ -356,12 +372,18 @@ func TestCommandsWithArguments(t *testing.T) {
 	t.Run("New command with content type", func(t *testing.T) {
 		tempDir := t.TempDir()
 		originalWd, _ := os.Getwd()
-		_ = os.Chdir(tempDir)
-		defer func() { _ = os.Chdir(originalWd) }()
+		if err := os.Chdir(tempDir); err != nil {
+			t.Fatal(err)
+		}
+		defer func() { _ = os.Chdir(originalWd) }() //nolint:errcheck // test cleanup
 
 		// Create minimal Hugo structure
-		_ = os.MkdirAll("content", 0755)
-		_ = os.WriteFile("hugo.toml", []byte(`title = "Test"`), 0644)
+		if err := os.MkdirAll("content", 0755); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile("hugo.toml", []byte(`title = "Test"`), 0644); err != nil {
+			t.Fatal(err)
+		}
 
 		tests := []TestCase{
 			{
