@@ -134,7 +134,7 @@ optimizer:
 			setupViper: func(configPath string) {
 				viper.Reset()
 				viper.SetConfigFile(configPath)
-				viper.ReadInConfig()
+				_ = viper.ReadInConfig()
 			},
 			wantErr: false,
 			validate: func(cfg *WalgoConfig) error {
@@ -156,7 +156,7 @@ walrus:
 			setupViper: func(configPath string) {
 				viper.Reset()
 				viper.SetConfigFile(configPath)
-				viper.ReadInConfig()
+				_ = viper.ReadInConfig()
 			},
 			wantErr: false,
 			validate: func(cfg *WalgoConfig) error {
@@ -242,7 +242,7 @@ optimizer:
 			setupViper: func(configPath string) {
 				viper.Reset()
 				viper.SetConfigFile(configPath)
-				viper.ReadInConfig()
+				_ = viper.ReadInConfig()
 			},
 			wantErr: false,
 			validate: func(cfg *WalgoConfig) error {
@@ -560,7 +560,7 @@ func TestConfigEdgeCases(t *testing.T) {
 
 		viper.Reset()
 		viper.SetConfigFile(configPath)
-		viper.ReadInConfig()
+		_ = viper.ReadInConfig()
 
 		cfg, err := LoadConfig()
 		if err != nil {
@@ -592,7 +592,7 @@ futureFeature:
 
 		viper.Reset()
 		viper.SetConfigFile(configPath)
-		viper.ReadInConfig()
+		_ = viper.ReadInConfig()
 
 		cfg, err := LoadConfig()
 		if err != nil {

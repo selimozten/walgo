@@ -199,7 +199,7 @@ func TestDeployQuilt(t *testing.T) {
 						// Simple validation that we got some data
 						if len(body) == 0 {
 							w.WriteHeader(http.StatusBadRequest)
-							w.Write([]byte("Empty request body"))
+							_, _ = w.Write([]byte("Empty request body"))
 							return
 						}
 
@@ -213,7 +213,7 @@ func TestDeployQuilt(t *testing.T) {
 							},
 						}
 						w.Header().Set("Content-Type", "application/json")
-						json.NewEncoder(w).Encode(resp)
+						_ = json.NewEncoder(w).Encode(resp)
 					} else {
 						w.WriteHeader(http.StatusNotFound)
 					}
@@ -264,7 +264,7 @@ func TestDeployQuilt(t *testing.T) {
 			setupServer: func() *httptest.Server {
 				return httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 					w.WriteHeader(http.StatusInternalServerError)
-					w.Write([]byte("Internal server error"))
+					_, _ = w.Write([]byte("Internal server error"))
 				}))
 			},
 			wantErr:     true,
@@ -279,7 +279,7 @@ func TestDeployQuilt(t *testing.T) {
 				return httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 					if r.URL.Path == "/v1/quilts" {
 						w.Header().Set("Content-Type", "application/json")
-						w.Write([]byte("invalid json"))
+						_, _ = w.Write([]byte("invalid json"))
 					} else {
 						w.WriteHeader(http.StatusNotFound)
 					}
@@ -371,7 +371,7 @@ func TestDeploy_WithBlobStrategy(t *testing.T) {
 				"id": "blob-789",
 			}
 			w.Header().Set("Content-Type", "application/json")
-			json.NewEncoder(w).Encode(resp)
+			_ = json.NewEncoder(w).Encode(resp)
 		} else {
 			w.WriteHeader(http.StatusNotFound)
 		}
