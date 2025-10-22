@@ -18,6 +18,15 @@ import (
 )
 
 func TestUpdate(t *testing.T) {
+	// Create a temporary directory for test files
+	tmpDir := t.TempDir()
+
+	// Create a test file
+	indexHTML := filepath.Join(tmpDir, "index.html")
+	if err := os.WriteFile(indexHTML, []byte("<html><body>Test Site</body></html>"), 0644); err != nil {
+		t.Fatal(err)
+	}
+
 	tests := []struct {
 		name     string
 		siteDir  string
@@ -25,38 +34,62 @@ func TestUpdate(t *testing.T) {
 		opts     deployer.DeployOptions
 		wantErr  bool
 		errMsg   string
+		setupServer func() *httptest.Server
 	}{
 		{
-			name:     "Update not implemented",
-			siteDir:  "/tmp/test-site",
+			name:     "Update performs fresh deploy",
+			siteDir:  tmpDir,
 			objectID: "test-object-123",
-			opts:     deployer.DeployOptions{},
-			wantErr:  true,
-			errMsg:   "HTTP deployer does not support updates",
-		},
-		{
-			name:     "Update with empty objectID",
-			siteDir:  "/tmp/test-site",
-			objectID: "",
-			opts:     deployer.DeployOptions{},
-			wantErr:  true,
-			errMsg:   "HTTP deployer does not support updates",
-		},
-		{
-			name:     "Update with epochs",
-			siteDir:  "/tmp/test-site",
-			objectID: "test-object-123",
-			opts: deployer.DeployOptions{
-				Epochs: 10,
+			opts:     deployer.DeployOptions{
+				PublisherBaseURL: "", // Will be set from server
+				Epochs: 1,
 			},
-			wantErr: true,
-			errMsg:  "HTTP deployer does not support updates",
+			setupServer: func() *httptest.Server {
+				return httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+					if r.URL.Path == "/v1/quilts" {
+						resp := map[string]interface{}{
+							"blobStoreResult": map[string]interface{}{
+								"newlyCreated": map[string]interface{}{
+									"blobObject": map[string]interface{}{
+										"blobId": "new-blob-123",
+									},
+								},
+							},
+						}
+						w.Header().Set("Content-Type", "application/json")
+						_ = json.NewEncoder(w).Encode(resp)
+					} else {
+						w.WriteHeader(http.StatusNotFound)
+					}
+				}))
+			},
+			wantErr:  false,
+		},
+		{
+			name:     "Update with non-existent directory",
+			siteDir:  "/non/existent/path",
+			objectID: "test-object-123",
+			opts:     deployer.DeployOptions{
+				PublisherBaseURL: "http://localhost:9999",
+				Epochs: 1,
+			},
+			wantErr:  true,
+			errMsg:   "no such file or directory",
 		},
 	}
 
 	adapter := New()
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			var srv *httptest.Server
+			if tt.setupServer != nil {
+				srv = tt.setupServer()
+				defer srv.Close()
+				if tt.opts.PublisherBaseURL == "" {
+					tt.opts.PublisherBaseURL = srv.URL
+				}
+			}
+
 			ctx := context.Background()
 			result, err := adapter.Update(ctx, tt.siteDir, tt.objectID, tt.opts)
 
@@ -65,15 +98,15 @@ func TestUpdate(t *testing.T) {
 					t.Errorf("Update() error = nil, wantErr %v", tt.wantErr)
 					return
 				}
-				if tt.errMsg != "" && err.Error() != tt.errMsg {
-					t.Errorf("Update() error = %v, wantErr %v", err.Error(), tt.errMsg)
-				}
-				if result != nil {
-					t.Errorf("Update() result = %v, want nil", result)
+				if tt.errMsg != "" && !strings.Contains(err.Error(), tt.errMsg) {
+					t.Errorf("Update() error = %v, should contain %v", err.Error(), tt.errMsg)
 				}
 			} else {
 				if err != nil {
 					t.Errorf("Update() unexpected error = %v", err)
+				}
+				if result == nil {
+					t.Errorf("Update() result = nil, expected non-nil result")
 				}
 			}
 		})
@@ -86,21 +119,18 @@ func TestStatus(t *testing.T) {
 		objectID string
 		opts     deployer.DeployOptions
 		wantErr  bool
-		errMsg   string
 	}{
 		{
-			name:     "Status not implemented",
+			name:     "Status returns success stub",
 			objectID: "test-object-123",
 			opts:     deployer.DeployOptions{},
-			wantErr:  true,
-			errMsg:   "HTTP deployer does not support status checks",
+			wantErr:  false,
 		},
 		{
 			name:     "Status with empty objectID",
 			objectID: "",
 			opts:     deployer.DeployOptions{},
-			wantErr:  true,
-			errMsg:   "HTTP deployer does not support status checks",
+			wantErr:  false,
 		},
 		{
 			name:     "Status with verbose flag",
@@ -108,8 +138,7 @@ func TestStatus(t *testing.T) {
 			opts: deployer.DeployOptions{
 				Verbose: true,
 			},
-			wantErr: true,
-			errMsg:  "HTTP deployer does not support status checks",
+			wantErr: false,
 		},
 	}
 
@@ -124,15 +153,20 @@ func TestStatus(t *testing.T) {
 					t.Errorf("Status() error = nil, wantErr %v", tt.wantErr)
 					return
 				}
-				if tt.errMsg != "" && err.Error() != tt.errMsg {
-					t.Errorf("Status() error = %v, wantErr %v", err.Error(), tt.errMsg)
-				}
-				if result != nil {
-					t.Errorf("Status() result = %v, want nil", result)
-				}
 			} else {
 				if err != nil {
 					t.Errorf("Status() unexpected error = %v", err)
+				}
+				if result == nil {
+					t.Errorf("Status() result = nil, expected non-nil result")
+				} else {
+					// Verify the result matches what Status() returns
+					if !result.Success {
+						t.Errorf("Status() result.Success = false, expected true")
+					}
+					if result.ObjectID != tt.objectID {
+						t.Errorf("Status() result.ObjectID = %v, expected %v", result.ObjectID, tt.objectID)
+					}
 				}
 			}
 		})
@@ -184,7 +218,7 @@ func TestDeployQuilt(t *testing.T) {
 				return httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 					if r.URL.Path == "/v1/quilts" {
 						// Check method
-						if r.Method != http.MethodPost {
+						if r.Method != http.MethodPut {
 							w.WriteHeader(http.StatusMethodNotAllowed)
 							return
 						}
@@ -203,13 +237,24 @@ func TestDeployQuilt(t *testing.T) {
 							return
 						}
 
-						// Return success response
+						// Return success response matching the actual expected format
 						resp := map[string]interface{}{
-							"id":     "quilt-123",
-							"status": "stored",
-							"urls": []string{
-								"https://example.walrus.site",
-								"https://backup.walrus.site",
+							"blobStoreResult": map[string]interface{}{
+								"newlyCreated": map[string]interface{}{
+									"blobObject": map[string]interface{}{
+										"blobId": "quilt-123",
+									},
+								},
+							},
+							"storedQuiltBlobs": []map[string]interface{}{
+								{
+									"identifier": "index.html",
+									"quiltPatchId": "patch-1",
+								},
+								{
+									"identifier": "about.html",
+									"quiltPatchId": "patch-2",
+								},
 							},
 						}
 						w.Header().Set("Content-Type", "application/json")
@@ -230,8 +275,8 @@ func TestDeployQuilt(t *testing.T) {
 				if result.ObjectID != "quilt-123" {
 					return fmt.Errorf("expected ObjectID=quilt-123, got %s", result.ObjectID)
 				}
-				if len(result.BrowseURLs) != 2 {
-					return fmt.Errorf("expected 2 browse URLs, got %d", len(result.BrowseURLs))
+				if len(result.QuiltPatches) != 2 {
+					return fmt.Errorf("expected 2 quilt patches, got %d", len(result.QuiltPatches))
 				}
 				return nil
 			},
@@ -244,7 +289,7 @@ func TestDeployQuilt(t *testing.T) {
 			setupServer: func() *httptest.Server { return nil },
 			serverURL:   "http://localhost:9999",
 			wantErr:     true,
-			errContains: "siteDir cannot be empty",
+			errContains: "no such file or directory",
 		},
 		{
 			name:        "Non-existent site directory",
@@ -364,11 +409,29 @@ func TestDeploy_WithBlobStrategy(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	// Test server for blob strategy (default)
+	// Test server for quilt strategy (default)
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if strings.HasPrefix(r.URL.Path, "/v1/blobs") {
+		if r.URL.Path == "/v1/quilts" {
+			// Return success response for quilt deployment
 			resp := map[string]interface{}{
-				"id": "blob-789",
+				"blobStoreResult": map[string]interface{}{
+					"newlyCreated": map[string]interface{}{
+						"blobObject": map[string]interface{}{
+							"blobId": "blob-789",
+						},
+					},
+				},
+			}
+			w.Header().Set("Content-Type", "application/json")
+			_ = json.NewEncoder(w).Encode(resp)
+		} else if strings.HasPrefix(r.URL.Path, "/v1/blobs") {
+			// Also handle blob requests if mode is changed
+			resp := map[string]interface{}{
+				"newlyCreated": map[string]interface{}{
+					"blobObject": map[string]interface{}{
+						"blobId": "blob-individual",
+					},
+				},
 			}
 			w.Header().Set("Content-Type", "application/json")
 			_ = json.NewEncoder(w).Encode(resp)
@@ -390,6 +453,7 @@ func TestDeploy_WithBlobStrategy(t *testing.T) {
 		WalrusCfg: config.WalrusConfig{
 			ProjectID: "test-project",
 		},
+		PublisherBaseURL: srv.URL,
 		Verbose: true,
 		Epochs:  1,
 	}
