@@ -28,21 +28,21 @@ func TestUpdate(t *testing.T) {
 	}
 
 	tests := []struct {
-		name     string
-		siteDir  string
-		objectID string
-		opts     deployer.DeployOptions
-		wantErr  bool
-		errMsg   string
+		name        string
+		siteDir     string
+		objectID    string
+		opts        deployer.DeployOptions
+		wantErr     bool
+		errMsg      string
 		setupServer func() *httptest.Server
 	}{
 		{
 			name:     "Update performs fresh deploy",
 			siteDir:  tmpDir,
 			objectID: "test-object-123",
-			opts:     deployer.DeployOptions{
+			opts: deployer.DeployOptions{
 				PublisherBaseURL: "", // Will be set from server
-				Epochs: 1,
+				Epochs:           1,
 			},
 			setupServer: func() *httptest.Server {
 				return httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -63,18 +63,18 @@ func TestUpdate(t *testing.T) {
 					}
 				}))
 			},
-			wantErr:  false,
+			wantErr: false,
 		},
 		{
 			name:     "Update with non-existent directory",
 			siteDir:  "/non/existent/path",
 			objectID: "test-object-123",
-			opts:     deployer.DeployOptions{
+			opts: deployer.DeployOptions{
 				PublisherBaseURL: "http://localhost:9999",
-				Epochs: 1,
+				Epochs:           1,
 			},
-			wantErr:  true,
-			errMsg:   "no such file or directory",
+			wantErr: true,
+			errMsg:  "no such file or directory",
 		},
 	}
 
@@ -248,11 +248,11 @@ func TestDeployQuilt(t *testing.T) {
 							},
 							"storedQuiltBlobs": []map[string]interface{}{
 								{
-									"identifier": "index.html",
+									"identifier":   "index.html",
 									"quiltPatchId": "patch-1",
 								},
 								{
-									"identifier": "about.html",
+									"identifier":   "about.html",
 									"quiltPatchId": "patch-2",
 								},
 							},
@@ -454,8 +454,8 @@ func TestDeploy_WithBlobStrategy(t *testing.T) {
 			ProjectID: "test-project",
 		},
 		PublisherBaseURL: srv.URL,
-		Verbose: true,
-		Epochs:  1,
+		Verbose:          true,
+		Epochs:           1,
 	}
 
 	result, err := adapter.Deploy(ctx, tmpDir, opts)
