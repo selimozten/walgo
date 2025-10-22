@@ -158,7 +158,7 @@ func TestInitCommandIntegration(t *testing.T) {
 		if err != nil {
 			// Check if it's the expected error
 			if output != "" {
-				// Some output was generated
+				t.Logf("command output: %s", output)
 			}
 		} else {
 			// Check if site directory exists

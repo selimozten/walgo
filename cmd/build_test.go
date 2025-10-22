@@ -99,7 +99,9 @@ optimizer:
 		cmd := &cobra.Command{}
 		cmd.Flags().Bool("clean", true, "")
 		cmd.Flags().Bool("no-optimize", false, "")
-		_ = cmd.Flags().Set("clean", "true")
+		if err := cmd.Flags().Set("clean", "true"); err != nil {
+			t.Fatalf("failed to set flag: %v", err)
+		}
 
 		// Execute build
 		stdout, stderr := captureOutput(func() {
@@ -141,7 +143,9 @@ optimizer:
 		cmd := &cobra.Command{}
 		cmd.Flags().Bool("clean", false, "")
 		cmd.Flags().Bool("no-optimize", true, "")
-		_ = cmd.Flags().Set("no-optimize", "true")
+		if err := cmd.Flags().Set("no-optimize", "true"); err != nil {
+			t.Fatalf("failed to set flag: %v", err)
+		}
 
 		// Execute build
 		stdout, stderr := captureOutput(func() {

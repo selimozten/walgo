@@ -6,9 +6,10 @@ import (
 	"path/filepath"
 	"testing"
 
+	"walgo/internal/optimizer"
+
 	"github.com/spf13/viper"
 	"gopkg.in/yaml.v3"
-	"walgo/internal/optimizer"
 )
 
 func TestCreateDefaultWalgoConfig(t *testing.T) {
@@ -432,17 +433,17 @@ func TestNewDefaultWalgoConfig(t *testing.T) {
 
 	// Test that OptimizerConfig is set (assuming it has defaults)
 	// The actual defaults are tested in the optimizer package tests
-	if cfg.OptimizerConfig.Enabled {
-		// Good, optimizer is enabled by default
+	if !cfg.OptimizerConfig.Enabled {
+		t.Error("Expected optimizer to be enabled by default")
 	}
-	if cfg.OptimizerConfig.HTML.Enabled {
-		// HTML optimization is enabled
+	if !cfg.OptimizerConfig.HTML.Enabled {
+		t.Error("Expected HTML optimizer to be enabled by default")
 	}
-	if cfg.OptimizerConfig.CSS.Enabled {
-		// CSS optimization is enabled
+	if !cfg.OptimizerConfig.CSS.Enabled {
+		t.Error("Expected CSS optimizer to be enabled by default")
 	}
-	if cfg.OptimizerConfig.JS.Enabled {
-		// JS optimization is enabled
+	if !cfg.OptimizerConfig.JS.Enabled {
+		t.Error("Expected JS optimizer to be enabled by default")
 	}
 }
 
