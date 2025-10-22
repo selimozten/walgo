@@ -240,7 +240,8 @@ title = "Test Site"
 			}
 
 			// Check if hugo is actually installed for tests that need it
-			if !tt.hugoNotFound && !tt.noConfig {
+			// Skip if Hugo is not found, unless we're specifically testing the "hugo not found" case
+			if !tt.hugoNotFound {
 				if _, err := exec.LookPath("hugo"); err != nil {
 					// Hugo is not installed, skip this test
 					t.Skip("Hugo is not installed, skipping test that requires Hugo")
@@ -443,6 +444,11 @@ func TestErrorMessages(t *testing.T) {
 	})
 
 	t.Run("BuildSite config not found message", func(t *testing.T) {
+		// Skip if Hugo is not installed
+		if _, err := exec.LookPath("hugo"); err != nil {
+			t.Skip("Hugo is not installed, skipping test that requires Hugo")
+		}
+
 		tmpDir := t.TempDir()
 		err := BuildSite(tmpDir)
 
