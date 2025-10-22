@@ -70,7 +70,8 @@ func (a *Adapter) deployQuilt(ctx context.Context, siteDir, publisher string, ep
 		if err != nil {
 			return err
 		}
-		f, err := os.Open(path)
+		// #nosec G304 - path comes from filepath.Walk which is already constrained to siteDir
+		f, err := os.Open(filepath.Clean(path))
 		if err != nil {
 			return err
 		}
@@ -83,7 +84,9 @@ func (a *Adapter) deployQuilt(ctx context.Context, siteDir, publisher string, ep
 	if err != nil {
 		return nil, err
 	}
-	writer.Close()
+	if err := writer.Close(); err != nil {
+		return nil, fmt.Errorf("failed to close multipart writer: %w", err)
+	}
 
 	endpoint := fmt.Sprintf("%s/v1/quilts?epochs=%d", strings.TrimRight(publisher, "/"), epochs)
 	req, err := http.NewRequestWithContext(ctx, http.MethodPut, endpoint, &body)
@@ -217,7 +220,8 @@ func uploadWithRetry(ctx context.Context, endpoint, filePath string, maxRetries 
 }
 
 func putBlob(ctx context.Context, endpoint, filePath string) (string, int, error) {
-	f, err := os.Open(filePath)
+	// #nosec G304 - filePath comes from filepath.Walk which is already constrained to siteDir
+	f, err := os.Open(filepath.Clean(filePath))
 	if err != nil {
 		return "", 0, err
 	}
