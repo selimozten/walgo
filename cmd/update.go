@@ -75,7 +75,11 @@ Assumes the site has been built using 'walgo build'.`,
 		fmt.Printf("Preparing to update site with content from: %s\n", deployDir)
 
 		// Get epochs flag
-		epochs, _ := cmd.Flags().GetInt("epochs")
+		epochs, err := cmd.Flags().GetInt("epochs")
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "Error reading epochs flag: %v\n", err)
+			os.Exit(1)
+		}
 		if epochs <= 0 {
 			epochs = 1 // Default to 1 epoch
 		}

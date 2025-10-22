@@ -43,9 +43,21 @@ Example: walgo deploy --epochs 5`,
 		}
 
 		// Get flags
-		epochs, _ := cmd.Flags().GetInt("epochs")
-		force, _ := cmd.Flags().GetBool("force")
-		verbose, _ := cmd.Flags().GetBool("verbose")
+		epochs, err := cmd.Flags().GetInt("epochs")
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "Error reading epochs flag: %v\n", err)
+			os.Exit(1)
+		}
+		force, err := cmd.Flags().GetBool("force")
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "Error reading force flag: %v\n", err)
+			os.Exit(1)
+		}
+		verbose, err := cmd.Flags().GetBool("verbose")
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "Error reading verbose flag: %v\n", err)
+			os.Exit(1)
+		}
 
 		// Prepare deployer
 		d := sb.New()

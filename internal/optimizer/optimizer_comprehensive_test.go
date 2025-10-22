@@ -501,17 +501,26 @@ initApp();`
 	}
 
 	// Check that files were actually modified
-	htmlOptimized, _ := os.ReadFile(htmlFile)
+	htmlOptimized, err := os.ReadFile(htmlFile)
+	if err != nil {
+		t.Fatalf("Failed to read optimized HTML file: %v", err)
+	}
 	if len(htmlOptimized) >= len(htmlContent) {
 		t.Error("HTML file was not optimized")
 	}
 
-	cssOptimized, _ := os.ReadFile(cssFile)
+	cssOptimized, err := os.ReadFile(cssFile)
+	if err != nil {
+		t.Fatalf("Failed to read optimized CSS file: %v", err)
+	}
 	if len(cssOptimized) >= len(cssContent) {
 		t.Error("CSS file was not optimized")
 	}
 
-	jsOptimized, _ := os.ReadFile(jsFile)
+	jsOptimized, err := os.ReadFile(jsFile)
+	if err != nil {
+		t.Fatalf("Failed to read optimized JS file: %v", err)
+	}
 	if len(jsOptimized) >= len(jsContent) {
 		t.Error("JS file was not optimized")
 	}

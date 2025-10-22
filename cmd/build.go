@@ -38,7 +38,11 @@ This command runs the 'hugo' command to generate static files typically into the
 		fmt.Println("🔨 Building site...")
 
 		// Check if clean flag is set
-		clean, _ := cmd.Flags().GetBool("clean")
+		clean, err := cmd.Flags().GetBool("clean")
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "Error reading clean flag: %v\n", err)
+			os.Exit(1)
+		}
 		if clean {
 			publishDir := filepath.Join(sitePath, walgoCfg.HugoConfig.PublishDir)
 			fmt.Printf("  [1/3] Cleaning %s...\n", publishDir)
@@ -68,7 +72,11 @@ This command runs the 'hugo' command to generate static files typically into the
 		publishDirPath := filepath.Join(sitePath, walgoCfg.HugoConfig.PublishDir)
 
 		// Run optimization if enabled and --no-optimize flag is not set
-		noOptimize, _ := cmd.Flags().GetBool("no-optimize")
+		noOptimize, err := cmd.Flags().GetBool("no-optimize")
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "Error reading no-optimize flag: %v\n", err)
+			os.Exit(1)
+		}
 		if walgoCfg.OptimizerConfig.Enabled && !cmd.Flags().Changed("no-optimize") && !noOptimize {
 			fmt.Println("  [3/3] Optimizing assets...")
 

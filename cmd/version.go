@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"os"
 	"strings"
 	"time"
 
@@ -35,8 +36,16 @@ var versionCmd = &cobra.Command{
 	Short: "Show version information",
 	Long:  `Display the version number, git commit, and build date of Walgo.`,
 	Run: func(cmd *cobra.Command, args []string) {
-		checkUpdates, _ := cmd.Flags().GetBool("check-updates")
-		short, _ := cmd.Flags().GetBool("short")
+		checkUpdates, err := cmd.Flags().GetBool("check-updates")
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "Error reading check-updates flag: %v\n", err)
+			os.Exit(1)
+		}
+		short, err := cmd.Flags().GetBool("short")
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "Error reading short flag: %v\n", err)
+			os.Exit(1)
+		}
 
 		if short {
 			fmt.Printf("v%s\n", Version)

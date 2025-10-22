@@ -43,9 +43,21 @@ Examples:
   walgo doctor --fix-paths  # Fix tilde paths in config
   walgo doctor --fix-all    # Auto-fix all issues`,
 	Run: func(cmd *cobra.Command, args []string) {
-		fixAll, _ := cmd.Flags().GetBool("fix-all")
-		fixPaths, _ := cmd.Flags().GetBool("fix-paths")
-		verbose, _ := cmd.Flags().GetBool("verbose")
+		fixAll, err := cmd.Flags().GetBool("fix-all")
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "Error getting fix-all flag: %v\n", err)
+			return
+		}
+		fixPaths, err := cmd.Flags().GetBool("fix-paths")
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "Error getting fix-paths flag: %v\n", err)
+			return
+		}
+		verbose, err := cmd.Flags().GetBool("verbose")
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "Error getting verbose flag: %v\n", err)
+			return
+		}
 
 		fmt.Println("╔═══════════════════════════════════════════════════════════╗")
 		fmt.Println("║                     Walgo Doctor                          ║")
@@ -157,25 +169,33 @@ Examples:
 		fmt.Println("⚙️  Checking configuration files...")
 		fmt.Println()
 
-		home, _ := os.UserHomeDir()
+		home, err := os.UserHomeDir()
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "Error getting home directory: %v\n", err)
+			return
+		}
 		scPath := filepath.Join(home, ".config", "walrus", "sites-config.yaml")
 
 		if _, err := os.Stat(scPath); err == nil {
 			fmt.Printf("  ✓ sites-config.yaml found at %s\n", scPath)
 
 			// Check for tilde paths
-			data, _ := os.ReadFile(scPath) // #nosec G304 - path is constructed from known directory
-			if strings.Contains(string(data), "~/") {
-				fmt.Println("  ⚠ Configuration contains tilde paths (~)")
-				fmt.Println("    Run: walgo doctor --fix-paths")
-				warnings++
+			data, err := os.ReadFile(scPath) // #nosec G304 - path is constructed from known directory
+			if err != nil {
+				fmt.Fprintf(os.Stderr, "Warning: Could not read sites-config.yaml: %v\n", err)
+			} else {
+				if strings.Contains(string(data), "~/") {
+					fmt.Println("  ⚠ Configuration contains tilde paths (~)")
+					fmt.Println("    Run: walgo doctor --fix-paths")
+					warnings++
 
-				if fixPaths || fixAll {
-					if err := ensureAbsolutePaths(scPath, home); err != nil {
-						fmt.Printf("  ✗ Failed to fix paths: %v\n", err)
-						issues++
-					} else {
-						fmt.Println("  ✓ Fixed tilde paths to absolute paths")
+					if fixPaths || fixAll {
+						if err := ensureAbsolutePaths(scPath, home); err != nil {
+							fmt.Printf("  ✗ Failed to fix paths: %v\n", err)
+							issues++
+						} else {
+							fmt.Println("  ✓ Fixed tilde paths to absolute paths")
+						}
 					}
 				}
 			}

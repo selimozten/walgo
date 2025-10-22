@@ -66,7 +66,12 @@ You can provide the object ID as an argument, or the command will look for it in
 		}
 
 		// If the --convert flag is set, also show the Base36 representation
-		if convert, _ := cmd.Flags().GetBool("convert"); convert {
+		convert, err := cmd.Flags().GetBool("convert")
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "Error reading convert flag: %v\n", err)
+			os.Exit(1)
+		}
+		if convert {
 			fmt.Println("\nConverting to Base36 format:")
 			// Use the original walrus helper for conversion which wraps site-builder
 			base36, err := convertObjectID(objectID)
