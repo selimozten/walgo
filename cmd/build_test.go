@@ -59,10 +59,9 @@ func TestBuildCommandExecution(t *testing.T) {
 		_ = stderr
 
 		// Check error messages
-		if stderr != "" {
-			// Should contain error about config
-			// "Did you run 'walgo init' to create a site?"
-		}
+		// Note: stderr should contain error about config
+		// "Did you run 'walgo init' to create a site?"
+		// but we can't easily test this without mocking os.Exit
 	})
 
 	t.Run("Build with clean flag", func(t *testing.T) {
@@ -252,10 +251,8 @@ title = "Test Site"
 
 		// The build will fail without Hugo installed
 		// but we're testing the command flow
-		if stderr != "" {
-			// Should contain Hugo-related error message
-		}
-
+		// Note: stderr should contain Hugo-related error message
+		_ = stderr
 		_ = stdout
 	})
 }

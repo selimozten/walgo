@@ -351,15 +351,13 @@ hugo:
 			}
 		}
 
+		// The serve command typically starts a server,
+		// so we'll just test that it can be invoked without crashing
+		// Note: We can't mock os.Exit directly
+		// The serve command may call os.Exit
+		// We can't easily test a blocking server command,
+		// but we can verify the command exists and has expected flags
 		if serveCmd != nil {
-			// The serve command typically starts a server,
-			// so we'll just test that it can be invoked without crashing
-
-			// Note: We can't mock os.Exit directly
-			// The serve command may call os.Exit
-
-			// We can't easily test a blocking server command,
-			// but we can verify the command exists and has expected flags
 			if portFlag := serveCmd.Flags().Lookup("port"); portFlag != nil {
 				t.Logf("Serve command has port flag with default: %s", portFlag.DefValue)
 			}
@@ -401,9 +399,8 @@ func TestCommandsWithArguments(t *testing.T) {
 		// These will fail without Hugo but test the argument parsing
 		for _, tc := range tests {
 			output, err := executeCommand(rootCmd, tc.Args...)
-			if err != nil && tc.ExpectError {
-				// Expected
-			}
+			// Expected to fail without Hugo
+			_ = err
 			_ = output
 		}
 	})
