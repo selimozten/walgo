@@ -9,9 +9,6 @@ import (
 	"testing"
 )
 
-// mockExecCommand is used to mock exec.Command for testing
-var mockExecCommand = exec.Command
-
 // TestMain sets up and tears down the test environment
 func TestMain(m *testing.M) {
 	// Run tests

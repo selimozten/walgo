@@ -96,8 +96,8 @@ func TestInitCommandExecution(t *testing.T) {
 	t.Run("Init with invalid directory name", func(t *testing.T) {
 		tempDir := t.TempDir()
 		originalWd, _ := os.Getwd()
-		os.Chdir(tempDir)
-		defer os.Chdir(originalWd)
+		_ = os.Chdir(tempDir)
+		defer func() { _ = os.Chdir(originalWd) }()
 
 		// Use invalid characters for directory name (on most systems)
 		siteName := "/invalid\x00name"
@@ -127,8 +127,8 @@ func TestInitCommandIntegration(t *testing.T) {
 
 		tempDir := t.TempDir()
 		originalWd, _ := os.Getwd()
-		os.Chdir(tempDir)
-		defer os.Chdir(originalWd)
+		_ = os.Chdir(tempDir)
+		defer func() { _ = os.Chdir(originalWd) }()
 
 		siteName := "integration-test-site"
 

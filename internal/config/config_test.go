@@ -356,7 +356,7 @@ func TestSaveConfig(t *testing.T) {
 					t.Fatalf("Setup failed: %v", err)
 				}
 				// Ensure we can clean up even if directory is read-only
-				defer os.Chmod(tempDir, 0755)
+				defer func() { _ = os.Chmod(tempDir, 0755) }()
 			}
 
 			// Execute function

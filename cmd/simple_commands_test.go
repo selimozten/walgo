@@ -261,18 +261,18 @@ func TestCommandExecutionWithMocks(t *testing.T) {
 	t.Run("Optimize command execution", func(t *testing.T) {
 		tempDir := t.TempDir()
 		originalWd, _ := os.Getwd()
-		os.Chdir(tempDir)
-		defer os.Chdir(originalWd)
+		_ = os.Chdir(tempDir)
+		defer func() { _ = os.Chdir(originalWd) }()
 
 		// Create test files
 		publicDir := filepath.Join(tempDir, "public")
-		os.MkdirAll(publicDir, 0755)
+		_ = os.MkdirAll(publicDir, 0755)
 
 		htmlFile := filepath.Join(publicDir, "index.html")
-		os.WriteFile(htmlFile, []byte(`<html><body><h1>Test</h1></body></html>`), 0644)
+		_ = os.WriteFile(htmlFile, []byte(`<html><body><h1>Test</h1></body></html>`), 0644)
 
 		cssFile := filepath.Join(publicDir, "style.css")
-		os.WriteFile(cssFile, []byte(`body { margin: 0; padding: 0; }`), 0644)
+		_ = os.WriteFile(cssFile, []byte(`body { margin: 0; padding: 0; }`), 0644)
 
 		// Create config
 		configContent := `
@@ -282,7 +282,7 @@ optimizer:
   css: true
   js: true
 `
-		os.WriteFile("walgo.yaml", []byte(configContent), 0644)
+		_ = os.WriteFile("walgo.yaml", []byte(configContent), 0644)
 
 		// Note: We can't mock os.Exit directly
 		// The command may call os.Exit on error
@@ -310,19 +310,19 @@ optimizer:
 	t.Run("Serve command execution", func(t *testing.T) {
 		tempDir := t.TempDir()
 		originalWd, _ := os.Getwd()
-		os.Chdir(tempDir)
-		defer os.Chdir(originalWd)
+		_ = os.Chdir(tempDir)
+		defer func() { _ = os.Chdir(originalWd) }()
 
 		// Create public directory
 		publicDir := filepath.Join(tempDir, "public")
-		os.MkdirAll(publicDir, 0755)
+		_ = os.MkdirAll(publicDir, 0755)
 
 		// Create config
 		configContent := `
 hugo:
   publishDir: public
 `
-		os.WriteFile("walgo.yaml", []byte(configContent), 0644)
+		_ = os.WriteFile("walgo.yaml", []byte(configContent), 0644)
 
 		// Find serve command
 		var serveCmd *cobra.Command
@@ -354,12 +354,12 @@ func TestCommandsWithArguments(t *testing.T) {
 	t.Run("New command with content type", func(t *testing.T) {
 		tempDir := t.TempDir()
 		originalWd, _ := os.Getwd()
-		os.Chdir(tempDir)
-		defer os.Chdir(originalWd)
+		_ = os.Chdir(tempDir)
+		defer func() { _ = os.Chdir(originalWd) }()
 
 		// Create minimal Hugo structure
-		os.MkdirAll("content", 0755)
-		os.WriteFile("hugo.toml", []byte(`title = "Test"`), 0644)
+		_ = os.MkdirAll("content", 0755)
+		_ = os.WriteFile("hugo.toml", []byte(`title = "Test"`), 0644)
 
 		tests := []TestCase{
 			{
