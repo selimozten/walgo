@@ -62,7 +62,10 @@ func (a *Adapter) deployQuilt(ctx context.Context, siteDir, publisher string, ep
 		if info.IsDir() {
 			return nil
 		}
-		rel, _ := filepath.Rel(siteDir, path)
+		rel, err := filepath.Rel(siteDir, path)
+		if err != nil {
+			return fmt.Errorf("failed to get relative path: %w", err)
+		}
 		field := strings.ReplaceAll(rel, string(os.PathSeparator), "__")
 		field = strings.ReplaceAll(field, " ", "_")
 
@@ -103,7 +106,10 @@ func (a *Adapter) deployQuilt(ctx context.Context, siteDir, publisher string, ep
 	}
 	defer resp.Body.Close()
 
-	respBytes, _ := io.ReadAll(resp.Body)
+	respBytes, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return nil, fmt.Errorf("failed to read response body: %w", err)
+	}
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
 		return nil, fmt.Errorf("publisher responded %d: %s", resp.StatusCode, string(respBytes))
 	}
@@ -150,7 +156,10 @@ func (a *Adapter) deployBlobs(ctx context.Context, siteDir, publisher string, ep
 		if info.IsDir() {
 			return nil
 		}
-		rel, _ := filepath.Rel(siteDir, path)
+		rel, err := filepath.Rel(siteDir, path)
+		if err != nil {
+			return fmt.Errorf("failed to get relative path: %w", err)
+		}
 		files = append(files, job{rel: rel, abs: path})
 		return nil
 	}); err != nil {
@@ -239,7 +248,10 @@ func putBlob(ctx context.Context, endpoint, filePath string) (string, int, error
 		return "", 0, err
 	}
 	defer resp.Body.Close()
-	b, _ := io.ReadAll(resp.Body)
+	b, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return "", resp.StatusCode, fmt.Errorf("failed to read response body: %w", err)
+	}
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
 		return "", resp.StatusCode, fmt.Errorf("publisher responded %d: %s", resp.StatusCode, string(b))
 	}

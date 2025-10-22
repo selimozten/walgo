@@ -25,14 +25,47 @@ Example:
   walgo deploy-http --publisher https://publisher.walrus-testnet.walrus.space \
     --aggregator https://aggregator.walrus-testnet.walrus.space --epochs 1`,
 	Run: func(cmd *cobra.Command, args []string) {
-		publisher, _ := cmd.Flags().GetString("publisher")
-		aggregator, _ := cmd.Flags().GetString("aggregator")
-		epochs, _ := cmd.Flags().GetInt("epochs")
-		mode, _ := cmd.Flags().GetString("mode")
-		workers, _ := cmd.Flags().GetInt("workers")
-		retries, _ := cmd.Flags().GetInt("retries")
-		jsonLogs, _ := cmd.Flags().GetBool("json")
-		verbose, _ := cmd.Flags().GetBool("verbose")
+		var err error
+		publisher, err := cmd.Flags().GetString("publisher")
+		if err != nil {
+			fmt.Fprintln(os.Stderr, "Error reading publisher flag:", err)
+			os.Exit(1)
+		}
+		aggregator, err := cmd.Flags().GetString("aggregator")
+		if err != nil {
+			fmt.Fprintln(os.Stderr, "Error reading aggregator flag:", err)
+			os.Exit(1)
+		}
+		epochs, err := cmd.Flags().GetInt("epochs")
+		if err != nil {
+			fmt.Fprintln(os.Stderr, "Error reading epochs flag:", err)
+			os.Exit(1)
+		}
+		mode, err := cmd.Flags().GetString("mode")
+		if err != nil {
+			fmt.Fprintln(os.Stderr, "Error reading mode flag:", err)
+			os.Exit(1)
+		}
+		workers, err := cmd.Flags().GetInt("workers")
+		if err != nil {
+			fmt.Fprintln(os.Stderr, "Error reading workers flag:", err)
+			os.Exit(1)
+		}
+		retries, err := cmd.Flags().GetInt("retries")
+		if err != nil {
+			fmt.Fprintln(os.Stderr, "Error reading retries flag:", err)
+			os.Exit(1)
+		}
+		jsonLogs, err := cmd.Flags().GetBool("json")
+		if err != nil {
+			fmt.Fprintln(os.Stderr, "Error reading json flag:", err)
+			os.Exit(1)
+		}
+		verbose, err := cmd.Flags().GetBool("verbose")
+		if err != nil {
+			fmt.Fprintln(os.Stderr, "Error reading verbose flag:", err)
+			os.Exit(1)
+		}
 
 		if publisher == "" || aggregator == "" {
 			fmt.Fprintln(os.Stderr, "--publisher and --aggregator are required")

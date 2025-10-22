@@ -38,7 +38,11 @@ The configuration will be created at ~/.config/walrus/sites-config.yaml`,
 		fmt.Printf("Setting up site-builder configuration for %s...\n", network)
 
 		// Determine if forcing overwrite
-		force, _ := cmd.Flags().GetBool("force")
+		force, err := cmd.Flags().GetBool("force")
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "Error reading force flag: %v\n", err)
+			os.Exit(1)
+		}
 
 		// Check if already configured (and not forcing)
 		if !force {

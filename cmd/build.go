@@ -38,7 +38,12 @@ This command runs the 'hugo' command to generate static files typically into the
 		fmt.Println("🔨 Building site...")
 
 		// Check if clean flag is set
-		if clean, _ := cmd.Flags().GetBool("clean"); clean {
+		clean, err := cmd.Flags().GetBool("clean")
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "Error reading clean flag: %v\n", err)
+			os.Exit(1)
+		}
+		if clean {
 			publishDir := filepath.Join(sitePath, walgoCfg.HugoConfig.PublishDir)
 			fmt.Printf("  [1/3] Cleaning %s...\n", publishDir)
 			if err := os.RemoveAll(publishDir); err != nil {
@@ -50,7 +55,7 @@ This command runs the 'hugo' command to generate static files typically into the
 
 		// Execute Hugo build
 		stepNum := 2
-		if clean, _ := cmd.Flags().GetBool("clean"); !clean {
+		if !clean {
 			stepNum = 1
 		}
 		fmt.Printf("  [%d/3] Running Hugo build...\n", stepNum)
@@ -67,18 +72,21 @@ This command runs the 'hugo' command to generate static files typically into the
 		publishDirPath := filepath.Join(sitePath, walgoCfg.HugoConfig.PublishDir)
 
 		// Run optimization if enabled and --no-optimize flag is not set
-		if walgoCfg.OptimizerConfig.Enabled && !cmd.Flags().Changed("no-optimize") {
-			if noOptimize, _ := cmd.Flags().GetBool("no-optimize"); !noOptimize {
-				fmt.Println("  [3/3] Optimizing assets...")
+		noOptimize, err := cmd.Flags().GetBool("no-optimize")
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "Error reading no-optimize flag: %v\n", err)
+			os.Exit(1)
+		}
+		if walgoCfg.OptimizerConfig.Enabled && !cmd.Flags().Changed("no-optimize") && !noOptimize {
+			fmt.Println("  [3/3] Optimizing assets...")
 
-				optimizerEngine := optimizer.NewEngine(walgoCfg.OptimizerConfig)
-				stats, err := optimizerEngine.OptimizeDirectory(publishDirPath)
-				if err != nil {
-					fmt.Fprintf(os.Stderr, "  ⚠ Warning: Optimization failed: %v\n", err)
-				} else {
-					optimizerEngine.PrintStats(stats)
-					fmt.Println("  ✓ Optimization complete")
-				}
+			optimizerEngine := optimizer.NewEngine(walgoCfg.OptimizerConfig)
+			stats, err := optimizerEngine.OptimizeDirectory(publishDirPath)
+			if err != nil {
+				fmt.Fprintf(os.Stderr, "  ⚠ Warning: Optimization failed: %v\n", err)
+			} else {
+				optimizerEngine.PrintStats(stats)
+				fmt.Println("  ✓ Optimization complete")
 			}
 		}
 

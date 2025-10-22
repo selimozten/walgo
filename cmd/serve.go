@@ -37,16 +37,36 @@ Press Ctrl+C to stop the server.`,
 		hugoArgs := []string{"server"}
 
 		// Append flags recognized by walgo serve
-		if drafts, _ := cmd.Flags().GetBool("drafts"); drafts {
+		drafts, err := cmd.Flags().GetBool("drafts")
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "Error reading drafts flag: %v\n", err)
+			os.Exit(1)
+		}
+		if drafts {
 			hugoArgs = append(hugoArgs, "-D")
 		}
-		if expired, _ := cmd.Flags().GetBool("expired"); expired {
+		expired, err := cmd.Flags().GetBool("expired")
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "Error reading expired flag: %v\n", err)
+			os.Exit(1)
+		}
+		if expired {
 			hugoArgs = append(hugoArgs, "-E")
 		}
-		if future, _ := cmd.Flags().GetBool("future"); future {
+		future, err := cmd.Flags().GetBool("future")
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "Error reading future flag: %v\n", err)
+			os.Exit(1)
+		}
+		if future {
 			hugoArgs = append(hugoArgs, "-F")
 		}
-		if port, _ := cmd.Flags().GetInt("port"); port != 0 {
+		port, err := cmd.Flags().GetInt("port")
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "Error reading port flag: %v\n", err)
+			os.Exit(1)
+		}
+		if port != 0 {
 			hugoArgs = append(hugoArgs, "--port", strconv.Itoa(port))
 		}
 

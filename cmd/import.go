@@ -42,11 +42,31 @@ Features:
 		}
 
 		// Get flag values
-		outputDir, _ := cmd.Flags().GetString("output-dir")
-		overwrite, _ := cmd.Flags().GetBool("overwrite")
-		convertWikilinks, _ := cmd.Flags().GetBool("convert-wikilinks")
-		attachmentDir, _ := cmd.Flags().GetString("attachment-dir")
-		frontmatterFormat, _ := cmd.Flags().GetString("frontmatter-format")
+		outputDir, err := cmd.Flags().GetString("output-dir")
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "Error reading output-dir flag: %v\n", err)
+			os.Exit(1)
+		}
+		overwrite, err := cmd.Flags().GetBool("overwrite")
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "Error reading overwrite flag: %v\n", err)
+			os.Exit(1)
+		}
+		convertWikilinks, err := cmd.Flags().GetBool("convert-wikilinks")
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "Error reading convert-wikilinks flag: %v\n", err)
+			os.Exit(1)
+		}
+		attachmentDir, err := cmd.Flags().GetString("attachment-dir")
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "Error reading attachment-dir flag: %v\n", err)
+			os.Exit(1)
+		}
+		frontmatterFormat, err := cmd.Flags().GetString("frontmatter-format")
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "Error reading frontmatter-format flag: %v\n", err)
+			os.Exit(1)
+		}
 
 		// Determine target content directory
 		hugoContentDir := filepath.Join(sitePath, cfg.HugoConfig.ContentDir)

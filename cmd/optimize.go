@@ -83,33 +83,48 @@ The optimization settings can be configured in walgo.yaml under the 'optimizer' 
 
 		// Override config with command line flags
 		if cmd.Flags().Changed("verbose") {
-			if verbose, _ := cmd.Flags().GetBool("verbose"); verbose {
-				optimizerConfig.Verbose = true
+			verbose, err := cmd.Flags().GetBool("verbose")
+			if err != nil {
+				fmt.Fprintf(os.Stderr, "Error reading verbose flag: %v\n", err)
+				os.Exit(1)
 			}
+			optimizerConfig.Verbose = verbose
 		}
 
 		if cmd.Flags().Changed("html") {
-			if html, _ := cmd.Flags().GetBool("html"); !html {
-				optimizerConfig.HTML.Enabled = false
+			html, err := cmd.Flags().GetBool("html")
+			if err != nil {
+				fmt.Fprintf(os.Stderr, "Error reading html flag: %v\n", err)
+				os.Exit(1)
 			}
+			optimizerConfig.HTML.Enabled = html
 		}
 
 		if cmd.Flags().Changed("css") {
-			if css, _ := cmd.Flags().GetBool("css"); !css {
-				optimizerConfig.CSS.Enabled = false
+			css, err := cmd.Flags().GetBool("css")
+			if err != nil {
+				fmt.Fprintf(os.Stderr, "Error reading css flag: %v\n", err)
+				os.Exit(1)
 			}
+			optimizerConfig.CSS.Enabled = css
 		}
 
 		if cmd.Flags().Changed("js") {
-			if js, _ := cmd.Flags().GetBool("js"); !js {
-				optimizerConfig.JS.Enabled = false
+			js, err := cmd.Flags().GetBool("js")
+			if err != nil {
+				fmt.Fprintf(os.Stderr, "Error reading js flag: %v\n", err)
+				os.Exit(1)
 			}
+			optimizerConfig.JS.Enabled = js
 		}
 
 		if cmd.Flags().Changed("remove-unused-css") {
-			if removeUnused, _ := cmd.Flags().GetBool("remove-unused-css"); removeUnused {
-				optimizerConfig.CSS.RemoveUnused = true
+			removeUnused, err := cmd.Flags().GetBool("remove-unused-css")
+			if err != nil {
+				fmt.Fprintf(os.Stderr, "Error reading remove-unused-css flag: %v\n", err)
+				os.Exit(1)
 			}
+			optimizerConfig.CSS.RemoveUnused = removeUnused
 		}
 
 		// Create and run optimizer

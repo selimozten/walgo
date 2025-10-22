@@ -40,14 +40,32 @@ Examples:
   walgo setup-deps --with-site-builder --with-walrus --network testnet
   walgo setup-deps --bin-dir ~/.local/bin --with-hugo`,
 	RunE: func(cmd *cobra.Command, args []string) error {
-		binDir, _ := cmd.Flags().GetString("bin-dir")
-		withSiteBuilder, _ := cmd.Flags().GetBool("with-site-builder")
-		withWalrus, _ := cmd.Flags().GetBool("with-walrus")
-		withHugo, _ := cmd.Flags().GetBool("with-hugo")
-		network, _ := cmd.Flags().GetString("network")
+		binDir, err := cmd.Flags().GetString("bin-dir")
+		if err != nil {
+			return err
+		}
+		withSiteBuilder, err := cmd.Flags().GetBool("with-site-builder")
+		if err != nil {
+			return err
+		}
+		withWalrus, err := cmd.Flags().GetBool("with-walrus")
+		if err != nil {
+			return err
+		}
+		withHugo, err := cmd.Flags().GetBool("with-hugo")
+		if err != nil {
+			return err
+		}
+		network, err := cmd.Flags().GetString("network")
+		if err != nil {
+			return err
+		}
 
 		if binDir == "" {
-			home, _ := os.UserHomeDir()
+			home, err := os.UserHomeDir()
+			if err != nil {
+				return fmt.Errorf("failed to get home directory: %w", err)
+			}
 			binDir = filepath.Join(home, ".config", "walgo", "bin")
 		}
 		// #nosec G301 - bin directory needs standard permissions
@@ -178,7 +196,10 @@ func downloadAndInstall(url, dest string) error {
 }
 
 func wireWalrusBinary(binDir string) error {
-	home, _ := os.UserHomeDir()
+	home, err := os.UserHomeDir()
+	if err != nil {
+		return errors.New("failed to get home directory")
+	}
 	scPath := filepath.Join(home, ".config", "walrus", "sites-config.yaml")
 	data, err := os.ReadFile(scPath) // #nosec G304 - path is constructed from known directory
 	if err != nil {

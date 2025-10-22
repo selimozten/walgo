@@ -183,15 +183,15 @@ func (e *Engine) applyCSSUnusedRuleRemoval(cssContent []byte) []byte {
 func (e *Engine) shouldSkipFile(filePath string) bool {
 	// Check skip patterns
 	for _, pattern := range e.config.SkipPatterns {
-		matched, _ := filepath.Match(pattern, filepath.Base(filePath))
-		if matched {
+		matched, err := filepath.Match(pattern, filepath.Base(filePath))
+		if err == nil && matched {
 			return true
 		}
 
 		// Also check against full path for directory patterns
 		if strings.Contains(pattern, "/") {
-			matched, _ = filepath.Match(pattern, filePath)
-			if matched {
+			matched, err := filepath.Match(pattern, filePath)
+			if err == nil && matched {
 				return true
 			}
 		}

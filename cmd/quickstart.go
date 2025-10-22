@@ -28,8 +28,16 @@ Example:
 	Args: cobra.ExactArgs(1),
 	Run: func(cmd *cobra.Command, args []string) {
 		siteName := args[0]
-		skipDeploy, _ := cmd.Flags().GetBool("skip-deploy")
-		skipBuild, _ := cmd.Flags().GetBool("skip-build")
+		skipDeploy, err := cmd.Flags().GetBool("skip-deploy")
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "Error reading skip-deploy flag: %v\n", err)
+			os.Exit(1)
+		}
+		skipBuild, err := cmd.Flags().GetBool("skip-build")
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "Error reading skip-build flag: %v\n", err)
+			os.Exit(1)
+		}
 
 		// Validate site name to prevent command injection
 		if !isValidSiteName(siteName) {
