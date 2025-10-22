@@ -12,11 +12,11 @@ import (
 
 func TestImportVault(t *testing.T) {
 	tests := []struct {
-		name           string
-		setupVault     func(string) error
-		cfg            config.ObsidianConfig
-		wantErr        bool
-		checkStats     func(*ImportStats) error
+		name       string
+		setupVault func(string) error
+		cfg        config.ObsidianConfig
+		wantErr    bool
+		checkStats func(*ImportStats) error
 	}{
 		{
 			name: "Import simple vault",

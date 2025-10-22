@@ -35,20 +35,20 @@ func captureOutput(f func()) (string, string) {
 
 	go func() {
 		var buf bytes.Buffer
-		io.Copy(&buf, rOut)
+		_, _ = io.Copy(&buf, rOut)
 		outC <- buf.String()
 	}()
 
 	go func() {
 		var buf bytes.Buffer
-		io.Copy(&buf, rErr)
+		_, _ = io.Copy(&buf, rErr)
 		errC <- buf.String()
 	}()
 
 	f()
 
-	wOut.Close()
-	wErr.Close()
+	_ = wOut.Close()
+	_ = wErr.Close()
 	os.Stdout = oldStdout
 	os.Stderr = oldStderr
 
@@ -56,12 +56,6 @@ func captureOutput(f func()) (string, string) {
 	stderr := <-errC
 
 	return stdout, stderr
-}
-
-// resetRootCmd resets the root command for testing
-func resetRootCmd() {
-	rootCmd.ResetCommands()
-	rootCmd.ResetFlags()
 }
 
 // TestCase represents a test case for command testing

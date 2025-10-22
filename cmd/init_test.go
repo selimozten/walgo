@@ -40,8 +40,8 @@ func TestInitCommandExecution(t *testing.T) {
 		// Create temp directory for testing
 		tempDir := t.TempDir()
 		originalWd, _ := os.Getwd()
-		os.Chdir(tempDir)
-		defer os.Chdir(originalWd)
+		_ = os.Chdir(tempDir)
+		defer func() { _ = os.Chdir(originalWd) }()
 
 		siteName := "test-site"
 
@@ -74,12 +74,12 @@ func TestInitCommandExecution(t *testing.T) {
 	t.Run("Init with existing directory", func(t *testing.T) {
 		tempDir := t.TempDir()
 		originalWd, _ := os.Getwd()
-		os.Chdir(tempDir)
-		defer os.Chdir(originalWd)
+		_ = os.Chdir(tempDir)
+		defer func() { _ = os.Chdir(originalWd) }()
 
 		// Create existing directory
 		siteName := "existing-site"
-		os.MkdirAll(siteName, 0755)
+		_ = os.MkdirAll(siteName, 0755)
 
 		// Execute command
 		stdout, stderr := captureOutput(func() {

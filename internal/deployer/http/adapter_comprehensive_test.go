@@ -49,8 +49,8 @@ func TestUpdate(t *testing.T) {
 			opts: deployer.DeployOptions{
 				Epochs: 10,
 			},
-			wantErr:  true,
-			errMsg:   "HTTP deployer does not support updates",
+			wantErr: true,
+			errMsg:  "HTTP deployer does not support updates",
 		},
 	}
 
@@ -108,8 +108,8 @@ func TestStatus(t *testing.T) {
 			opts: deployer.DeployOptions{
 				Verbose: true,
 			},
-			wantErr:  true,
-			errMsg:   "HTTP deployer does not support status checks",
+			wantErr: true,
+			errMsg:  "HTTP deployer does not support status checks",
 		},
 	}
 

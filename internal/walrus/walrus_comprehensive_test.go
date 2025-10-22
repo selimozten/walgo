@@ -148,10 +148,10 @@ func TestSetupSiteBuilder(t *testing.T) {
 
 func TestHandleSiteBuilderError(t *testing.T) {
 	tests := []struct {
-		name       string
-		output     string
-		errMsg     string
-		wantErr    bool
+		name        string
+		output      string
+		errMsg      string
+		wantErr     bool
 		errContains string
 	}{
 		{

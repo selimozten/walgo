@@ -21,7 +21,7 @@ func TestCSSOptimizer_FindUnusedRules(t *testing.T) {
 .unused { color: blue; }
 #used-id { color: green; }
 #unused-id { color: yellow; }`,
-			html: `<div class="used" id="used-id">Test</div>`,
+			html:     `<div class="used" id="used-id">Test</div>`,
 			wantLen:  2, // Should find 2 unused rules
 			contains: []string{".unused", "#unused-id"},
 		},
@@ -130,10 +130,10 @@ func TestCSSOptimizer_IsSelectorUsed(t *testing.T) {
 
 func TestCSSOptimizer_RemoveUnusedRules(t *testing.T) {
 	tests := []struct {
-		name        string
-		css         string
-		html        string
-		shouldKeep  []string
+		name         string
+		css          string
+		html         string
+		shouldKeep   []string
 		shouldRemove []string
 	}{
 		{
@@ -156,8 +156,8 @@ func TestCSSOptimizer_RemoveUnusedRules(t *testing.T) {
 			name: "Keep all when RemoveUnused is false",
 			css: `.test1 { color: red; }
 .test2 { color: blue; }`,
-			html:        `<div>No classes</div>`,
-			shouldKeep:  []string{".test1", ".test2"},
+			html:         `<div>No classes</div>`,
+			shouldKeep:   []string{".test1", ".test2"},
 			shouldRemove: []string{},
 		},
 	}

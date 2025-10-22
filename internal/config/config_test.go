@@ -325,8 +325,8 @@ func TestSaveConfig(t *testing.T) {
 			wantErr: false,
 		},
 		{
-			name:   "Save default config",
-			config: func() *WalgoConfig { cfg := NewDefaultWalgoConfig(); return &cfg }(),
+			name:    "Save default config",
+			config:  func() *WalgoConfig { cfg := NewDefaultWalgoConfig(); return &cfg }(),
 			wantErr: false,
 		},
 		{
@@ -544,7 +544,7 @@ func TestConfigRoundTrip(t *testing.T) {
 func contains(s, substr string) bool {
 	return len(substr) > 0 && len(s) >= len(substr) &&
 		(s == substr || len(s) > len(substr) && (s[:len(substr)] == substr ||
-		contains(s[1:], substr)))
+			contains(s[1:], substr)))
 }
 
 // Additional test for edge cases

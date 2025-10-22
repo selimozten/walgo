@@ -38,8 +38,8 @@ func TestBuildCommandExecution(t *testing.T) {
 		// Create temp directory without config
 		tempDir := t.TempDir()
 		originalWd, _ := os.Getwd()
-		os.Chdir(tempDir)
-		defer os.Chdir(originalWd)
+		_ = os.Chdir(tempDir)
+		defer func() { _ = os.Chdir(originalWd) }()
 
 		// Note: We can't directly mock os.Exit in Go
 		// The command will call os.Exit if config is missing
@@ -64,8 +64,8 @@ func TestBuildCommandExecution(t *testing.T) {
 	t.Run("Build with clean flag", func(t *testing.T) {
 		tempDir := t.TempDir()
 		originalWd, _ := os.Getwd()
-		os.Chdir(tempDir)
-		defer os.Chdir(originalWd)
+		_ = os.Chdir(tempDir)
+		defer func() { _ = os.Chdir(originalWd) }()
 
 		// Create a mock walgo.yaml
 		configContent := `
@@ -74,13 +74,13 @@ hugo:
 optimizer:
   enabled: false
 `
-		os.WriteFile("walgo.yaml", []byte(configContent), 0644)
+		_ = os.WriteFile("walgo.yaml", []byte(configContent), 0644)
 
 		// Create public directory to clean
 		publicDir := filepath.Join(tempDir, "public")
-		os.MkdirAll(publicDir, 0755)
+		_ = os.MkdirAll(publicDir, 0755)
 		testFile := filepath.Join(publicDir, "test.html")
-		os.WriteFile(testFile, []byte("test"), 0644)
+		_ = os.WriteFile(testFile, []byte("test"), 0644)
 
 		// Note: We can't mock os.Exit directly
 
@@ -88,7 +88,7 @@ optimizer:
 		cmd := &cobra.Command{}
 		cmd.Flags().Bool("clean", true, "")
 		cmd.Flags().Bool("no-optimize", false, "")
-		cmd.Flags().Set("clean", "true")
+		_ = cmd.Flags().Set("clean", "true")
 
 		// Execute build
 		stdout, stderr := captureOutput(func() {
@@ -105,8 +105,8 @@ optimizer:
 	t.Run("Build with no-optimize flag", func(t *testing.T) {
 		tempDir := t.TempDir()
 		originalWd, _ := os.Getwd()
-		os.Chdir(tempDir)
-		defer os.Chdir(originalWd)
+		_ = os.Chdir(tempDir)
+		defer func() { _ = os.Chdir(originalWd) }()
 
 		// Create a mock walgo.yaml with optimizer enabled
 		configContent := `
@@ -118,7 +118,7 @@ optimizer:
   css: true
   js: true
 `
-		os.WriteFile("walgo.yaml", []byte(configContent), 0644)
+		_ = os.WriteFile("walgo.yaml", []byte(configContent), 0644)
 
 		// Note: We can't mock os.Exit directly
 
@@ -126,7 +126,7 @@ optimizer:
 		cmd := &cobra.Command{}
 		cmd.Flags().Bool("clean", false, "")
 		cmd.Flags().Bool("no-optimize", true, "")
-		cmd.Flags().Set("no-optimize", "true")
+		_ = cmd.Flags().Set("no-optimize", "true")
 
 		// Execute build
 		stdout, stderr := captureOutput(func() {
@@ -184,8 +184,8 @@ func TestBuildCommandWithMockConfig(t *testing.T) {
 	t.Run("Successful build simulation", func(t *testing.T) {
 		tempDir := t.TempDir()
 		originalWd, _ := os.Getwd()
-		os.Chdir(tempDir)
-		defer os.Chdir(originalWd)
+		_ = os.Chdir(tempDir)
+		defer func() { _ = os.Chdir(originalWd) }()
 
 		// Create valid config
 		configContent := `

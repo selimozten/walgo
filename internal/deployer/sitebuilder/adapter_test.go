@@ -25,8 +25,8 @@ func TestAdapter_Deploy(t *testing.T) {
 			name:    "Deploy with valid options",
 			siteDir: "/tmp/test-site",
 			opts: deployer.DeployOptions{
-				Verbose:   true,
-				Epochs:    5,
+				Verbose: true,
+				Epochs:  5,
 				WalrusCfg: config.WalrusConfig{
 					ProjectID:  "test-project",
 					Entrypoint: "index.html",

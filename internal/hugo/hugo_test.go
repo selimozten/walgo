@@ -21,13 +21,13 @@ func TestMain(m *testing.M) {
 
 func TestInitializeSite(t *testing.T) {
 	tests := []struct {
-		name           string
-		setup          func() (string, func())
-		mockHugo       bool
-		hugoNotFound   bool
-		hugoFails      bool
-		wantErr        bool
-		errContains    string
+		name         string
+		setup        func() (string, func())
+		mockHugo     bool
+		hugoNotFound bool
+		hugoFails    bool
+		wantErr      bool
+		errContains  string
 	}{
 		{
 			name: "Successful initialization",

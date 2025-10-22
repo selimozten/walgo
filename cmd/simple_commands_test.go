@@ -413,8 +413,8 @@ func TestCommandsWithArguments(t *testing.T) {
 // TestCommandFlags tests that all commands have their expected flags
 func TestCommandFlags(t *testing.T) {
 	flagTests := []struct {
-		command  string
-		flags    []string
+		command string
+		flags   []string
 	}{
 		{"build", []string{"clean", "no-optimize"}},
 		{"deploy", []string{"epochs"}},
