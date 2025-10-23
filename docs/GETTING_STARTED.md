@@ -24,7 +24,32 @@ Before you begin, make sure you have:
 
 ## Your First Site
 
-### Step 1: Create a New Site
+### Quick Option: Use Quickstart (Recommended for Beginners)
+
+The fastest way to get started is with the quickstart command:
+
+```bash
+# One command to create, configure, and deploy!
+walgo quickstart my-first-site
+```
+
+This single command will:
+1. Create a new Hugo site
+2. Install the PaperMod theme
+3. Add sample content (welcome post, about page)
+4. Configure the site
+5. Build with optimization
+6. Deploy to Walrus (HTTP mode)
+
+**Result:** Your site is live in ~2 minutes! 🎉
+
+Skip to [Step 7](#step-7-share-your-site) to see your live site.
+
+### Manual Option: Step-by-Step Setup
+
+If you prefer to understand each step or customize the setup, follow these steps:
+
+#### Step 1: Create a New Site
 
 ```bash
 # Create a new Hugo site

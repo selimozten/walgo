@@ -45,6 +45,198 @@ walgo --help
 walgo <command> --help
 ```
 
+## Quick Start
+
+### `walgo quickstart`
+
+The fastest way to get started with Walgo. Creates a new site, adds a theme, creates sample content, and optionally deploys it - all in one command.
+
+#### Syntax
+
+```bash
+walgo quickstart <name> [flags]
+```
+
+#### Arguments
+
+- `<name>` - Name of the site directory
+
+#### Flags
+
+- `--theme <theme>` - Hugo theme to install (default: `PaperMod`)
+- `--deploy` - Deploy immediately after setup
+- `--deploy-mode <mode>` - Deployment mode: `http` or `onchain` (default: `http`)
+- `--epochs <number>` - Storage epochs for on-chain deployment (default: `5`)
+- `--skip-content` - Skip creating sample content
+- `--skip-build` - Skip building the site
+
+#### Examples
+
+```bash
+# Quickstart with defaults (HTTP deployment)
+walgo quickstart my-blog
+
+# Quickstart with custom theme
+walgo quickstart my-blog --theme hugo-theme-stack
+
+# Quickstart with on-chain deployment
+walgo quickstart my-blog --deploy --deploy-mode onchain --epochs 10
+
+# Quickstart without deployment
+walgo quickstart my-blog --deploy=false
+
+# Quickstart with minimal setup (no sample content)
+walgo quickstart my-blog --skip-content
+```
+
+#### What It Does
+
+The quickstart command automates the entire setup process:
+
+```mermaid
+graph LR
+    A[walgo quickstart] --> B[Create Hugo Site]
+    B --> C[Initialize Git]
+    C --> D[Install Theme]
+    D --> E[Create Sample Content]
+    E --> F[Configure Site]
+    F --> G{Deploy Flag?}
+    G -->|Yes| H[Build Site]
+    G -->|No| End[Ready to Use]
+    H --> I{Deploy Mode?}
+    I -->|HTTP| J[Deploy HTTP]
+    I -->|On-Chain| K[Deploy On-Chain]
+    J --> End
+    K --> End
+
+    style A fill:#e1f5ff
+    style End fill:#e1ffe1
+```
+
+**Step-by-step process:**
+
+1. **Creates Hugo site** - `walgo init <name>`
+2. **Initializes Git** - `git init`
+3. **Installs theme** - Downloads and configures theme
+4. **Creates sample content** - Adds example posts
+5. **Configures site** - Sets up `hugo.toml` and `walgo.yaml`
+6. **Builds site** (if deploying) - `walgo build`
+7. **Deploys** (if `--deploy` flag) - `walgo deploy-http` or `walgo deploy`
+
+#### Output Example
+
+```
+🚀 Walgo Quickstart
+==================
+
+Creating new Hugo site 'my-blog'...
+✓ Site structure created
+
+Initializing Git repository...
+✓ Git initialized
+
+Installing theme 'PaperMod'...
+✓ Theme installed as submodule
+✓ Theme configured in hugo.toml
+
+Creating sample content...
+✓ Created posts/welcome.md
+✓ Created posts/getting-started.md
+✓ Created about.md
+
+Configuring site...
+✓ hugo.toml updated
+✓ walgo.yaml created
+
+Building site...
+✓ Hugo build completed (42 files)
+✓ Assets optimized (saved 234 KB)
+
+Deploying to Walrus (HTTP mode)...
+✓ Files uploaded
+✓ Site published
+
+🎉 Your site is ready!
+
+📁 Site directory: ./my-blog
+🌐 URL: https://5tphzvq5shsxzugrz7kqd5bhnbajqfamvtxrn8jbfm3jbibzz1.walrus.site
+
+Next steps:
+  cd my-blog
+  walgo serve              # Preview locally
+  hugo new posts/my-post.md # Create new content
+
+Learn more: https://github.com/selimozten/walgo/tree/main/docs
+```
+
+#### Sample Content Created
+
+The quickstart command creates the following sample content:
+
+**posts/welcome.md:**
+```markdown
+---
+title: "Welcome to Your New Site"
+date: 2025-01-23T10:00:00Z
+draft: false
+tags: ["welcome", "getting-started"]
+---
+
+Welcome to your new decentralized website powered by Walgo and Walrus!
+
+This is a sample post to get you started. You can edit or delete it.
+```
+
+**posts/getting-started.md:**
+```markdown
+---
+title: "Getting Started with Walgo"
+date: 2025-01-23T10:30:00Z
+draft: false
+tags: ["tutorial", "walgo"]
+---
+
+Learn how to use Walgo to deploy your Hugo sites to Walrus...
+```
+
+**about.md:**
+```markdown
+---
+title: "About"
+date: 2025-01-23T10:00:00Z
+---
+
+This is your about page. Tell your visitors about yourself!
+```
+
+#### When to Use Quickstart
+
+**Perfect for:**
+- First-time users
+- Quick prototypes
+- Learning Walgo
+- Demo sites
+- Blog starters
+
+**Not ideal for:**
+- Existing Hugo sites (use `walgo build` + `walgo deploy` instead)
+- Custom theme requirements (install theme manually)
+- Complex configurations (configure manually)
+
+#### Comparison with Manual Setup
+
+| Task | Quickstart | Manual Setup |
+|------|-----------|--------------|
+| Create site | ✓ Automatic | `walgo init` |
+| Add theme | ✓ Automatic | Git submodule |
+| Sample content | ✓ Automatic | `hugo new` × 3 |
+| Configuration | ✓ Automatic | Edit configs |
+| Build | ✓ Automatic | `walgo build` |
+| Deploy | ✓ Optional | `walgo deploy-http` |
+| **Time** | **~2 minutes** | **~10 minutes** |
+
+---
+
 ## Site Management
 
 ### `walgo init`

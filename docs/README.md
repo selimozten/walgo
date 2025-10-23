@@ -10,6 +10,7 @@ Perfect for getting started and using Walgo for your projects.
 
 | Document | Description | Target Audience |
 |----------|-------------|-----------------|
+| [⚡ Quickstart Guide](QUICKSTART.md) | Get your site live in 2 minutes! | Everyone (START HERE) |
 | [Installation Guide](INSTALLATION.md) | Complete installation instructions for all platforms | Everyone |
 | [Getting Started](GETTING_STARTED.md) | Your first site deployment walkthrough | New users |
 | [Commands Reference](COMMANDS.md) | Detailed documentation of all commands | All users |
@@ -32,11 +33,13 @@ Perfect for contributors and those wanting to understand Walgo's internals.
 ## Quick Links
 
 ### Getting Started
+- **⚡ Fastest way:** `walgo quickstart my-blog` - See [Quickstart Command](COMMANDS.md#walgo-quickstart)
 - New to Walgo? Start with [Installation](INSTALLATION.md) → [Getting Started](GETTING_STARTED.md)
 - Want to deploy quickly? See [Getting Started: Your First Site](GETTING_STARTED.md#your-first-site)
 - Need help? Check [Troubleshooting Guide](TROUBLESHOOTING.md)
 
 ### Common Tasks
+- [⚡ Quickstart - Fastest way](COMMANDS.md#walgo-quickstart)
 - [Create a new site](GETTING_STARTED.md#step-1-create-a-new-site)
 - [Deploy via HTTP (free)](DEPLOYMENT.md#http-deployment)
 - [Deploy on-chain (permanent)](DEPLOYMENT.md#on-chain-deployment)
@@ -57,6 +60,7 @@ docs/
 ├── README.md                    # This file - documentation index
 │
 ├── User Documentation/
+│   ├── QUICKSTART.md            # ⚡ Get started in 2 minutes!
 │   ├── INSTALLATION.md          # Installation for all platforms
 │   ├── GETTING_STARTED.md       # First deployment walkthrough
 │   ├── COMMANDS.md              # Complete command reference
@@ -74,7 +78,17 @@ docs/
 
 ## Learning Paths
 
-### Path 1: Quick Start (15 minutes)
+### Path 1: Quickstart (2 minutes) ⚡
+
+Perfect for: "I want a site live RIGHT NOW"
+
+1. [Install Walgo](INSTALLATION.md#quick-install)
+2. Run: `walgo quickstart my-blog`
+3. Done! Your site is live.
+
+**Read:** [Complete Quickstart Guide](QUICKSTART.md)
+
+### Path 2: Quick Start (15 minutes)
 
 Perfect for: "I just want to deploy my Hugo site"
 
@@ -82,7 +96,7 @@ Perfect for: "I just want to deploy my Hugo site"
 2. [Create your first site](GETTING_STARTED.md#your-first-site)
 3. [Deploy via HTTP](DEPLOYMENT.md#http-deployment)
 
-### Path 2: Complete User Guide (1 hour)
+### Path 3: Complete User Guide (1 hour)
 
 Perfect for: "I want to master Walgo"
 
@@ -92,7 +106,7 @@ Perfect for: "I want to master Walgo"
 4. [Deployment Guide](DEPLOYMENT.md) - Master both modes
 5. [Commands Reference](COMMANDS.md) - Learn all commands
 
-### Path 3: Developer Journey (2-3 hours)
+### Path 4: Developer Journey (2-3 hours)
 
 Perfect for: "I want to contribute to Walgo"
 
@@ -100,7 +114,7 @@ Perfect for: "I want to contribute to Walgo"
 2. [Development Guide](DEVELOPMENT.md) - Set up dev environment
 3. [Contributing Guide](CONTRIBUTING.md) - Make your first contribution
 
-### Path 4: Troubleshooting
+### Path 5: Troubleshooting
 
 Perfect for: "Something isn't working"
 
@@ -202,6 +216,9 @@ The documentation includes various Mermaid diagrams:
 
 ### Essential Commands
 ```bash
+# Quickstart (Recommended)
+walgo quickstart my-blog     # 🚀 Create, configure, and deploy in one command!
+
 # Site Management
 walgo init my-site           # Create new site
 walgo build                  # Build site

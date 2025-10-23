@@ -31,6 +31,24 @@ go install github.com/selimozten/walgo@latest
 
 ## Quick Start
 
+### Fastest Way (Recommended)
+
+```bash
+# One command to create, configure, and deploy your site!
+walgo quickstart my-blog
+```
+
+This will:
+- ✓ Create a new Hugo site
+- ✓ Install a theme (PaperMod)
+- ✓ Add sample content
+- ✓ Build and optimize
+- ✓ Deploy to Walrus (HTTP)
+
+**Result:** Your site live on the decentralized web in ~2 minutes! 🚀
+
+### Manual Setup
+
 ```bash
 # Create a new site
 walgo init my-site
@@ -57,6 +75,7 @@ walgo deploy --epochs 5
 ## Commands
 
 ```bash
+walgo quickstart <name>  # 🚀 Create, configure, and deploy in one command!
 walgo init <name>        # Create new Hugo site
 walgo build              # Build the site
 walgo deploy             # Deploy on-chain (requires wallet)
