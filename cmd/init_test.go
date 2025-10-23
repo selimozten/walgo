@@ -54,7 +54,7 @@ func TestInitCommandExecution(t *testing.T) {
 		// Note: This will fail without Hugo installed
 		stdout, stderr := captureOutput(func() {
 			// Recover from potential panics
-			defer func() { recover() }()
+			defer func() { _ = func() any { return recover() }() }()
 			// The command may call os.Exit, which we can't mock directly
 			// So we use recover to continue the test
 			initCmd.Run(initCmd, []string{siteName})
@@ -95,7 +95,7 @@ func TestInitCommandExecution(t *testing.T) {
 
 		// Execute command
 		stdout, stderr := captureOutput(func() {
-			defer func() { recover() }() // Recover to continue test
+			defer func() { _ = func() any { return recover() }() }() // Recover to continue test
 			initCmd.Run(initCmd, []string{siteName})
 		})
 
@@ -120,7 +120,7 @@ func TestInitCommandExecution(t *testing.T) {
 
 		// Execute command
 		stdout, stderr := captureOutput(func() {
-			defer func() { recover() }()
+			defer func() { _ = func() any { return recover() }() }()
 			initCmd.Run(initCmd, []string{siteName})
 		})
 

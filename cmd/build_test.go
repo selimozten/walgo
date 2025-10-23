@@ -50,7 +50,9 @@ func TestBuildCommandExecution(t *testing.T) {
 
 		// Execute build command
 		stdout, stderr := captureOutput(func() {
-			defer func() { recover() }()
+			defer func() {
+				_ = func() any { return recover() }()
+			}()
 			buildCmd.Run(buildCmd, []string{})
 		})
 
@@ -105,7 +107,9 @@ optimizer:
 
 		// Execute build
 		stdout, stderr := captureOutput(func() {
-			defer func() { recover() }()
+			defer func() {
+				_ = func() any { return recover() }()
+			}()
 			buildCmd.Run(cmd, []string{})
 		})
 
@@ -149,7 +153,9 @@ optimizer:
 
 		// Execute build
 		stdout, stderr := captureOutput(func() {
-			defer func() { recover() }()
+			defer func() {
+				_ = func() any { return recover() }()
+			}()
 			buildCmd.Run(cmd, []string{})
 		})
 
@@ -249,7 +255,9 @@ title = "Test Site"
 
 		// Try to execute build
 		stdout, stderr := captureOutput(func() {
-			defer func() { recover() }()
+			defer func() {
+				_ = func() any { return recover() }()
+			}()
 			buildCmd.Run(buildCmd, []string{})
 		})
 

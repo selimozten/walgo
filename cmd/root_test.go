@@ -236,7 +236,7 @@ func TestExecute(t *testing.T) {
 		_, stderr := captureOutput(func() {
 			// Execute will call os.Exit(1) for invalid command
 			// We can't mock os.Exit directly, so we expect this to fail
-			defer func() { recover() }()
+			defer func() { _ = func() any { return recover() }() }()
 			Execute()
 		})
 
