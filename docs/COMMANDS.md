@@ -63,30 +63,20 @@ walgo quickstart <name> [flags]
 
 #### Flags
 
-- `--theme <theme>` - Hugo theme to install (default: `PaperMod`)
-- `--deploy` - Deploy immediately after setup
-- `--deploy-mode <mode>` - Deployment mode: `http` or `onchain` (default: `http`)
-- `--epochs <number>` - Storage epochs for on-chain deployment (default: `5`)
-- `--skip-content` - Skip creating sample content
+- `--skip-deploy` - Skip deployment step
 - `--skip-build` - Skip building the site
 
 #### Examples
 
 ```bash
-# Quickstart with defaults (HTTP deployment)
+# Quickstart with defaults (includes build and HTTP deployment)
 walgo quickstart my-blog
 
-# Quickstart with custom theme
-walgo quickstart my-blog --theme hugo-theme-stack
-
-# Quickstart with on-chain deployment
-walgo quickstart my-blog --deploy --deploy-mode onchain --epochs 10
-
 # Quickstart without deployment
-walgo quickstart my-blog --deploy=false
+walgo quickstart my-blog --skip-deploy
 
-# Quickstart with minimal setup (no sample content)
-walgo quickstart my-blog --skip-content
+# Quickstart without build or deployment (setup only)
+walgo quickstart my-blog --skip-build --skip-deploy
 ```
 
 #### What It Does
@@ -116,12 +106,10 @@ graph LR
 **Step-by-step process:**
 
 1. **Creates Hugo site** - `walgo init <name>`
-2. **Initializes Git** - `git init`
-3. **Installs theme** - Downloads and configures theme
-4. **Creates sample content** - Adds example posts
-5. **Configures site** - Sets up `hugo.toml` and `walgo.yaml`
-6. **Builds site** (if deploying) - `walgo build`
-7. **Deploys** (if `--deploy` flag) - `walgo deploy-http` or `walgo deploy`
+2. **Installs theme** - Downloads and configures Ananke theme
+3. **Creates sample content** - Adds welcome post
+4. **Builds site** (unless `--skip-build`) - `walgo build`
+5. **Deploys** (unless `--skip-deploy`) - `walgo deploy-http`
 
 #### Output Example
 
@@ -140,13 +128,7 @@ Installing theme 'PaperMod'...
 ✓ Theme configured in hugo.toml
 
 Creating sample content...
-✓ Created posts/welcome.md
-✓ Created posts/getting-started.md
-✓ Created about.md
-
-Configuring site...
-✓ hugo.toml updated
-✓ walgo.yaml created
+✓ Sample content created
 
 Building site...
 ✓ Hugo build completed (42 files)
@@ -162,51 +144,37 @@ Deploying to Walrus (HTTP mode)...
 🌐 URL: https://5tphzvq5shsxzugrz7kqd5bhnbajqfamvtxrn8jbfm3jbibzz1.walrus.site
 
 Next steps:
-  cd my-blog
-  walgo serve              # Preview locally
-  hugo new posts/my-post.md # Create new content
+  1. Edit content in content/posts/
+  2. Rebuild: walgo build
+  3. Update: walgo update <object-id>
 
-Learn more: https://github.com/selimozten/walgo/tree/main/docs
+Learn more: https://github.com/selimozten/walgo
 ```
 
 #### Sample Content Created
 
-The quickstart command creates the following sample content:
+The quickstart command creates a welcome post at `content/posts/welcome.md`:
 
-**posts/welcome.md:**
 ```markdown
 ---
-title: "Welcome to Your New Site"
-date: 2025-01-23T10:00:00Z
+title: "Welcome to Walrus Sites"
+date: 2024-01-01T00:00:00Z
 draft: false
-tags: ["welcome", "getting-started"]
 ---
 
-Welcome to your new decentralized website powered by Walgo and Walrus!
+Welcome to your new decentralized website powered by Walrus!
 
-This is a sample post to get you started. You can edit or delete it.
-```
+This site is hosted on the Walrus decentralized storage network,
+making it censorship-resistant and always available.
 
-**posts/getting-started.md:**
-```markdown
----
-title: "Getting Started with Walgo"
-date: 2025-01-23T10:30:00Z
-draft: false
-tags: ["tutorial", "walgo"]
----
+## Next Steps
 
-Learn how to use Walgo to deploy your Hugo sites to Walrus...
-```
+1. Edit this content in content/posts/welcome.md
+2. Add more posts to content/posts/
+3. Customize your theme
+4. Deploy updates with walgo deploy
 
-**about.md:**
-```markdown
----
-title: "About"
-date: 2025-01-23T10:00:00Z
----
-
-This is your about page. Tell your visitors about yourself!
+Happy building! 🚀
 ```
 
 #### When to Use Quickstart
@@ -228,16 +196,74 @@ This is your about page. Tell your visitors about yourself!
 | Task | Quickstart | Manual Setup |
 |------|-----------|--------------|
 | Create site | ✓ Automatic | `walgo init` |
-| Add theme | ✓ Automatic | Git submodule |
-| Sample content | ✓ Automatic | `hugo new` × 3 |
-| Configuration | ✓ Automatic | Edit configs |
+| Add theme | ✓ Automatic (Ananke) | Git clone manually |
+| Sample content | ✓ Automatic (1 post) | `walgo new posts/welcome.md` |
 | Build | ✓ Automatic | `walgo build` |
-| Deploy | ✓ Optional | `walgo deploy-http` |
-| **Time** | **~2 minutes** | **~10 minutes** |
+| Deploy | ✓ Automatic (HTTP) | `walgo deploy-http` |
+| **Time** | **~2 minutes** | **~5 minutes** |
 
 ---
 
 ## Site Management
+
+### `walgo new`
+
+Create new content in your Hugo site (wrapper around `hugo new`).
+
+#### Syntax
+
+```bash
+walgo new <content-path>
+```
+
+#### Arguments
+
+- `<content-path>` - Path to content file (e.g., `posts/my-post.md`)
+
+#### Examples
+
+```bash
+# Create a new blog post
+walgo new posts/my-first-post.md
+
+# Create a new page
+walgo new about.md
+
+# Create in subdirectory
+walgo new blog/tutorials/getting-started.md
+```
+
+#### What It Does
+
+This is a convenience wrapper around `hugo new` that:
+1. Validates the content path
+2. Creates the file using Hugo's archetypes
+3. Places it in the `content/` directory
+
+#### Output
+
+```
+Creating new content: posts/my-first-post.md
+Content "/path/to/site/content/posts/my-first-post.md" created
+Successfully initiated content creation.
+Remember to edit the new file!
+```
+
+The created file will have frontmatter from your archetype:
+
+```markdown
+---
+title: "My First Post"
+date: 2025-01-23T10:00:00Z
+draft: true
+---
+
+Content here...
+```
+
+**Note:** Remember to set `draft: false` when ready to publish!
+
+---
 
 ### `walgo init`
 
