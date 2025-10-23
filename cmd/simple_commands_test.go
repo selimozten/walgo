@@ -310,7 +310,7 @@ optimizer:
 
 		if optimizeCmd != nil {
 			stdout, stderr := captureOutput(func() {
-				defer func() { recover() }()
+				defer func() { _ = func() any { return recover() }() }()
 				optimizeCmd.Run(optimizeCmd, []string{})
 			})
 
