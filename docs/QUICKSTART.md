@@ -85,7 +85,7 @@ Building site...
 ✓ Hugo build completed (42 files)
 ✓ Assets optimized (saved 234 KB)
 
-Deploying to Walrus (HTTP mode)...
+Deploying to Walrus Sites...
 ✓ Files uploaded
 ✓ Site published
 
@@ -194,7 +194,7 @@ graph TD
 7. **Deploy to Walrus**
    ```bash
    # Equivalent to:
-   walgo deploy-http
+   walgo deploy
    ```
 
 ## Next Steps
@@ -249,13 +249,6 @@ theme = 'PaperMod'
 ```bash
 # Make your changes, then:
 walgo build
-walgo deploy-http
-```
-
-Or for permanent deployment:
-
-```bash
-walgo setup --network testnet  # One time
 walgo deploy --epochs 5
 ```
 
@@ -336,7 +329,7 @@ No, quickstart is for creating new sites. For existing sites, use:
 ```bash
 cd existing-site
 walgo build
-walgo deploy-http
+walgo deploy
 ```
 
 ### What if I don't like the theme?
@@ -349,7 +342,7 @@ git submodule deinit themes/PaperMod
 git submodule add https://github.com/CaiJimmy/hugo-theme-stack.git themes/stack
 # Update hugo.toml: theme = "stack"
 walgo build
-walgo deploy-http
+walgo deploy
 ```
 
 ### How do I deploy on-chain after using quickstart?
@@ -372,17 +365,19 @@ Then deploy manually later:
 
 ```bash
 cd my-blog
-walgo deploy-http
+walgo deploy
 ```
 
-### What's the difference between HTTP and on-chain deployment?
+### What is Walrus Sites deployment?
 
-| Feature | HTTP | On-Chain |
-|---------|------|----------|
-| **Cost** | Free | Requires SUI tokens |
-| **Duration** | ~30 days | Configurable epochs |
-| **Updates** | Re-deploy (new URL) | Update in place (same URL) |
-| **Custom Domain** | No | Yes (via SuiNS) |
+Walrus Sites deployment creates a proper decentralized website with:
+- **Cost**: Requires SUI tokens for on-chain storage
+- **Duration**: Configurable epochs (storage time)
+- **Updates**: Update in place (same object ID)
+- **Custom Domain**: Yes (via SuiNS names)
+- **Content-Type Headers**: Proper MIME types for browser rendering
+
+For testing without SUI tokens, you can use `walgo deploy-http` for raw file storage, but those URLs are meant for curl/testing, not browsing.
 
 ### How do I add my own content?
 
@@ -398,7 +393,7 @@ vim content/posts/my-topic.md
 # Set draft: false when ready
 # Then rebuild and deploy
 walgo build
-walgo deploy-http
+walgo deploy
 ```
 
 ### Can I customize the sample content?
@@ -505,7 +500,7 @@ hugo new about.md
 # Edit hugo.toml to configure theme
 # Create walgo.yaml
 walgo build
-walgo deploy-http
+walgo deploy
 ```
 
 **Quickstart = 1 command instead of 12+ steps!**

@@ -20,6 +20,8 @@ var buildCmd = &cobra.Command{
 (or the directory specified by global --config flag if walgo.yaml is there).
 This command runs the 'hugo' command to generate static files typically into the 'public' directory.`,
 	Run: func(cmd *cobra.Command, args []string) {
+		quiet, _ := cmd.Flags().GetBool("quiet")
+
 		// Determine site path (current directory by default)
 		sitePath, err := os.Getwd()
 		if err != nil {
@@ -35,7 +37,9 @@ This command runs the 'hugo' command to generate static files typically into the
 			os.Exit(1)
 		}
 
-		fmt.Println("🔨 Building site...")
+		if !quiet {
+			fmt.Println("🔨 Building site...")
+		}
 
 		// Check if clean flag is set
 		clean, err := cmd.Flags().GetBool("clean")
@@ -45,20 +49,26 @@ This command runs the 'hugo' command to generate static files typically into the
 		}
 		if clean {
 			publishDir := filepath.Join(sitePath, walgoCfg.HugoConfig.PublishDir)
-			fmt.Printf("  [1/3] Cleaning %s...\n", publishDir)
+			if !quiet {
+				fmt.Printf("  [1/3] Cleaning %s...\n", publishDir)
+			}
 			if err := os.RemoveAll(publishDir); err != nil {
-				fmt.Fprintf(os.Stderr, "  ⚠ Warning: Failed to clean: %v\n", err)
-			} else {
+				if !quiet {
+					fmt.Fprintf(os.Stderr, "  ⚠ Warning: Failed to clean: %v\n", err)
+				}
+			} else if !quiet {
 				fmt.Println("  ✓ Cleaned")
 			}
 		}
 
 		// Execute Hugo build
-		stepNum := 2
-		if !clean {
-			stepNum = 1
+		if !quiet {
+			stepNum := 2
+			if !clean {
+				stepNum = 1
+			}
+			fmt.Printf("  [%d/3] Running Hugo build...\n", stepNum)
 		}
-		fmt.Printf("  [%d/3] Running Hugo build...\n", stepNum)
 		if err := hugo.BuildSite(sitePath); err != nil {
 			fmt.Fprintf(os.Stderr, "❌ Error: Hugo build failed: %v\n\n", err)
 			fmt.Fprintf(os.Stderr, "💡 Troubleshooting:\n")
@@ -67,7 +77,9 @@ This command runs the 'hugo' command to generate static files typically into the
 			fmt.Fprintf(os.Stderr, "  - Run: hugo --verbose (for detailed output)\n")
 			os.Exit(1)
 		}
-		fmt.Println("  ✓ Hugo build complete")
+		if !quiet {
+			fmt.Println("  ✓ Hugo build complete")
+		}
 
 		publishDirPath := filepath.Join(sitePath, walgoCfg.HugoConfig.PublishDir)
 
@@ -78,22 +90,28 @@ This command runs the 'hugo' command to generate static files typically into the
 			os.Exit(1)
 		}
 		if walgoCfg.OptimizerConfig.Enabled && !cmd.Flags().Changed("no-optimize") && !noOptimize {
-			fmt.Println("  [3/3] Optimizing assets...")
+			if !quiet {
+				fmt.Println("  [3/3] Optimizing assets...")
+			}
 
 			optimizerEngine := optimizer.NewEngine(walgoCfg.OptimizerConfig)
 			stats, err := optimizerEngine.OptimizeDirectory(publishDirPath)
 			if err != nil {
-				fmt.Fprintf(os.Stderr, "  ⚠ Warning: Optimization failed: %v\n", err)
-			} else {
+				if !quiet {
+					fmt.Fprintf(os.Stderr, "  ⚠ Warning: Optimization failed: %v\n", err)
+				}
+			} else if !quiet {
 				optimizerEngine.PrintStats(stats)
 				fmt.Println("  ✓ Optimization complete")
 			}
 		}
 
-		fmt.Printf("\n✅ Build complete! Output: %s\n", publishDirPath)
-		fmt.Printf("\n💡 Next steps:\n")
-		fmt.Printf("  - Preview: walgo serve\n")
-		fmt.Printf("  - Deploy: walgo deploy-http --publisher ... --aggregator ... --epochs 1\n")
+		if !quiet {
+			fmt.Printf("\n✅ Build complete! Output: %s\n", publishDirPath)
+			fmt.Printf("\n💡 Next steps:\n")
+			fmt.Printf("  - Preview: walgo serve\n")
+			fmt.Printf("  - Deploy: walgo deploy-http --publisher ... --aggregator ... --epochs 1\n")
+		}
 	},
 }
 
@@ -102,4 +120,5 @@ func init() {
 
 	buildCmd.Flags().BoolP("clean", "c", false, "Clean the public directory before building")
 	buildCmd.Flags().Bool("no-optimize", false, "Skip asset optimization after building")
+	buildCmd.Flags().BoolP("quiet", "q", false, "Suppress output (used internally by quickstart)")
 }

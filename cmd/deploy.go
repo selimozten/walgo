@@ -27,6 +27,8 @@ your site and configure domain names.
 
 Example: walgo deploy --epochs 5`,
 	Run: func(cmd *cobra.Command, args []string) {
+		quiet, _ := cmd.Flags().GetBool("quiet")
+
 		// Get current working directory
 		sitePath, err := os.Getwd()
 		if err != nil {
@@ -73,14 +75,18 @@ Example: walgo deploy --epochs 5`,
 			}
 		}
 
-		fmt.Println("🚀 Deploying to Walrus Sites...")
-		fmt.Println("  [1/3] Checking environment...")
+		if !quiet {
+			fmt.Println("🚀 Deploying to Walrus Sites...")
+			fmt.Println("  [1/3] Checking environment...")
+		}
 
 		// Deploy the site via adapter interface
-		fmt.Println("  [2/3] Uploading site...")
+		if !quiet {
+			fmt.Println("  [2/3] Uploading site...")
+		}
 		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Minute)
 		defer cancel()
-		output, err := d.Deploy(ctx, publishDir, deployer.DeployOptions{Epochs: epochs, Verbose: verbose, WalrusCfg: walgoCfg.WalrusConfig})
+		output, err := d.Deploy(ctx, publishDir, deployer.DeployOptions{Epochs: epochs, Verbose: verbose && !quiet, WalrusCfg: walgoCfg.WalrusConfig})
 		if err != nil {
 			fmt.Fprintf(os.Stderr, "\n❌ Deployment failed: %v\n\n", err)
 			fmt.Fprintf(os.Stderr, "💡 Troubleshooting:\n")
@@ -92,16 +98,21 @@ Example: walgo deploy --epochs 5`,
 		}
 
 		if output.Success && output.ObjectID != "" {
-			fmt.Println("  [3/3] Confirming deployment...")
-			fmt.Println("  ✓ Deployment confirmed")
-			fmt.Printf("\n🎉 Deployment successful!\n\n")
-			fmt.Printf("📋 Site Object ID: %s\n", output.ObjectID)
-			fmt.Printf("\n💡 Next steps:\n")
-			fmt.Printf("1. Update walgo.yaml with this Object ID:\n")
-			fmt.Printf("   walrus:\n")
-			fmt.Printf("     projectID: \"%s\"\n", output.ObjectID)
-			fmt.Printf("\n2. Configure a domain: walgo domain <your-domain>\n")
-			fmt.Printf("3. Check status: walgo status\n")
+			if !quiet {
+				fmt.Println("  [3/3] Confirming deployment...")
+				fmt.Println("  ✓ Deployment confirmed")
+				fmt.Printf("\n🎉 Deployment successful!\n\n")
+				fmt.Printf("📋 Site Object ID: %s\n", output.ObjectID)
+				fmt.Printf("\n💡 Next steps:\n")
+				fmt.Printf("1. Update walgo.yaml with this Object ID:\n")
+				fmt.Printf("   walrus:\n")
+				fmt.Printf("     projectID: \"%s\"\n", output.ObjectID)
+				fmt.Printf("\n2. Configure a domain: walgo domain <your-domain>\n")
+				fmt.Printf("3. Check status: walgo status\n")
+			} else {
+				// In quiet mode, just output the object ID for parsing by quickstart
+				fmt.Printf("Site Object ID: %s\n", output.ObjectID)
+			}
 		}
 	},
 }
@@ -112,4 +123,5 @@ func init() {
 	deployCmd.Flags().IntP("epochs", "e", 1, "Number of epochs to store the site")
 	deployCmd.Flags().BoolP("force", "f", false, "Deploy even if public directory doesn't exist")
 	deployCmd.Flags().BoolP("verbose", "v", false, "Show detailed output for debugging")
+	deployCmd.Flags().BoolP("quiet", "q", false, "Suppress output (used internally by quickstart)")
 }
