@@ -258,14 +258,14 @@ func getCurrentDate() string {
 
 // DryRunStats holds statistics for dry-run mode
 type DryRunStats struct {
-	TotalFiles      int
-	MarkdownFiles   int
-	Attachments     int
-	WouldProcess    int
-	WouldSkip       int
-	WikilinksFound  int
+	TotalFiles         int
+	MarkdownFiles      int
+	Attachments        int
+	WouldProcess       int
+	WouldSkip          int
+	WikilinksFound     int
 	TransclusionsFound int
-	EstimatedSize   int64
+	EstimatedSize      int64
 }
 
 // DryRunImport simulates an import without actually copying files
@@ -288,7 +288,7 @@ func DryRunImport(vaultPath, hugoContentDir string, cfg config.ObsidianConfig) (
 			stats.MarkdownFiles++
 
 			// Check for wikilinks and transclusions
-			content, err := os.ReadFile(path)
+			content, err := os.ReadFile(path) // #nosec G304 - Reading user-specified Obsidian vault files is intended behavior
 			if err == nil {
 				contentStr := string(content)
 				stats.WikilinksFound += strings.Count(contentStr, "[[")

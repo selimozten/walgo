@@ -16,8 +16,8 @@ type WSResource struct {
 
 // WSResourcesConfig represents the ws-resources.json file structure
 type WSResourcesConfig struct {
-	Resources []WSResource          `json:"resources,omitempty"`
-	Routes    map[string]string     `json:"routes,omitempty"`
+	Resources []WSResource                 `json:"resources,omitempty"`
+	Routes    map[string]string            `json:"routes,omitempty"`
 	Headers   map[string]map[string]string `json:"headers,omitempty"`
 }
 
@@ -37,11 +37,11 @@ func DefaultCacheControlConfig() CacheControlConfig {
 	return CacheControlConfig{
 		Enabled:         true,
 		ImmutableMaxAge: 31536000, // 1 year
-		MutableMaxAge:   300,       // 5 minutes
+		MutableMaxAge:   300,      // 5 minutes
 		ImmutablePatterns: []string{
 			// Patterns for files with content hashes in filename
-			"*.*.min.js",     // e.g., app.abc123.min.js
-			"*.*.min.css",    // e.g., style.def456.min.css
+			"*.*.min.js",  // e.g., app.abc123.min.js
+			"*.*.min.css", // e.g., style.def456.min.css
 			"*.*.js",
 			"*.*.css",
 			// Font files (rarely change)
@@ -180,10 +180,10 @@ func getContentType(path string) string {
 		".wav":  "audio/wav",
 
 		// Archives
-		".pdf":  "application/pdf",
-		".zip":  "application/zip",
-		".tar":  "application/x-tar",
-		".gz":   "application/gzip",
+		".pdf": "application/pdf",
+		".zip": "application/zip",
+		".tar": "application/x-tar",
+		".gz":  "application/gzip",
 
 		// WebAssembly
 		".wasm": "application/wasm",

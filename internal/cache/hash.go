@@ -7,6 +7,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"strings"
 )
 
 // HashFile computes the SHA-256 hash of a file
@@ -42,7 +43,7 @@ func HashDirectory(dir string) (map[string]string, error) {
 		}
 
 		// Skip the cache directory
-		if relPath == CacheDir || filepath.HasPrefix(relPath, CacheDir+string(filepath.Separator)) {
+		if relPath == CacheDir || strings.HasPrefix(relPath, CacheDir+string(filepath.Separator)) {
 			if info.IsDir() {
 				return filepath.SkipDir
 			}
@@ -74,9 +75,9 @@ func HashDirectory(dir string) (map[string]string, error) {
 // CompareHashes compares two hash maps and returns the changes
 func CompareHashes(old, new map[string]string) *ChangeSet {
 	changes := &ChangeSet{
-		Added:    make([]string, 0),
-		Modified: make([]string, 0),
-		Deleted:  make([]string, 0),
+		Added:     make([]string, 0),
+		Modified:  make([]string, 0),
+		Deleted:   make([]string, 0),
 		Unchanged: make([]string, 0),
 	}
 

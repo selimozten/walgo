@@ -10,10 +10,10 @@ import (
 
 // Event represents a single telemetry event
 type Event struct {
-	Timestamp time.Time         `json:"timestamp"`
-	Command   string            `json:"command"`
-	Duration  int64             `json:"duration_ms"` // Milliseconds
-	Success   bool              `json:"success"`
+	Timestamp time.Time              `json:"timestamp"`
+	Command   string                 `json:"command"`
+	Duration  int64                  `json:"duration_ms"` // Milliseconds
+	Success   bool                   `json:"success"`
 	Metadata  map[string]interface{} `json:"metadata,omitempty"`
 }
 
@@ -29,19 +29,19 @@ type BuildMetrics struct {
 
 // DeployMetrics captures deployment-specific metrics
 type DeployMetrics struct {
-	TotalFiles     int   `json:"total_files"`
-	ChangedFiles   int   `json:"changed_files,omitempty"`
-	UploadDuration int64 `json:"upload_duration_ms"`
+	TotalFiles     int     `json:"total_files"`
+	ChangedFiles   int     `json:"changed_files,omitempty"`
+	UploadDuration int64   `json:"upload_duration_ms"`
 	CacheHitRatio  float64 `json:"cache_hit_ratio,omitempty"`
-	BytesUploaded  int64 `json:"bytes_uploaded,omitempty"`
+	BytesUploaded  int64   `json:"bytes_uploaded,omitempty"`
 }
 
 // Collector manages telemetry collection
 type Collector struct {
-	enabled     bool
-	sinkPath    string
-	sessionID   string
-	startTime   time.Time
+	enabled   bool
+	sinkPath  string
+	sessionID string
+	startTime time.Time
 }
 
 // defaultSinkPath returns the default path for telemetry data
@@ -92,11 +92,11 @@ func (c *Collector) RecordBuild(startTime time.Time, metrics *BuildMetrics, succ
 		Duration:  duration,
 		Success:   success,
 		Metadata: map[string]interface{}{
-			"hugo_duration_ms":       metrics.HugoDuration,
-			"optimize_duration_ms":   metrics.OptimizeDuration,
-			"compress_duration_ms":   metrics.CompressDuration,
-			"total_files":            metrics.TotalFiles,
-			"compressed_files":       metrics.CompressedFiles,
+			"hugo_duration_ms":          metrics.HugoDuration,
+			"optimize_duration_ms":      metrics.OptimizeDuration,
+			"compress_duration_ms":      metrics.CompressDuration,
+			"total_files":               metrics.TotalFiles,
+			"compressed_files":          metrics.CompressedFiles,
 			"compression_savings_bytes": metrics.CompressionSavings,
 		},
 	}
@@ -118,11 +118,11 @@ func (c *Collector) RecordDeploy(startTime time.Time, metrics *DeployMetrics, su
 		Duration:  duration,
 		Success:   success,
 		Metadata: map[string]interface{}{
-			"total_files":      metrics.TotalFiles,
-			"changed_files":    metrics.ChangedFiles,
+			"total_files":        metrics.TotalFiles,
+			"changed_files":      metrics.ChangedFiles,
 			"upload_duration_ms": metrics.UploadDuration,
-			"cache_hit_ratio":  metrics.CacheHitRatio,
-			"bytes_uploaded":   metrics.BytesUploaded,
+			"cache_hit_ratio":    metrics.CacheHitRatio,
+			"bytes_uploaded":     metrics.BytesUploaded,
 		},
 	}
 
@@ -202,17 +202,17 @@ func (c *Collector) IsEnabled() bool {
 
 // Stats provides statistics about collected metrics
 type Stats struct {
-	TotalEvents    int                    `json:"total_events"`
-	CommandCounts  map[string]int         `json:"command_counts"`
-	AvgDurations   map[string]int64       `json:"avg_durations_ms"`
-	SuccessRates   map[string]float64     `json:"success_rates"`
-	FirstEvent     time.Time              `json:"first_event,omitempty"`
-	LastEvent      time.Time              `json:"last_event,omitempty"`
+	TotalEvents   int                `json:"total_events"`
+	CommandCounts map[string]int     `json:"command_counts"`
+	AvgDurations  map[string]int64   `json:"avg_durations_ms"`
+	SuccessRates  map[string]float64 `json:"success_rates"`
+	FirstEvent    time.Time          `json:"first_event,omitempty"`
+	LastEvent     time.Time          `json:"last_event,omitempty"`
 }
 
 // GetStats reads and computes statistics from the telemetry data
 func GetStats(sinkPath string) (*Stats, error) {
-	data, err := os.ReadFile(sinkPath)
+	data, err := os.ReadFile(sinkPath) // #nosec G304 - Reading user's local telemetry file is intended behavior
 	if err != nil {
 		return nil, err
 	}
@@ -227,12 +227,12 @@ func GetStats(sinkPath string) (*Stats, error) {
 	}
 
 	stats := &Stats{
-		TotalEvents:  len(events),
+		TotalEvents:   len(events),
 		CommandCounts: make(map[string]int),
-		AvgDurations: make(map[string]int64),
-		SuccessRates: make(map[string]float64),
-		FirstEvent:   events[0].Timestamp,
-		LastEvent:    events[len(events)-1].Timestamp,
+		AvgDurations:  make(map[string]int64),
+		SuccessRates:  make(map[string]float64),
+		FirstEvent:    events[0].Timestamp,
+		LastEvent:     events[len(events)-1].Timestamp,
 	}
 
 	// Compute statistics

@@ -19,10 +19,10 @@ type Compressor struct {
 
 // Config holds compression configuration
 type Config struct {
-	Enabled       bool
-	BrotliLevel   int // 0-11, default: 6
-	GzipEnabled   bool
-	GzipLevel     int // 1-9, default: 6
+	Enabled        bool
+	BrotliLevel    int // 0-11, default: 6
+	GzipEnabled    bool
+	GzipLevel      int      // 1-9, default: 6
 	SkipExtensions []string // Extensions to skip (e.g., .min.js, .jpg)
 }
 
@@ -30,7 +30,7 @@ type Config struct {
 func DefaultConfig() Config {
 	return Config{
 		Enabled:     true,
-		BrotliLevel: 6, // Balance between compression and speed
+		BrotliLevel: 6,     // Balance between compression and speed
 		GzipEnabled: false, // Only Brotli for now
 		GzipLevel:   6,
 		SkipExtensions: []string{
@@ -87,7 +87,7 @@ func (c *Compressor) ShouldCompress(filePath string) bool {
 // CompressFile compresses a file using Brotli
 func (c *Compressor) CompressFile(inputPath, outputPath string) (*CompressionResult, error) {
 	// Read input file
-	data, err := os.ReadFile(inputPath)
+	data, err := os.ReadFile(inputPath) // #nosec G304 - Reading user-specified files for compression is intended behavior
 	if err != nil {
 		return nil, fmt.Errorf("failed to read file: %w", err)
 	}
@@ -100,7 +100,7 @@ func (c *Compressor) CompressFile(inputPath, outputPath string) (*CompressionRes
 
 	_, err = writer.Write(data)
 	if err != nil {
-		writer.Close()
+		_ = writer.Close() // Ignore close error when write already failed
 		return nil, fmt.Errorf("failed to compress: %w", err)
 	}
 
@@ -241,13 +241,13 @@ func (c *Compressor) CompressInPlace(dir string) (*DirectoryCompressionStats, er
 		// If compression was beneficial, replace original
 		if result.Compressed {
 			if err := os.Rename(tmpPath, path); err != nil {
-				os.Remove(tmpPath)
+				_ = os.Remove(tmpPath) // Best effort cleanup
 				stats.Errors++
 				return nil
 			}
 		} else {
 			// Remove temp file if compression wasn't beneficial
-			os.Remove(tmpPath)
+			_ = os.Remove(tmpPath) // Best effort cleanup
 		}
 
 		stats.Files[relPath] = result
@@ -280,7 +280,7 @@ func CompressBuffer(data []byte, level int) ([]byte, error) {
 	writer := brotli.NewWriterLevel(&buf, level)
 
 	if _, err := writer.Write(data); err != nil {
-		writer.Close()
+		_ = writer.Close() // Ignore close error when write already failed
 		return nil, err
 	}
 
@@ -306,7 +306,7 @@ func CompressGzip(data []byte, level int) ([]byte, error) {
 	}
 
 	if _, err := writer.Write(data); err != nil {
-		writer.Close()
+		_ = writer.Close() // Ignore close error when write already failed
 		return nil, err
 	}
 

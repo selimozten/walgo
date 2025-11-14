@@ -48,7 +48,7 @@ func NewManager(siteRoot string) (*Manager, error) {
 
 	// Initialize database schema
 	if err := manager.initSchema(); err != nil {
-		db.Close()
+		_ = db.Close() // Ignore close error when init already failed
 		return nil, err
 	}
 
@@ -307,9 +307,9 @@ func (m *Manager) ComputeChangeSet(dir string) (*ChangeSet, error) {
 		}
 
 		changes := &ChangeSet{
-			Added:    make([]string, 0, len(hashes)),
-			Modified: make([]string, 0),
-			Deleted:  make([]string, 0),
+			Added:     make([]string, 0, len(hashes)),
+			Modified:  make([]string, 0),
+			Deleted:   make([]string, 0),
 			Unchanged: make([]string, 0),
 		}
 

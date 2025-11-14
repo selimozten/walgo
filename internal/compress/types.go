@@ -12,14 +12,14 @@ type CompressionResult struct {
 
 // DirectoryCompressionStats holds statistics for compressing a directory
 type DirectoryCompressionStats struct {
-	Files                  map[string]*CompressionResult
-	Compressed             int
-	NotWorthCompressing    int
-	Skipped                int
-	Errors                 int
-	TotalOriginalSize      int
-	TotalCompressedSize    int
-	OverallSavingsPercent  float64
+	Files                 map[string]*CompressionResult
+	Compressed            int
+	NotWorthCompressing   int
+	Skipped               int
+	Errors                int
+	TotalOriginalSize     int
+	TotalCompressedSize   int
+	OverallSavingsPercent float64
 }
 
 // PrintSummary prints a human-readable summary of compression stats

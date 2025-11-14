@@ -45,14 +45,14 @@ type ObsidianConfig struct {
 
 // CompressConfig holds settings for Brotli compression
 type CompressConfig struct {
-	Enabled     bool `mapstructure:"enabled" yaml:"enabled"`           // Enable compression
-	Level       int  `mapstructure:"level" yaml:"level,omitempty"`     // Brotli level 0-11, default: 6
+	Enabled             bool `mapstructure:"enabled" yaml:"enabled"`                         // Enable compression
+	Level               int  `mapstructure:"level" yaml:"level,omitempty"`                   // Brotli level 0-11, default: 6
 	GenerateWSResources bool `mapstructure:"generateWSResources" yaml:"generateWSResources"` // Generate ws-resources.json
 }
 
 // CacheConfig holds settings for caching and cache-control headers
 type CacheConfig struct {
-	Enabled         bool `mapstructure:"enabled" yaml:"enabled"`                   // Enable cache-control headers
+	Enabled         bool `mapstructure:"enabled" yaml:"enabled"`                           // Enable cache-control headers
 	ImmutableMaxAge int  `mapstructure:"immutableMaxAge" yaml:"immutableMaxAge,omitempty"` // Max-age for immutable assets (default: 31536000)
 	MutableMaxAge   int  `mapstructure:"mutableMaxAge" yaml:"mutableMaxAge,omitempty"`     // Max-age for HTML (default: 300)
 }
@@ -83,7 +83,7 @@ func NewDefaultWalgoConfig() WalgoConfig {
 		CacheConfig: CacheConfig{
 			Enabled:         true,
 			ImmutableMaxAge: 31536000, // 1 year
-			MutableMaxAge:   300,       // 5 minutes
+			MutableMaxAge:   300,      // 5 minutes
 		},
 	}
 }

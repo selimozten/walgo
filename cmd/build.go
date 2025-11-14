@@ -126,7 +126,7 @@ This command runs the 'hugo' command to generate static files typically into the
 		}
 
 		// Calculate step number
-		currentStep := 3
+		var currentStep int
 		if clean {
 			currentStep = 3
 		} else {
