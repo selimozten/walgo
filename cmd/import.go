@@ -20,9 +20,11 @@ This command will attempt to convert Obsidian markdown and attachments into a Hu
 
 Features:
 - Converts [[wikilinks]] to Hugo markdown links
-- Copies attachments to the static directory  
+- Supports transclusions ![[note]] and ![[note#heading]]
+- Copies attachments to the static directory
 - Adds Hugo frontmatter to files that don't have it
-- Preserves directory structure from the vault`,
+- Preserves directory structure from the vault
+- Enhanced alias and heading support`,
 	Args: cobra.ExactArgs(1), // Expects exactly one argument: obsidian-vault-path
 	Run: func(cmd *cobra.Command, args []string) {
 		vaultPath := args[0]
@@ -52,6 +54,11 @@ Features:
 			fmt.Fprintf(os.Stderr, "Error reading overwrite flag: %v\n", err)
 			os.Exit(1)
 		}
+		dryRun, err := cmd.Flags().GetBool("dry-run")
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "Error reading dry-run flag: %v\n", err)
+			os.Exit(1)
+		}
 		convertWikilinks, err := cmd.Flags().GetBool("convert-wikilinks")
 		if err != nil {
 			fmt.Fprintf(os.Stderr, "Error reading convert-wikilinks flag: %v\n", err)
@@ -76,14 +83,6 @@ Features:
 
 		fmt.Printf("Target Hugo content directory: %s\n", hugoContentDir)
 
-		// Check if target directory exists and has files (unless overwrite is enabled)
-		if !overwrite {
-			if files, err := os.ReadDir(hugoContentDir); err == nil && len(files) > 0 {
-				fmt.Fprintf(os.Stderr, "Target directory %s is not empty. Use --overwrite to proceed anyway.\n", hugoContentDir)
-				os.Exit(1)
-			}
-		}
-
 		// Configure Obsidian import settings
 		obsidianCfg := cfg.ObsidianConfig
 		if attachmentDir != "" {
@@ -94,6 +93,28 @@ Features:
 		}
 		if frontmatterFormat != "" {
 			obsidianCfg.FrontmatterFormat = frontmatterFormat
+		}
+
+		// If dry-run, just analyze and exit
+		if dryRun {
+			fmt.Println("\n🔍 Dry-run mode: Analyzing vault without importing...")
+			stats, err := obsidian.DryRunImport(vaultPath, hugoContentDir, obsidianCfg)
+			if err != nil {
+				fmt.Fprintf(os.Stderr, "Error analyzing vault: %v\n", err)
+				os.Exit(1)
+			}
+
+			stats.PrintSummary()
+			fmt.Println("\n💡 To actually import, run without --dry-run flag")
+			os.Exit(0)
+		}
+
+		// Check if target directory exists and has files (unless overwrite is enabled)
+		if !overwrite {
+			if files, err := os.ReadDir(hugoContentDir); err == nil && len(files) > 0 {
+				fmt.Fprintf(os.Stderr, "Target directory %s is not empty. Use --overwrite to proceed anyway.\n", hugoContentDir)
+				os.Exit(1)
+			}
 		}
 
 		// Perform the import
@@ -128,4 +149,5 @@ func init() {
 	importCmd.Flags().Bool("convert-wikilinks", true, "Convert [[wikilinks]] to Hugo markdown links")
 	importCmd.Flags().String("attachment-dir", "", "Directory name for attachments (relative to static/)")
 	importCmd.Flags().String("frontmatter-format", "", "Frontmatter format for new files (yaml, toml, json)")
+	importCmd.Flags().Bool("dry-run", false, "Preview import without actually copying files")
 }

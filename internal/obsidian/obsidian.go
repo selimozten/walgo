@@ -137,11 +137,21 @@ func processMarkdownFile(srcPath, vaultPath, hugoContentDir string, cfg config.O
 
 	// Convert wikilinks if enabled
 	if cfg.ConvertWikilinks {
-		convertedContent = convertWikilinks(convertedContent, cfg.AttachmentDir)
+		// Use enhanced wikilink conversion with transclusion support
+		convertedContent = convertWikilinksEnhanced(convertedContent, cfg.AttachmentDir)
 	}
 
-	// Add Hugo frontmatter if not present
-	convertedContent = ensureFrontmatter(convertedContent, relPath, cfg.FrontmatterFormat)
+	// Parse existing frontmatter if present
+	obsidianFM, body, hasFM := parseObsidianFrontmatter(convertedContent)
+
+	// Generate Hugo frontmatter
+	if hasFM {
+		// Use enhanced frontmatter that preserves Obsidian metadata
+		convertedContent = enhancedFrontmatter(obsidianFM, relPath, cfg.FrontmatterFormat) + body
+	} else {
+		// Add Hugo frontmatter if not present
+		convertedContent = ensureFrontmatter(convertedContent, relPath, cfg.FrontmatterFormat)
+	}
 
 	// Create destination path
 	destPath := filepath.Join(hugoContentDir, relPath)

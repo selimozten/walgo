@@ -7,9 +7,11 @@ import (
 	"path/filepath"
 	"time"
 
+	"walgo/internal/cache"
 	"walgo/internal/config"
 	"walgo/internal/deployer"
 	sb "walgo/internal/deployer/sitebuilder"
+	"walgo/internal/metrics"
 
 	"github.com/spf13/cobra"
 )
@@ -28,6 +30,22 @@ your site and configure domain names.
 Example: walgo deploy --epochs 5`,
 	Run: func(cmd *cobra.Command, args []string) {
 		quiet, _ := cmd.Flags().GetBool("quiet")
+
+		// Initialize telemetry if enabled
+		telemetry, _ := cmd.Flags().GetBool("telemetry")
+		var collector *metrics.Collector
+		var startTime time.Time
+		var deployMetrics metrics.DeployMetrics
+		success := false
+		if telemetry {
+			collector = metrics.New(true)
+			startTime = collector.Start()
+			defer func() {
+				if collector != nil {
+					_ = collector.RecordDeploy(startTime, &deployMetrics, success)
+				}
+			}()
+		}
 
 		// Get current working directory
 		sitePath, err := os.Getwd()
@@ -77,16 +95,78 @@ Example: walgo deploy --epochs 5`,
 
 		if !quiet {
 			fmt.Println("🚀 Deploying to Walrus Sites...")
-			fmt.Println("  [1/3] Checking environment...")
+			fmt.Println("  [1/4] Checking environment...")
+		}
+
+		// Initialize cache helper
+		cacheHelper, err := cache.NewDeployHelper(sitePath)
+		if err != nil {
+			if !quiet {
+				fmt.Fprintf(os.Stderr, "⚠️  Warning: Cache initialization failed: %v\n", err)
+				fmt.Fprintf(os.Stderr, "  Continuing without incremental build optimization...\n")
+			}
+		} else {
+			defer cacheHelper.Close()
+		}
+
+		// Check for dry-run mode
+		dryRun, err := cmd.Flags().GetBool("dry-run")
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "Error reading dry-run flag: %v\n", err)
+			os.Exit(1)
+		}
+
+		// Prepare deployment plan
+		if cacheHelper != nil && !quiet {
+			fmt.Println("  [2/4] Analyzing changes...")
+			plan, err := cacheHelper.PrepareDeployment(publishDir)
+			if err != nil {
+				fmt.Fprintf(os.Stderr, "⚠️  Warning: Failed to analyze changes: %v\n", err)
+			} else {
+				if telemetry {
+					deployMetrics.TotalFiles = plan.TotalFiles
+					if plan.ChangeSet != nil {
+						deployMetrics.ChangedFiles = len(plan.ChangeSet.Added) + len(plan.ChangeSet.Modified)
+					}
+				}
+
+				if verbose {
+					plan.PrintVerboseSummary()
+				} else {
+					plan.PrintSummary()
+				}
+
+				// If dry-run, stop here
+				if dryRun {
+					fmt.Println("\n🔍 Dry-run mode: No files will be uploaded")
+					fmt.Println("✅ Deployment plan complete!")
+					fmt.Printf("\n💡 To actually deploy, run without --dry-run flag\n")
+					os.Exit(0)
+				}
+			}
+		} else if dryRun && !quiet {
+			// No cache helper but dry-run requested
+			fmt.Println("\n⚠️  Note: Dry-run without cache - cannot show file-level changes")
+			fmt.Printf("🔍 Would deploy all files in: %s\n", publishDir)
+			fmt.Println("\n💡 To see detailed changes, ensure cache is enabled")
+			os.Exit(0)
 		}
 
 		// Deploy the site via adapter interface
 		if !quiet {
-			fmt.Println("  [2/3] Uploading site...")
+			if cacheHelper != nil {
+				fmt.Println("  [3/4] Uploading site...")
+			} else {
+				fmt.Println("  [2/3] Uploading site...")
+			}
 		}
+		uploadStart := time.Now()
 		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Minute)
 		defer cancel()
 		output, err := d.Deploy(ctx, publishDir, deployer.DeployOptions{Epochs: epochs, Verbose: verbose && !quiet, WalrusCfg: walgoCfg.WalrusConfig})
+		if telemetry {
+			deployMetrics.UploadDuration = time.Since(uploadStart).Milliseconds()
+		}
 		if err != nil {
 			fmt.Fprintf(os.Stderr, "\n❌ Deployment failed: %v\n\n", err)
 			fmt.Fprintf(os.Stderr, "💡 Troubleshooting:\n")
@@ -98,8 +178,30 @@ Example: walgo deploy --epochs 5`,
 		}
 
 		if output.Success && output.ObjectID != "" {
-			if !quiet {
+			// Mark deployment as successful
+			success = true
+
+			// Update cache with deployment info
+			if cacheHelper != nil {
+				if !quiet {
+					if cacheHelper != nil {
+						fmt.Println("  [4/4] Updating cache...")
+					} else {
+						fmt.Println("  [3/3] Confirming deployment...")
+					}
+				}
+
+				err := cacheHelper.FinalizeDeployment(publishDir, output.ObjectID, output.ObjectID, output.FileToBlobID)
+				if err != nil && !quiet {
+					fmt.Fprintf(os.Stderr, "⚠️  Warning: Failed to update cache: %v\n", err)
+				} else if !quiet {
+					fmt.Println("  ✓ Cache updated")
+				}
+			} else if !quiet {
 				fmt.Println("  [3/3] Confirming deployment...")
+			}
+
+			if !quiet {
 				fmt.Println("  ✓ Deployment confirmed")
 				fmt.Printf("\n🎉 Deployment successful!\n\n")
 				fmt.Printf("📋 Site Object ID: %s\n", output.ObjectID)
@@ -124,4 +226,6 @@ func init() {
 	deployCmd.Flags().BoolP("force", "f", false, "Deploy even if public directory doesn't exist")
 	deployCmd.Flags().BoolP("verbose", "v", false, "Show detailed output for debugging")
 	deployCmd.Flags().BoolP("quiet", "q", false, "Suppress output (used internally by quickstart)")
+	deployCmd.Flags().Bool("dry-run", false, "Preview deployment plan without actually deploying")
+	deployCmd.Flags().Bool("telemetry", false, "Record deployment metrics to local JSON file (~/.walgo/metrics.json)")
 }

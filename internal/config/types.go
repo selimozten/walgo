@@ -9,6 +9,8 @@ type WalgoConfig struct {
 	WalrusConfig    WalrusConfig              `mapstructure:"walrus" yaml:"walrus"`
 	ObsidianConfig  ObsidianConfig            `mapstructure:"obsidian" yaml:"obsidian,omitempty"`
 	OptimizerConfig optimizer.OptimizerConfig `mapstructure:"optimizer" yaml:"optimizer,omitempty"`
+	CompressConfig  CompressConfig            `mapstructure:"compress" yaml:"compress,omitempty"`
+	CacheConfig     CacheConfig               `mapstructure:"cache" yaml:"cache,omitempty"`
 	// Future: Additional integrations
 }
 
@@ -41,6 +43,20 @@ type ObsidianConfig struct {
 	FrontmatterFormat string `mapstructure:"frontmatterFormat" yaml:"frontmatterFormat"`   // yaml, toml, json
 }
 
+// CompressConfig holds settings for Brotli compression
+type CompressConfig struct {
+	Enabled     bool `mapstructure:"enabled" yaml:"enabled"`           // Enable compression
+	Level       int  `mapstructure:"level" yaml:"level,omitempty"`     // Brotli level 0-11, default: 6
+	GenerateWSResources bool `mapstructure:"generateWSResources" yaml:"generateWSResources"` // Generate ws-resources.json
+}
+
+// CacheConfig holds settings for caching and cache-control headers
+type CacheConfig struct {
+	Enabled         bool `mapstructure:"enabled" yaml:"enabled"`                   // Enable cache-control headers
+	ImmutableMaxAge int  `mapstructure:"immutableMaxAge" yaml:"immutableMaxAge,omitempty"` // Max-age for immutable assets (default: 31536000)
+	MutableMaxAge   int  `mapstructure:"mutableMaxAge" yaml:"mutableMaxAge,omitempty"`     // Max-age for HTML (default: 300)
+}
+
 // NewDefaultWalgoConfig creates a WalgoConfig with sensible defaults.
 func NewDefaultWalgoConfig() WalgoConfig {
 	return WalgoConfig{
@@ -59,5 +75,15 @@ func NewDefaultWalgoConfig() WalgoConfig {
 			FrontmatterFormat: "yaml",
 		},
 		OptimizerConfig: optimizer.NewDefaultOptimizerConfig(),
+		CompressConfig: CompressConfig{
+			Enabled:             true,
+			Level:               6, // Balanced compression
+			GenerateWSResources: true,
+		},
+		CacheConfig: CacheConfig{
+			Enabled:         true,
+			ImmutableMaxAge: 31536000, // 1 year
+			MutableMaxAge:   300,       // 5 minutes
+		},
 	}
 }
