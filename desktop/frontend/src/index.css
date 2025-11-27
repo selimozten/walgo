@@ -1,4 +1,5 @@
 @import "tailwindcss";
+@import url('https://fonts.googleapis.com/css2?family=Barlow:wght@300;400;500&family=Rajdhani:wght@300;400;500;600;700&display=swap');
 
 @theme {
   --font-display: 'Rajdhani', sans-serif;
@@ -21,8 +22,10 @@
   --color-border-active: rgba(77, 162, 255, 0.5);
 }
 
-/* Import Fonts */
-@import url('https://fonts.googleapis.com/css2?family=Barlow:wght@300;400;500&family=Rajdhani:wght@300;400;500;600;700&display=swap');
+/* Custom Utilities */
+.wails-drag {
+  --wails-draggable: drag;
+}
 
 body {
   background-color: var(--color-bg-main);

@@ -162,6 +162,9 @@ function App() {
         <div className="min-h-screen flex font-sans overflow-hidden relative">
             <div className="bg-noise" />
 
+            {/* Window Drag Region */}
+            <div className="fixed top-0 left-0 right-0 h-8 z-50 wails-drag" />
+
             {/* Command Rail */}
             <div className="w-20 border-r border-white/5 flex flex-col items-center py-8 z-20 bg-[#0a0f14]/80 backdrop-blur-xl relative">
                 <div className="mb-12">
