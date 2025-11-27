@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
 import { CreateSite, BuildSite, DeploySite } from '../wailsjs/go/main/App';
+import { WindowMinimise, WindowToggleMaximise, Quit } from '../wailsjs/runtime/runtime';
 import {
     LayoutGrid,
     Plus,
@@ -19,7 +20,10 @@ import {
     Activity,
     Zap,
     Hexagon,
-    Radio
+    Radio,
+    Minus,
+    Square,
+    X
 } from 'lucide-react';
 import { clsx, type ClassValue } from 'clsx';
 import { twMerge } from 'tailwind-merge';
@@ -143,6 +147,29 @@ function App() {
         </motion.div>
     );
 
+    const WindowControls = () => (
+        <div className="fixed top-0 right-0 z-[60] flex items-center h-8 px-2">
+            <button
+                onClick={WindowMinimise}
+                className="w-8 h-8 flex items-center justify-center text-zinc-500 hover:text-white hover:bg-white/5 transition-colors"
+            >
+                <Minus size={14} />
+            </button>
+            <button
+                onClick={WindowToggleMaximise}
+                className="w-8 h-8 flex items-center justify-center text-zinc-500 hover:text-white hover:bg-white/5 transition-colors"
+            >
+                <Square size={12} />
+            </button>
+            <button
+                onClick={Quit}
+                className="w-8 h-8 flex items-center justify-center text-zinc-500 hover:text-white hover:bg-red-500/20 hover:text-red-400 transition-colors"
+            >
+                <X size={14} />
+            </button>
+        </div>
+    );
+
     const containerVariants = {
         hidden: { opacity: 0 },
         show: {
@@ -164,6 +191,9 @@ function App() {
 
             {/* Window Drag Region */}
             <div className="fixed top-0 left-0 right-0 h-8 z-50 wails-drag" />
+
+            {/* Window Controls */}
+            <WindowControls />
 
             {/* Command Rail */}
             <div className="w-20 border-r border-white/5 flex flex-col items-center py-8 z-20 bg-[#0a0f14]/80 backdrop-blur-xl relative">
