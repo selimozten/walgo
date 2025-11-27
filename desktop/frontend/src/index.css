@@ -1,31 +1,118 @@
 @import "tailwindcss";
 
 @theme {
-  --font-sans: 'Inter', system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, 'Noto Sans', sans-serif;
-  --font-mono: 'JetBrains Mono', 'Fira Code', monospace;
+  --font-display: 'Rajdhani', sans-serif;
+  --font-body: 'Barlow', sans-serif;
+  --font-mono: 'JetBrains Mono', monospace;
 }
 
 :root {
   color-scheme: dark;
+
+  /* Cyber-Industrial Palette */
+  --color-bg-main: #0a0f14;
+  --color-bg-card: #11161d;
+  --color-accent: #ccff00;
+  /* Acid Green */
+  --color-accent-dim: rgba(204, 255, 0, 0.1);
+  --color-text-main: #e0e6ed;
+  --color-text-muted: #94a3b8;
+  --color-border: rgba(255, 255, 255, 0.08);
+  --color-border-active: rgba(204, 255, 0, 0.5);
 }
 
+/* Import Fonts */
+@import url('https://fonts.googleapis.com/css2?family=Barlow:wght@300;400;500&family=Rajdhani:wght@300;400;500;600;700&display=swap');
+
 body {
-  @apply bg-black text-zinc-200 antialiased selection:bg-white/20 selection:text-white;
-  font-feature-settings: "ss01", "ss02", "cv01", "cv02";
+  background-color: var(--color-bg-main);
+  color: var(--color-text-main);
+  font-family: var(--font-body);
+  -webkit-font-smoothing: antialiased;
+}
+
+::selection {
+  background-color: var(--color-accent);
+  color: black;
 }
 
 /* Custom Utilities */
-.bg-grid-pattern {
-  background-size: 40px 40px;
-  background-image: linear-gradient(to right, rgba(255, 255, 255, 0.03) 1px, transparent 1px),
-    linear-gradient(to bottom, rgba(255, 255, 255, 0.03) 1px, transparent 1px);
+.font-display {
+  font-family: var(--font-display);
 }
 
-.bg-dot-pattern {
-  background-image: radial-gradient(rgba(255, 255, 255, 0.1) 1px, transparent 1px);
-  background-size: 24px 24px;
+.bg-noise {
+  background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noiseFilter'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.65' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noiseFilter)' opacity='0.05'/%3E%3C/svg%3E");
+  pointer-events: none;
+  position: fixed;
+  inset: 0;
+  z-index: 0;
+  opacity: 0.1;
+  mix-blend-mode: overlay;
 }
 
-.glass-panel {
-  @apply bg-zinc-900/40 backdrop-blur-md border border-white/5;
+.glass-panel-tech {
+  background: linear-gradient(145deg, rgba(17, 22, 29, 0.9), rgba(10, 15, 20, 0.95));
+  backdrop-filter: blur(12px);
+  border: 1px solid var(--color-border);
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.5);
+}
+
+.glass-panel-tech:hover {
+  border-color: rgba(255, 255, 255, 0.15);
+  box-shadow: 0 8px 30px rgba(0, 0, 0, 0.6);
+}
+
+.text-accent {
+  color: var(--color-accent);
+}
+
+.bg-accent {
+  background-color: var(--color-accent);
+}
+
+.border-accent {
+  border-color: var(--color-accent);
+}
+
+/* Scanline Effect */
+.scanline {
+  width: 100%;
+  height: 100px;
+  z-index: 10;
+  background: linear-gradient(0deg, rgba(0, 0, 0, 0) 0%, rgba(204, 255, 0, 0.03) 50%, rgba(0, 0, 0, 0) 100%);
+  opacity: 0.1;
+  background-size: 100% 2px;
+  animation: scanline 10s linear infinite;
+  pointer-events: none;
+  position: absolute;
+  top: -100px;
+}
+
+@keyframes scanline {
+  0% {
+    top: -100%;
+  }
+
+  100% {
+    top: 100%;
+  }
+}
+
+/* Scrollbar */
+::-webkit-scrollbar {
+  width: 6px;
+}
+
+::-webkit-scrollbar-track {
+  background: var(--color-bg-main);
+}
+
+::-webkit-scrollbar-thumb {
+  background: #333;
+  border-radius: 3px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: #555;
 }
