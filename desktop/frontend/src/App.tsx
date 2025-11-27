@@ -223,14 +223,19 @@ function App() {
                             {activeTab === 'dashboard' && (
                                 <div className="grid grid-cols-3 gap-6 h-full max-h-[600px]">
                                     <motion.div variants={itemVariants} className="col-span-2 row-span-2 h-full">
-                                        <Card onClick={() => setActiveTab('create')} className="h-full flex flex-col justify-between bg-zinc-900/20 hover:bg-zinc-900/30 transition-colors">
-                                            <div className="flex justify-between items-start">
-                                                <div className="p-3 bg-accent/10 rounded-sm border border-accent/20">
-                                                    <Plus size={24} className="text-accent" />
+                                        <Card onClick={() => setActiveTab('create')} className="h-full flex flex-col justify-between bg-zinc-900/20 hover:bg-zinc-900/30 transition-colors relative overflow-hidden group">
+                                            <div className="absolute -right-10 -bottom-10 text-accent/5 group-hover:text-accent/10 transition-colors duration-500">
+                                                <Plus size={200} strokeWidth={0.5} />
+                                            </div>
+
+                                            <div className="flex justify-between items-start relative z-10">
+                                                <div className="p-2 bg-accent/10 rounded-sm border border-accent/20">
+                                                    <Plus size={20} className="text-accent" />
                                                 </div>
                                                 <ArrowUpRight className="text-zinc-600 group-hover:text-accent transition-colors" />
                                             </div>
-                                            <div>
+
+                                            <div className="relative z-10">
                                                 <h2 className="text-3xl font-display font-light text-white mb-2">INITIALIZE_PROJECT</h2>
                                                 <p className="text-zinc-500 max-w-md font-light">Begin new static site sequence. Configure for decentralized distribution.</p>
                                             </div>
@@ -280,8 +285,8 @@ function App() {
                                 <motion.div variants={itemVariants} className="max-w-2xl mx-auto pt-10">
                                     <Card className="border-white/10 bg-zinc-900/20">
                                         <div className="flex items-center gap-4 mb-8 border-b border-white/5 pb-6">
-                                            <div className="w-12 h-12 bg-accent text-black rounded-sm flex items-center justify-center">
-                                                <Plus size={24} />
+                                            <div className="w-10 h-10 bg-accent text-black rounded-sm flex items-center justify-center shadow-[0_0_15px_rgba(77,162,255,0.3)]">
+                                                <Plus size={20} />
                                             </div>
                                             <div>
                                                 <h2 className="text-xl font-display font-medium text-white">PROJECT_INIT</h2>
