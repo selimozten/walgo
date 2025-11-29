@@ -158,6 +158,65 @@ install_binary() {
     print_success "Installed $BINARY_NAME to $INSTALL_DIR"
 }
 
+# Install Desktop App
+install_desktop() {
+    if [ "$OS" != "darwin" ]; then
+        return
+    fi
+
+    print_info "Installing Walgo Desktop..."
+    
+    local filename="walgo-desktop_${VERSION}_${OS}_${ARCH}.tar.gz"
+    local download_url="https://github.com/$REPO/releases/download/v${VERSION}/${filename}"
+    local tmp_dir=$(mktemp -d)
+    local tmp_file="${tmp_dir}/${filename}"
+
+    print_info "Downloading desktop app from $download_url..."
+    
+    if command -v curl >/dev/null 2>&1; then
+        if ! curl -fsSL -o "$tmp_file" "$download_url"; then
+            print_warning "Failed to download desktop app. Skipping."
+            rm -rf "$tmp_dir"
+            return
+        fi
+    else
+        if ! wget -q -O "$tmp_file" "$download_url"; then
+            print_warning "Failed to download desktop app. Skipping."
+            rm -rf "$tmp_dir"
+            return
+        fi
+    fi
+
+    print_info "Extracting..."
+    cd "$tmp_dir"
+    tar -xzf "$tmp_file"
+
+    if [ -d "Walgo.app" ]; then
+        print_info "Moving Walgo.app to /Applications..."
+        
+        # Remove existing if present
+        if [ -d "/Applications/Walgo.app" ]; then
+            if [ -w "/Applications" ]; then
+                rm -rf "/Applications/Walgo.app"
+            else
+                sudo rm -rf "/Applications/Walgo.app"
+            fi
+        fi
+
+        if [ -w "/Applications" ]; then
+            mv "Walgo.app" "/Applications/"
+        else
+            sudo mv "Walgo.app" "/Applications/"
+        fi
+        
+        print_success "Walgo Desktop installed to /Applications"
+    else
+        print_warning "Walgo.app not found in archive. Skipping desktop installation."
+    fi
+
+    rm -rf "$tmp_dir"
+}
+
 # Verify installation
 verify_installation() {
     print_info "Verifying installation..."
@@ -264,6 +323,7 @@ main() {
     detect_platform
     get_latest_version
     install_binary
+    install_desktop
     verify_installation
     check_dependencies
     show_next_steps
