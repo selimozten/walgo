@@ -114,7 +114,19 @@ func (a *Adapter) deployQuilt(ctx context.Context, siteDir, publisher string, ep
 		return nil, fmt.Errorf("publisher responded %d: %s", resp.StatusCode, string(respBytes))
 	}
 
-	var qResp struct {
+	// Try to parse the response - handle both v1 and v2 API response formats
+	quiltID, patches, err := parseQuiltResponse(respBytes)
+	if err != nil {
+		return nil, fmt.Errorf("failed to parse response: %w\nRaw response: %s", err, string(respBytes))
+	}
+
+	return &deployer.Result{Success: true, ObjectID: quiltID, QuiltPatches: patches}, nil
+}
+
+// parseQuiltResponse handles both v1 and v2 Walrus API response formats
+func parseQuiltResponse(respBytes []byte) (string, map[string]string, error) {
+	// Try v1 format first (current)
+	var v1Resp struct {
 		BlobStoreResult struct {
 			NewlyCreated struct {
 				BlobObject struct {
@@ -130,19 +142,99 @@ func (a *Adapter) deployQuilt(ctx context.Context, siteDir, publisher string, ep
 			QuiltPatchId string `json:"quiltPatchId"`
 		} `json:"storedQuiltBlobs"`
 	}
-	if err := json.Unmarshal(respBytes, &qResp); err != nil {
-		return nil, fmt.Errorf("failed to parse response: %w", err)
+
+	if err := json.Unmarshal(respBytes, &v1Resp); err == nil {
+		quiltID := v1Resp.BlobStoreResult.NewlyCreated.BlobObject.BlobId
+		if quiltID == "" {
+			quiltID = v1Resp.BlobStoreResult.AlreadyCertified.BlobId
+		}
+		if quiltID != "" {
+			patches := make(map[string]string, len(v1Resp.StoredQuiltBlobs))
+			for _, p := range v1Resp.StoredQuiltBlobs {
+				patches[p.Identifier] = p.QuiltPatchId
+			}
+			return quiltID, patches, nil
+		}
 	}
 
-	quiltID := qResp.BlobStoreResult.NewlyCreated.BlobObject.BlobId
-	if quiltID == "" {
-		quiltID = qResp.BlobStoreResult.AlreadyCertified.BlobId
+	// Try v2 format (potential new structure)
+	var v2Resp struct {
+		// v2 might have a flatter structure
+		BlobId   string `json:"blobId"`
+		QuiltId  string `json:"quiltId"`
+		ObjectId string `json:"objectId"`
+		Blobs    []struct {
+			Path   string `json:"path"`
+			BlobId string `json:"blobId"`
+		} `json:"blobs"`
+		// Also try nested result
+		Result struct {
+			BlobId  string `json:"blobId"`
+			QuiltId string `json:"quiltId"`
+		} `json:"result"`
 	}
-	patches := make(map[string]string, len(qResp.StoredQuiltBlobs))
-	for _, p := range qResp.StoredQuiltBlobs {
-		patches[p.Identifier] = p.QuiltPatchId
+
+	if err := json.Unmarshal(respBytes, &v2Resp); err == nil {
+		quiltID := v2Resp.BlobId
+		if quiltID == "" {
+			quiltID = v2Resp.QuiltId
+		}
+		if quiltID == "" {
+			quiltID = v2Resp.ObjectId
+		}
+		if quiltID == "" {
+			quiltID = v2Resp.Result.BlobId
+		}
+		if quiltID == "" {
+			quiltID = v2Resp.Result.QuiltId
+		}
+
+		patches := make(map[string]string, len(v2Resp.Blobs))
+		for _, b := range v2Resp.Blobs {
+			patches[b.Path] = b.BlobId
+		}
+
+		if quiltID != "" {
+			return quiltID, patches, nil
+		}
 	}
-	return &deployer.Result{Success: true, ObjectID: quiltID, QuiltPatches: patches}, nil
+
+	// If both fail, try to extract any blob ID from the raw response
+	var generic map[string]interface{}
+	if err := json.Unmarshal(respBytes, &generic); err != nil {
+		return "", nil, fmt.Errorf("invalid JSON response: %w", err)
+	}
+
+	// Look for common ID field names recursively
+	if id := findBlobID(generic); id != "" {
+		return id, nil, nil
+	}
+
+	return "", nil, fmt.Errorf("could not extract blob ID from response")
+}
+
+// findBlobID recursively searches for a blob ID in a map
+func findBlobID(m map[string]interface{}) string {
+	idFields := []string{"blobId", "blob_id", "quiltId", "quilt_id", "objectId", "object_id", "id"}
+
+	for _, field := range idFields {
+		if val, ok := m[field]; ok {
+			if str, ok := val.(string); ok && str != "" {
+				return str
+			}
+		}
+	}
+
+	// Recurse into nested objects
+	for _, val := range m {
+		if nested, ok := val.(map[string]interface{}); ok {
+			if id := findBlobID(nested); id != "" {
+				return id
+			}
+		}
+	}
+
+	return ""
 }
 
 // Blobs upload: concurrent workers with exponential backoff

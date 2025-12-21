@@ -74,6 +74,11 @@ Features:
 			fmt.Fprintf(os.Stderr, "Error reading frontmatter-format flag: %v\n", err)
 			os.Exit(1)
 		}
+		linkStyle, err := cmd.Flags().GetString("link-style")
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "Error reading link-style flag: %v\n", err)
+			os.Exit(1)
+		}
 
 		// Determine target content directory
 		hugoContentDir := filepath.Join(sitePath, cfg.HugoConfig.ContentDir)
@@ -93,6 +98,9 @@ Features:
 		}
 		if frontmatterFormat != "" {
 			obsidianCfg.FrontmatterFormat = frontmatterFormat
+		}
+		if linkStyle != "" {
+			obsidianCfg.LinkStyle = linkStyle
 		}
 
 		// If dry-run, just analyze and exit
@@ -149,5 +157,6 @@ func init() {
 	importCmd.Flags().Bool("convert-wikilinks", true, "Convert [[wikilinks]] to Hugo markdown links")
 	importCmd.Flags().String("attachment-dir", "", "Directory name for attachments (relative to static/)")
 	importCmd.Flags().String("frontmatter-format", "", "Frontmatter format for new files (yaml, toml, json)")
+	importCmd.Flags().String("link-style", "markdown", "Link conversion style: 'markdown' (default, avoids REF_NOT_FOUND) or 'relref' (strict Hugo shortcodes)")
 	importCmd.Flags().Bool("dry-run", false, "Preview import without actually copying files")
 }

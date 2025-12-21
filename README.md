@@ -82,7 +82,7 @@ walgo deploy             # Deploy on-chain (requires wallet)
 walgo deploy-http        # Deploy via HTTP (no wallet needed)
 walgo update <id>        # Update existing site
 walgo status <id>        # Check site status
-walgo import-obsidian    # Import Obsidian vault
+walgo import <vault>     # Import Obsidian vault
 walgo doctor             # Diagnose setup issues
 ```
 
@@ -122,9 +122,13 @@ walgo deploy --epochs 5
 
 ## Requirements
 
-- [Hugo](https://gohugo.io) - Static site generator
+- [Hugo Extended](https://gohugo.io) - Static site generator (**Extended version required** for SCSS/SASS support)
 - [site-builder](https://docs.walrus.site/walrus-sites/overview) - For on-chain deployments
 - [Sui wallet](https://docs.sui.io/guides/developer/getting-started/sui-install) - For on-chain mode only
+
+> **Note:** Hugo Extended is required. Check with `hugo version` - it should show "extended". Install via:
+> - macOS: `brew install hugo`
+> - Linux: Download the "extended" version from [Hugo releases](https://github.com/gohugoio/hugo/releases)
 
 ## Troubleshooting
 

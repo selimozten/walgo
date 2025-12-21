@@ -11,12 +11,40 @@ import (
 	"walgo/internal/config"
 )
 
+// LinkStyle determines how wikilinks are converted
+type LinkStyle string
+
+const (
+	// LinkStyleRelref uses Hugo's relref shortcode (strict, throws REF_NOT_FOUND if target missing)
+	LinkStyleRelref LinkStyle = "relref"
+	// LinkStyleMarkdown uses plain markdown links (permissive, works even if target missing)
+	LinkStyleMarkdown LinkStyle = "markdown"
+)
+
+// DefaultLinkStyle is the default link conversion style
+// Using markdown by default to avoid REF_NOT_FOUND errors
+var DefaultLinkStyle = LinkStyleMarkdown
+
 // convertWikilinksEnhanced converts Obsidian [[wikilinks]] with enhanced support for:
 // - Aliases: [[link|display text]]
 // - Headings: [[note#heading]]
 // - Blocks: [[note^block-id]]
 // - Transclusions: ![[note]] or ![[note#heading]]
 func convertWikilinksEnhanced(content, attachmentDir string) string {
+	return convertWikilinksWithStyle(content, attachmentDir, DefaultLinkStyle)
+}
+
+// ConvertWikilinksWithConfig converts wikilinks using the config's link style setting
+func ConvertWikilinksWithConfig(content, attachmentDir, linkStyleStr string) string {
+	style := DefaultLinkStyle
+	if linkStyleStr == "relref" {
+		style = LinkStyleRelref
+	}
+	return convertWikilinksWithStyle(content, attachmentDir, style)
+}
+
+// convertWikilinksWithStyle converts wikilinks using the specified link style
+func convertWikilinksWithStyle(content, attachmentDir string, style LinkStyle) string {
 	// Handle transclusions first (![[...]])
 	// Regex for transclusion: ![[target]] or ![[target#heading]]
 	transclusionRegex := regexp.MustCompile(`!\[\[([^\]|#^]+)(#[^\]|]+)?(\|([^\]]*))?\]\]`)
@@ -96,8 +124,16 @@ func convertWikilinksEnhanced(content, attachmentDir string) string {
 			anchor = "#" + blockID
 		}
 
-		// Use Hugo's relref for internal links
-		return fmt.Sprintf("[%s]({{< relref \"%s.md%s\" >}})", displayText, linkPath, anchor)
+		// Generate link based on style
+		switch style {
+		case LinkStyleRelref:
+			// Use Hugo's relref for internal links (strict - throws error if target missing)
+			return fmt.Sprintf("[%s]({{< relref \"%s.md%s\" >}})", displayText, linkPath, anchor)
+		default:
+			// Use plain markdown links (permissive - works even if target missing)
+			// This avoids REF_NOT_FOUND errors during Hugo build
+			return fmt.Sprintf("[%s](%s.md%s)", displayText, linkPath, anchor)
+		}
 	})
 
 	return content

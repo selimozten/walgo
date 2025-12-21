@@ -104,15 +104,26 @@ Examples:
 				}
 				fmt.Println()
 
-				// Get version info if available
-				if verbose {
-					switch bin {
-					case "hugo":
-						version := strings.TrimSpace(runQuiet("hugo", "version"))
-						if version != "" {
+				// Get version info and check for Hugo Extended
+				switch bin {
+				case "hugo":
+					version := strings.TrimSpace(runQuiet("hugo", "version"))
+					if version != "" {
+						if verbose {
 							fmt.Printf("    Version: %s\n", version)
 						}
-					case "sui":
+						// Check if Hugo Extended is installed
+						if !strings.Contains(strings.ToLower(version), "extended") {
+							fmt.Println("  ⚠ Hugo Extended is required but standard Hugo is installed")
+							fmt.Println("    Extended version is needed for SCSS/SASS support")
+							fmt.Println("    Install: brew install hugo (macOS) or download 'extended' from https://github.com/gohugoio/hugo/releases")
+							warnings++
+						} else if verbose {
+							fmt.Println("    ✓ Extended version detected")
+						}
+					}
+				case "sui":
+					if verbose {
 						version := strings.TrimSpace(runQuiet("sui", "--version"))
 						if version != "" {
 							fmt.Printf("    Version: %s\n", version)

@@ -41,6 +41,7 @@ type ObsidianConfig struct {
 	ConvertWikilinks  bool   `mapstructure:"convertWikilinks" yaml:"convertWikilinks"`     // Convert [[wikilinks]] to [markdown](links)
 	IncludeDrafts     bool   `mapstructure:"includeDrafts" yaml:"includeDrafts"`           // Include files marked as drafts
 	FrontmatterFormat string `mapstructure:"frontmatterFormat" yaml:"frontmatterFormat"`   // yaml, toml, json
+	LinkStyle         string `mapstructure:"linkStyle" yaml:"linkStyle,omitempty"`         // "markdown" (default) or "relref" - markdown avoids REF_NOT_FOUND errors
 }
 
 // CompressConfig holds settings for Brotli compression

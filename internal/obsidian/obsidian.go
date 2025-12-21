@@ -138,7 +138,8 @@ func processMarkdownFile(srcPath, vaultPath, hugoContentDir string, cfg config.O
 	// Convert wikilinks if enabled
 	if cfg.ConvertWikilinks {
 		// Use enhanced wikilink conversion with transclusion support
-		convertedContent = convertWikilinksEnhanced(convertedContent, cfg.AttachmentDir)
+		// Use config's link style (defaults to "markdown" to avoid REF_NOT_FOUND errors)
+		convertedContent = ConvertWikilinksWithConfig(convertedContent, cfg.AttachmentDir, cfg.LinkStyle)
 	}
 
 	// Parse existing frontmatter if present
