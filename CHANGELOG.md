@@ -7,6 +7,24 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.2.1] - 2025-01-21
+
+### Fixed
+- **Version display:** Fixed `walgo version` returning incorrect version number
+- **Obsidian import:** Fixed `REF_NOT_FOUND` errors by changing default link style from `relref` to plain markdown links
+- **README:** Corrected command from `import-obsidian` to `import <vault>`
+- **HTTP deployer:** Added compatibility with site-builder v2 API response formats
+
+### Added
+- **Hugo Extended check:** `walgo doctor` now detects if Hugo Extended is installed and warns if standard Hugo is used
+- **Link style option:** New `--link-style` flag for `walgo import` command (`markdown` or `relref`)
+- **Benchmark script:** Added `scripts/benchmark.sh` to measure caching performance improvements
+- **LinkStyle config:** New `linkStyle` option in `walgo.yaml` under `obsidian` section
+
+### Changed
+- Updated README to document Hugo Extended requirement
+- Improved error messages in HTTP deployer to show raw response on parse failures
+
 ## [0.2.0] - 2025-01-14
 
 ### Added - Phase 2: Performance & Enhanced Features
@@ -108,6 +126,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - 🎯 Flexible configuration system
 - 📋 Comprehensive documentation and examples
 
-[Unreleased]: https://github.com/selimozten/walgo/compare/v0.2.0...HEAD
+[Unreleased]: https://github.com/selimozten/walgo/compare/v0.2.1...HEAD
+[0.2.1]: https://github.com/selimozten/walgo/compare/v0.2.0...v0.2.1
 [0.2.0]: https://github.com/selimozten/walgo/compare/v0.1.0...v0.2.0
 [0.1.0]: https://github.com/selimozten/walgo/releases/tag/v0.1.0 
