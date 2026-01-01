@@ -55,7 +55,6 @@ logs/
 # Walgo specific output
 walgo
 walgo.exe
-walgo-*
 
 # Test artifacts
 coverage.txt
