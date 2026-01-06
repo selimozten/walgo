@@ -58,7 +58,7 @@ func PerformDeployment(ctx context.Context, opts DeploymentOptions) (*Deployment
 
 	var siteSize int64
 	var walkErrors []string
-	filepath.Walk(opts.PublishDir, func(path string, info os.FileInfo, err error) error {
+	_ = filepath.Walk(opts.PublishDir, func(path string, info os.FileInfo, err error) error {
 		if err != nil {
 			walkErrors = append(walkErrors, fmt.Sprintf("%s: %v", path, err))
 			return nil

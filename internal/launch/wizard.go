@@ -297,7 +297,7 @@ func VerifySite() (string, string, int64, error) {
 
 	// Calculate directory size
 	var size int64
-	filepath.Walk(publishDir, func(path string, info os.FileInfo, err error) error {
+	_ = filepath.Walk(publishDir, func(path string, info os.FileInfo, err error) error {
 		if err == nil && !info.IsDir() {
 			size += info.Size()
 		}
