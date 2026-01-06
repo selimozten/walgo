@@ -43,7 +43,7 @@ func TestInitializeSite(t *testing.T) {
 			},
 			hugoNotFound: true,
 			wantErr:      true,
-			errContains:  "Hugo is not installed",
+			errContains:  "hugo is not installed",
 		},
 		{
 			name: "Hugo command fails",
@@ -179,7 +179,7 @@ title = "Test Site"
 			},
 			hugoNotFound: true,
 			wantErr:      true,
-			errContains:  "Hugo is not installed",
+			errContains:  "hugo is not installed",
 		},
 		{
 			name: "No Hugo config file",
@@ -438,8 +438,8 @@ func TestErrorMessages(t *testing.T) {
 			t.Skip("Hugo might be in /usr/bin or /bin")
 		}
 
-		if !strings.Contains(err.Error(), "Hugo") {
-			t.Errorf("Error message should mention Hugo, got: %v", err)
+		if !strings.Contains(err.Error(), "hugo") {
+			t.Errorf("Error message should mention hugo, got: %v", err)
 		}
 	})
 

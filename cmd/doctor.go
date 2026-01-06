@@ -7,6 +7,9 @@ import (
 	"path/filepath"
 	"strings"
 
+	"github.com/selimozten/walgo/internal/deps"
+	"github.com/selimozten/walgo/internal/sui"
+	"github.com/selimozten/walgo/internal/ui"
 	"gopkg.in/yaml.v3"
 
 	"github.com/spf13/cobra"
@@ -34,7 +37,7 @@ var doctorCmd = &cobra.Command{
 This command checks:
 - Required binaries (hugo, site-builder, walrus, sui)
 - Sui client configuration and active address
-- Wallet gas balance
+- Wallet token balances (SUI, WAL, and others)
 - Configuration files
 - Provides auto-fix suggestions
 
@@ -42,21 +45,22 @@ Examples:
   walgo doctor              # Run diagnostics
   walgo doctor --fix-paths  # Fix tilde paths in config
   walgo doctor --fix-all    # Auto-fix all issues`,
-	Run: func(cmd *cobra.Command, args []string) {
+	RunE: func(cmd *cobra.Command, args []string) error {
+		icons := ui.GetIcons()
 		fixAll, err := cmd.Flags().GetBool("fix-all")
 		if err != nil {
-			fmt.Fprintf(os.Stderr, "Error getting fix-all flag: %v\n", err)
-			return
+			fmt.Fprintf(os.Stderr, "%s Error: reading fix-all flag: %v\n", icons.Error, err)
+			return fmt.Errorf("error getting fix-all flag: %w", err)
 		}
 		fixPaths, err := cmd.Flags().GetBool("fix-paths")
 		if err != nil {
-			fmt.Fprintf(os.Stderr, "Error getting fix-paths flag: %v\n", err)
-			return
+			fmt.Fprintf(os.Stderr, "%s Error: reading fix-paths flag: %v\n", icons.Error, err)
+			return fmt.Errorf("error getting fix-paths flag: %w", err)
 		}
 		verbose, err := cmd.Flags().GetBool("verbose")
 		if err != nil {
-			fmt.Fprintf(os.Stderr, "Error getting verbose flag: %v\n", err)
-			return
+			fmt.Fprintf(os.Stderr, "%s Error: reading verbose flag: %v\n", icons.Error, err)
+			return fmt.Errorf("error getting verbose flag: %w", err)
 		}
 
 		fmt.Println("╔═══════════════════════════════════════════════════════════╗")
@@ -69,7 +73,7 @@ Examples:
 		warnings := 0
 
 		// Check binaries
-		fmt.Println("📦 Checking dependencies...")
+		fmt.Printf("%s Checking dependencies...\n", icons.Package)
 		fmt.Println()
 
 		binaries := map[string]struct {
@@ -79,26 +83,42 @@ Examples:
 			install  string
 		}{
 			"hugo":         {"hugo", true, "Static site generation", "brew install hugo (macOS) or https://gohugo.io/installation/"},
-			"site-builder": {"site-builder", false, "On-chain deployment", "walgo setup-deps --with-site-builder"},
-			"walrus":       {"walrus", false, "Walrus CLI operations", "walgo setup-deps --with-walrus"},
-			"sui":          {"sui", false, "On-chain wallet management", "https://docs.sui.io/guides/developer/getting-started/sui-install"},
+			"site-builder": {"site-builder", false, "On-chain deployment", "walgo setup-deps (uses suiup)"},
+			"walrus":       {"walrus", false, "Walrus CLI operations", "walgo setup-deps (uses suiup)"},
+			"sui":          {"sui", false, "On-chain wallet management", "walgo setup-deps (uses suiup)"},
+		}
+
+		// Check for suiup first (tool manager)
+		if _, err := deps.LookPath("suiup"); err == nil {
+			fmt.Printf("  %s suiup found (Sui tool manager)\n", icons.Check)
+			if verbose {
+				version := strings.TrimSpace(runQuiet("suiup", "--version"))
+				if version != "" {
+					fmt.Printf("    Version: %s\n", version)
+				}
+			}
+		} else {
+			fmt.Printf("  %s suiup not found (recommended tool manager)\n", icons.Warning)
+			fmt.Println("    Install: curl -sSfL https://raw.githubusercontent.com/MystenLabs/suiup/main/install.sh | sh")
+			fmt.Println("    Or run: walgo setup-deps")
+			warnings++
 		}
 
 		for _, bin := range []string{"hugo", "site-builder", "walrus", "sui"} {
 			info := binaries[bin]
-			if path, err := exec.LookPath(bin); err != nil {
+			if path, err := deps.LookPath(bin); err != nil {
 				if info.required {
-					fmt.Printf("  ✗ %s not found (REQUIRED)\n", info.name)
+					fmt.Printf("  %s %s not found (REQUIRED)\n", icons.Cross, info.name)
 					fmt.Printf("    Purpose: %s\n", info.purpose)
 					fmt.Printf("    Install: %s\n", info.install)
 					issues++
 				} else {
-					fmt.Printf("  ⚠ %s not found (optional for %s)\n", info.name, info.purpose)
+					fmt.Printf("  %s %s not found (optional for %s)\n", icons.Warning, info.name, info.purpose)
 					fmt.Printf("    Install: %s\n", info.install)
 					warnings++
 				}
 			} else {
-				fmt.Printf("  ✓ %s found", info.name)
+				fmt.Printf("  %s %s found", icons.Check, info.name)
 				if verbose {
 					fmt.Printf(" at %s", path)
 				}
@@ -114,12 +134,12 @@ Examples:
 						}
 						// Check if Hugo Extended is installed
 						if !strings.Contains(strings.ToLower(version), "extended") {
-							fmt.Println("  ⚠ Hugo Extended is required but standard Hugo is installed")
+							fmt.Printf("  %s Hugo Extended is required but standard Hugo is installed\n", icons.Warning)
 							fmt.Println("    Extended version is needed for SCSS/SASS support")
 							fmt.Println("    Install: brew install hugo (macOS) or download 'extended' from https://github.com/gohugoio/hugo/releases")
 							warnings++
 						} else if verbose {
-							fmt.Println("    ✓ Extended version detected")
+							fmt.Printf("    %s Extended version detected\n", icons.Check)
 						}
 					}
 				case "sui":
@@ -135,25 +155,24 @@ Examples:
 
 		fmt.Println()
 
-		// Check Sui environment if sui is available
-		if _, err := exec.LookPath("sui"); err == nil {
-			fmt.Println("🔐 Checking Sui configuration...")
+		if _, err := deps.LookPath("sui"); err == nil {
+			fmt.Printf("%s Checking Sui configuration...\n", icons.Info)
 			fmt.Println()
 
-			activeEnv := runQuiet("sui", "client", "active-env")
-			activeEnv = strings.TrimSpace(activeEnv)
+			activeEnv, _ := sui.GetActiveEnv()
 			if activeEnv != "" {
-				fmt.Printf("  ✓ Active network: %s\n", activeEnv)
+				fmt.Printf("  %s Active network: %s\n", icons.Check, activeEnv)
 			}
 
-			address := strings.TrimSpace(runQuiet("sui", "client", "active-address"))
+			address, _ := sui.GetActiveAddress()
 			if address != "" {
-				fmt.Printf("  ✓ Active address: %s\n", address)
+				fmt.Printf("  %s Active address: %s\n", icons.Check, address)
 
-				// Check gas balance
-				gas := runQuiet("sui", "client", "gas")
-				if strings.Contains(gas, "No gas coins are owned") || strings.Contains(gas, "Error") {
-					fmt.Println("  ✗ No SUI gas coins found")
+				// Check token balances (SUI and WAL)
+				balance, err := sui.GetBalance()
+
+				if err != nil || (balance.SUI == 0 && balance.WAL == 0) {
+					fmt.Printf("  %s No token balances found\n", icons.Cross)
 					fmt.Println("    On-chain deployment requires SUI for gas fees")
 					if strings.Contains(activeEnv, "testnet") {
 						fmt.Printf("    Get testnet tokens: https://faucet.sui.io/?address=%s\n", address)
@@ -162,13 +181,37 @@ Examples:
 					}
 					issues++
 				} else {
-					fmt.Println("  ✓ SUI gas coins available")
-					if verbose {
-						fmt.Printf("    %s\n", strings.TrimSpace(gas))
+					// Show SUI balance
+					if balance.SUI > 0 {
+						fmt.Printf("  %s SUI balance: %.2f SUI\n", icons.Check, balance.SUI)
+						if balance.SUI < 0.1 {
+							fmt.Printf("    %s Low SUI balance (< 0.1 SUI), consider getting more tokens\n", icons.Warning)
+						}
+					} else {
+						fmt.Printf("  %s No SUI tokens found\n", icons.Cross)
+						fmt.Println("    On-chain deployment requires SUI for gas fees")
+						if strings.Contains(activeEnv, "testnet") {
+							fmt.Printf("    Get testnet tokens: https://faucet.sui.io/?address=%s\n", address)
+						}
+						issues++
+					}
+
+					// Show WAL balance
+					if balance.WAL > 0 {
+						fmt.Printf("  %s WAL balance: %.2f WAL\n", icons.Check, balance.WAL)
+						if verbose {
+							fmt.Println("    WAL tokens provide storage quota on Walrus network")
+						}
+					} else {
+						fmt.Printf("  %s No WAL tokens found\n", icons.Info)
+						fmt.Println("    WAL tokens provide extended storage quota (optional but recommended)")
+						if verbose {
+							fmt.Println("    Get WAL: walrus get-wal --context testnet (testnet)")
+						}
 					}
 				}
 			} else {
-				fmt.Println("  ✗ No active Sui address configured")
+				fmt.Printf("  %s No active Sui address configured\n", icons.Cross)
 				fmt.Println("    Run: sui client")
 				issues++
 			}
@@ -176,51 +219,48 @@ Examples:
 			fmt.Println()
 		}
 
-		// Check configuration files
-		fmt.Println("⚙️  Checking configuration files...")
+		fmt.Printf("%s Checking configuration files...\n", icons.Info)
 		fmt.Println()
 
 		home, err := os.UserHomeDir()
 		if err != nil {
-			fmt.Fprintf(os.Stderr, "Error getting home directory: %v\n", err)
-			return
+			fmt.Fprintf(os.Stderr, "%s Error: Cannot determine home directory: %v\n", icons.Error, err)
+			return fmt.Errorf("error getting home directory: %w", err)
 		}
 		scPath := filepath.Join(home, ".config", "walrus", "sites-config.yaml")
 
 		if _, err := os.Stat(scPath); err == nil {
-			fmt.Printf("  ✓ sites-config.yaml found at %s\n", scPath)
+			fmt.Printf("  %s sites-config.yaml found at %s\n", icons.Check, scPath)
 
-			// Check for tilde paths
 			data, err := os.ReadFile(scPath) // #nosec G304 - path is constructed from known directory
 			if err != nil {
-				fmt.Fprintf(os.Stderr, "Warning: Could not read sites-config.yaml: %v\n", err)
+				fmt.Fprintf(os.Stderr, "%s Warning: Could not read sites-config.yaml: %v\n", icons.Warning, err)
 			} else {
 				if strings.Contains(string(data), "~/") {
-					fmt.Println("  ⚠ Configuration contains tilde paths (~)")
+					fmt.Printf("  %s Configuration contains tilde paths (~)\n", icons.Warning)
 					fmt.Println("    Run: walgo doctor --fix-paths")
 					warnings++
 
 					if fixPaths || fixAll {
 						if err := ensureAbsolutePaths(scPath, home); err != nil {
-							fmt.Printf("  ✗ Failed to fix paths: %v\n", err)
+							fmt.Printf("  %s Failed to fix paths: %v\n", icons.Cross, err)
 							issues++
 						} else {
-							fmt.Println("  ✓ Fixed tilde paths to absolute paths")
+							fmt.Printf("  %s Fixed tilde paths to absolute paths\n", icons.Check)
 						}
 					}
 				}
 			}
 		} else {
-			fmt.Println("  ⚠ sites-config.yaml not found")
+			fmt.Printf("  %s sites-config.yaml not found\n", icons.Warning)
 			fmt.Println("    For on-chain deployment, run: walgo setup --network testnet --force")
 			warnings++
 		}
 
-		// Check for walgo.yaml in current directory
 		if _, err := os.Stat("walgo.yaml"); err == nil {
-			fmt.Println("  ✓ walgo.yaml found in current directory")
+			fmt.Printf("  %s walgo.yaml found in current directory\n", icons.Check)
 		} else {
-			fmt.Println("  ⚠ walgo.yaml not found in current directory")
+			fmt.Printf("  %s walgo.yaml not found in current directory\n", icons.Warning)
 			fmt.Println("    Initialize a site: walgo init my-site")
 			warnings++
 		}
@@ -228,37 +268,36 @@ Examples:
 		fmt.Println()
 
 		// Show deployment options
-		fmt.Println("🚀 Deployment options:")
+		fmt.Printf("%s Deployment options:\n", icons.Rocket)
 		fmt.Println()
-		fmt.Println("  Option 1: HTTP Testnet (No wallet required)")
+		fmt.Println("  Recommended: Interactive wizard")
+		fmt.Println("    walgo launch")
+		fmt.Println()
+		fmt.Println("  Alternative: HTTP Testnet (No wallet required)")
 		fmt.Println("    walgo deploy-http \\")
 		fmt.Println("      --publisher https://publisher.walrus-testnet.walrus.space \\")
-		fmt.Println("      --aggregator https://aggregator.walrus-testnet.walrus.space \\")
-		fmt.Println("      --epochs 1")
-		fmt.Println()
-		fmt.Println("  Option 2: On-chain (Requires wallet and SUI)")
-		fmt.Println("    walgo setup --network testnet --force")
-		fmt.Println("    walgo doctor --fix-paths")
-		fmt.Println("    walgo deploy --epochs 5")
+		fmt.Println("      --aggregator https://aggregator.walrus-testnet.walrus.space")
 		fmt.Println()
 
 		// Summary
 		fmt.Println("═══════════════════════════════════════════════════════════")
 		if issues == 0 && warnings == 0 {
-			fmt.Println("✅ All checks passed! Your environment is ready.")
+			fmt.Printf("%s All checks passed! Your environment is ready.\n", icons.Success)
 		} else {
 			fmt.Printf("Summary: %d issue(s), %d warning(s)\n", issues, warnings)
 			if issues > 0 {
-				fmt.Println("\n❌ Please fix the issues above before deploying on-chain.")
+				fmt.Printf("\n%s Please fix the issues above before deploying on-chain.\n", icons.Error)
 			}
 			if warnings > 0 {
-				fmt.Println("\n⚠️  Warnings indicate optional features that may not work.")
+				fmt.Printf("\n%s Warnings indicate optional features that may not work.\n", icons.Warning)
 			}
 			if !fixAll && warnings > 0 {
-				fmt.Println("\n💡 Tip: Run 'walgo doctor --fix-all' to auto-fix some issues")
+				fmt.Printf("\n%s Tip: Run 'walgo doctor --fix-all' to auto-fix some issues\n", icons.Lightbulb)
 			}
 		}
 		fmt.Println("═══════════════════════════════════════════════════════════")
+
+		return nil
 	},
 }
 

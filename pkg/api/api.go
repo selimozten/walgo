@@ -6,10 +6,11 @@ import (
 	"os"
 	"path/filepath"
 
-	"walgo/internal/config"
-	"walgo/internal/deployer"
-	sb "walgo/internal/deployer/sitebuilder"
-	"walgo/internal/hugo"
+	"github.com/selimozten/walgo/internal/ai"
+	"github.com/selimozten/walgo/internal/config"
+	"github.com/selimozten/walgo/internal/deployer"
+	sb "github.com/selimozten/walgo/internal/deployer/sitebuilder"
+	"github.com/selimozten/walgo/internal/hugo"
 
 	"github.com/spf13/viper"
 )
@@ -109,4 +110,78 @@ func DeploySite(sitePath string, epochs int) DeployResult {
 		Success:  result.Success,
 		ObjectID: result.ObjectID,
 	}
+}
+
+// =============================================================================
+// AI Configuration (uses ~/.walgo/ai-credentials.yaml)
+// =============================================================================
+
+// AIConfigureParams holds parameters for AI configuration
+type AIConfigureParams struct {
+	Provider string `json:"provider"` // "openai" or "openrouter"
+	APIKey   string `json:"apiKey"`
+	BaseURL  string `json:"baseURL,omitempty"`
+	Model    string `json:"model,omitempty"`
+}
+
+// AIConfigResult holds the result of AI configuration
+type AIConfigResult struct {
+	Configured bool   `json:"configured"`
+	Provider   string `json:"provider,omitempty"`
+	Model      string `json:"model,omitempty"`
+	Error      string `json:"error,omitempty"`
+}
+
+// ConfigureAI sets up AI provider credentials
+func ConfigureAI(params AIConfigureParams) error {
+	if params.Provider == "" {
+		return fmt.Errorf("provider is required")
+	}
+	if params.APIKey == "" {
+		return fmt.Errorf("API key is required")
+	}
+
+	baseURL := params.BaseURL
+	if baseURL == "" {
+		baseURL = ai.GetDefaultBaseURL(params.Provider)
+	}
+
+	model := params.Model
+	if model == "" {
+		if params.Provider == "openrouter" {
+			model = "openai/gpt-4"
+		} else {
+			model = "gpt-4"
+		}
+	}
+
+	return ai.SetProviderCredentials(params.Provider, params.APIKey, baseURL, model)
+}
+
+// GetAIConfig returns the current AI configuration
+func GetAIConfig() (AIConfigResult, error) {
+	providers := []string{"openai", "openrouter"}
+
+	for _, provider := range providers {
+		creds, err := ai.GetProviderCredentials(provider)
+		if err == nil && creds.APIKey != "" {
+			return AIConfigResult{
+				Configured: true,
+				Provider:   provider,
+				Model:      creds.Model,
+			}, nil
+		}
+	}
+
+	return AIConfigResult{Configured: false}, nil
+}
+
+// UpdateAIConfig updates AI configuration
+func UpdateAIConfig(params AIConfigureParams) error {
+	return ConfigureAI(params)
+}
+
+// CleanAIConfig removes all AI credentials
+func CleanAIConfig() error {
+	return ai.RemoveAllCredentials()
 }

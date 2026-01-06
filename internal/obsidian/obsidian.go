@@ -9,7 +9,7 @@ import (
 	"strings"
 	"time"
 
-	"walgo/internal/config"
+	"github.com/selimozten/walgo/internal/config"
 )
 
 // ImportStats holds statistics about the import operation
@@ -87,7 +87,7 @@ func ImportVault(vaultPath, hugoContentDir string, cfg config.ObsidianConfig) (*
 // isAttachment checks if a file is an attachment (image, pdf, etc.)
 func isAttachment(path string) bool {
 	ext := strings.ToLower(filepath.Ext(path))
-	attachmentExts := []string{".png", ".jpg", ".jpeg", ".gif", ".webp", ".svg", ".pdf", ".mp4", ".mov", ".mp3", ".wav"}
+	attachmentExts := []string{".png", ".jpg", ".jpeg", ".gif", ".webp", ".avif", ".svg", ".ico", ".pdf", ".mp4", ".mov", ".webm", ".mp3", ".wav", ".ogg"}
 
 	for _, attachExt := range attachmentExts {
 		if ext == attachExt {
@@ -97,31 +97,34 @@ func isAttachment(path string) bool {
 	return false
 }
 
-// copyAttachment copies an attachment file to the static directory
+// copyAttachment preserves directory structure when copying vault attachments
 func copyAttachment(srcPath, vaultPath, staticDir, attachmentDir string) error {
-	// Get relative path from vault
 	relPath, err := filepath.Rel(vaultPath, srcPath)
 	if err != nil {
 		return err
 	}
 
-	// Create destination path
-	destPath := filepath.Join(staticDir, filepath.Base(relPath))
+	destPath := filepath.Join(staticDir, relPath)
+	destDir := filepath.Dir(destPath)
 
-	// Read source file
-	data, err := os.ReadFile(srcPath) // #nosec G304 - srcPath comes from controlled directory walk
+	// #nosec G301 - attachment directory needs standard permissions
+	if err := os.MkdirAll(destDir, 0755); err != nil {
+		return fmt.Errorf("failed to create attachment directory %s: %w", destDir, err)
+	}
+
+	// #nosec G304 - srcPath comes from controlled directory walk
+	data, err := os.ReadFile(srcPath)
 	if err != nil {
 		return err
 	}
 
-	// Write to destination
-	return os.WriteFile(destPath, data, 0644) // #nosec G306 - attachment files need to be readable by web servers
+	// #nosec G306 - attachment files need to be readable by web servers
+	return os.WriteFile(destPath, data, 0644)
 }
 
-// processMarkdownFile processes a single markdown file
 func processMarkdownFile(srcPath, vaultPath, hugoContentDir string, cfg config.ObsidianConfig) error {
-	// Read the file
-	content, err := os.ReadFile(srcPath) // #nosec G304 - srcPath comes from controlled directory walk
+	// #nosec G304 - srcPath comes from controlled directory walk
+	content, err := os.ReadFile(srcPath)
 	if err != nil {
 		return err
 	}

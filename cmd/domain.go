@@ -4,24 +4,27 @@ import (
 	"fmt"
 	"os"
 
-	"walgo/internal/config"
+	"github.com/selimozten/walgo/internal/config"
 
+	"github.com/selimozten/walgo/internal/ui"
 	"github.com/spf13/cobra"
 )
 
-// domainCmd represents the domain command
 var domainCmd = &cobra.Command{
 	Use:   "domain [domain-name]",
-	Short: "Get instructions for configuring SuiNS domain for your Walrus Site.",
+	Short: "Get instructions for configuring SuiNS domain for your Walrus Site (mainnet only).",
 	Long: `Provides instructions for configuring a SuiNS domain name to point to your Walrus Site.
 
-Since SuiNS domain management is handled through the SuiNS web interface, this command 
+NOTE: SuiNS is only available on mainnet. If you're using testnet, please deploy to mainnet
+first to use SuiNS domain names.
+
+Since SuiNS domain management is handled through the SuiNS web interface, this command
 provides step-by-step instructions and the necessary object ID from your configuration.
 
-For Mainnet: https://suins.io
-For Testnet: https://testnet.suins.io`,
-	Args: cobra.MaximumNArgs(1), // Optional domain name argument
-	Run: func(cmd *cobra.Command, args []string) {
+For Mainnet: https://suins.io`,
+	Args: cobra.MaximumNArgs(1),
+	RunE: func(cmd *cobra.Command, args []string) error {
+		icons := ui.GetIcons()
 		var domainName string
 		if len(args) > 0 {
 			domainName = args[0]
@@ -29,69 +32,69 @@ For Testnet: https://testnet.suins.io`,
 
 		cfg, err := config.LoadConfig()
 		if err != nil {
-			fmt.Fprintf(os.Stderr, "%v\n", err)
-			os.Exit(1)
+			fmt.Fprintf(os.Stderr, "%s Error: %v\n", icons.Error, err)
+			return fmt.Errorf("error loading config: %w", err)
+		}
+
+		// Check network - SuiNS is mainnet only
+		network := cfg.WalrusConfig.Network
+		if network == "" {
+			network = "testnet" // Default to testnet
+		}
+
+		if network != "mainnet" {
+			fmt.Printf("%s SuiNS is only available on mainnet.\n", icons.Warning)
+			fmt.Printf("\n%s Your current network: %s\n", icons.Info, network)
+			fmt.Printf("%s To use SuiNS, you need to deploy your site to mainnet.\n", icons.Lightbulb)
+			fmt.Println()
+			fmt.Println("To deploy to mainnet:")
+			fmt.Println("  walgo config set network mainnet")
+			fmt.Println("  walgo launch")
+			fmt.Println()
+			return nil
 		}
 
 		if cfg.WalrusConfig.ProjectID == "" || cfg.WalrusConfig.ProjectID == "YOUR_WALRUS_PROJECT_ID" {
-			fmt.Fprintf(os.Stderr, "Walrus ProjectID is not set in walgo.yaml. Please configure it first.\n")
-			fmt.Fprintf(os.Stderr, "You need the object ID of your deployed Walrus Site to configure a domain.\n")
-			os.Exit(1)
+			fmt.Fprintf(os.Stderr, "%s Error: Walrus ProjectID is not set in walgo.yaml\n", icons.Error)
+			fmt.Fprintf(os.Stderr, "\n%s Deploy your site first to get an object ID:\n", icons.Lightbulb)
+			fmt.Fprintf(os.Stderr, "   walgo launch\n")
+			return fmt.Errorf("walrus projectid is not set in walgo.yaml")
 		}
 
-		fmt.Println("🌐 SuiNS Domain Configuration for Walrus Sites")
-		fmt.Println("==============================================")
-		fmt.Printf("Your Walrus Site Object ID: %s\n\n", cfg.WalrusConfig.ProjectID)
+		fmt.Printf("%s SuiNS Domain Configuration (Mainnet)\n", icons.Globe)
+		fmt.Println("━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
+		fmt.Printf("%s Object ID: %s\n", icons.File, cfg.WalrusConfig.ProjectID)
 
 		if domainName != "" {
-			fmt.Printf("Setting up domain: %s\n\n", domainName)
+			fmt.Printf("%s Domain: %s\n", icons.Info, domainName)
 		}
-
-		fmt.Println("Steps to configure your SuiNS domain:")
-		fmt.Println("1. Go to the SuiNS website:")
-		fmt.Println("   • Mainnet: https://suins.io")
-		fmt.Println("   • Testnet: https://testnet.suins.io")
 		fmt.Println()
 
+		fmt.Printf("%s Setup Steps:\n", icons.Pencil)
+		fmt.Println()
+		fmt.Println("  1  Visit SuiNS:")
+		fmt.Println("      • https://suins.io")
+		fmt.Println()
 		if domainName == "" {
-			fmt.Println("2. Purchase or select a domain name you own")
+			fmt.Println("  2  Purchase or select your domain")
 		} else {
-			fmt.Printf("2. Purchase or select the domain: %s\n", domainName)
+			fmt.Printf("  2  Select domain: %s\n", domainName)
 		}
-		fmt.Println("   • Domain names can only contain letters (a-z) and numbers (0-9)")
-		fmt.Println("   • No special characters like hyphens are allowed")
 		fmt.Println()
-
-		fmt.Println("3. In the 'Names you own' section:")
-		fmt.Println("   • Click the 'three dots' menu icon above your domain")
-		fmt.Println("   • Click 'Link To Walrus Site'")
+		fmt.Println("  3  Click 'Link To Walrus Site'")
 		fmt.Println()
-
-		fmt.Printf("4. Paste your Walrus Site Object ID: %s\n", cfg.WalrusConfig.ProjectID)
-		fmt.Println("   • Double-check that the ID is correct")
-		fmt.Println("   • Click 'Apply'")
+		fmt.Printf("  4  Enter Object ID: %s\n", cfg.WalrusConfig.ProjectID)
 		fmt.Println()
-
-		fmt.Println("5. Approve the transaction in your wallet")
+		fmt.Println("  5  Approve transaction in your wallet")
 		fmt.Println()
-
+		fmt.Println("━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
 		if domainName != "" {
-			fmt.Printf("Once completed, your site will be available at: https://%s.wal.app\n\n", domainName)
+			fmt.Printf("%s Your site will be available at: https://%s.wal.app\n", icons.Success, domainName)
 		} else {
-			fmt.Println("Once completed, your site will be available at: https://YOUR-DOMAIN.wal.app")
-			fmt.Println()
+			fmt.Printf("%s Your site will be available at: https://YOUR-DOMAIN.wal.app\n", icons.Success)
 		}
 
-		fmt.Println("💡 Tips:")
-		fmt.Println("• You can also update your walgo.yaml to include the domain:")
-		fmt.Println("  walrus:")
-		if domainName != "" {
-			fmt.Printf("    suinsDomain: \"%s.sui\"\n", domainName)
-		} else {
-			fmt.Println("    suinsDomain: \"your-domain.sui\"")
-		}
-		fmt.Println("• Use 'walgo status' to check your site's resources")
-		fmt.Println("• Your site is also accessible via Base36 encoding (use 'walgo status --convert')")
+		return nil
 	},
 }
 

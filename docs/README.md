@@ -2,285 +2,223 @@
 
 Complete documentation for Walgo, the official CLI tool for deploying static sites to Walrus decentralized storage.
 
+## Quick Start
+
+**New to Walgo?** Get your site live in minutes:
+
+```bash
+# Install
+curl -fsSL https://raw.githubusercontent.com/selimozten/walgo/main/install.sh | bash
+
+# Create and deploy
+walgo quickstart my-blog
+cd my-blog
+walgo launch
+```
+
+---
+
 ## Documentation Index
 
-### For Users
-
-Perfect for getting started and using Walgo for your projects.
-
-| Document | Description | Target Audience |
-|----------|-------------|-----------------|
-| [⚡ Quickstart Guide](QUICKSTART.md) | Get your site live in 2 minutes! | Everyone (START HERE) |
-| [Installation Guide](INSTALLATION.md) | Complete installation instructions for all platforms | Everyone |
-| [Getting Started](GETTING_STARTED.md) | Your first site deployment walkthrough | New users |
-| [Commands Reference](COMMANDS.md) | Detailed documentation of all commands | All users |
-| [Configuration Reference](CONFIGURATION.md) | Complete configuration options | Intermediate users |
-| [Deployment Guide](DEPLOYMENT.md) | HTTP and on-chain deployment strategies | All users |
-| [Troubleshooting Guide](TROUBLESHOOTING.md) | Solutions to common issues | All users |
-| [Optimizer Documentation](OPTIMIZER.md) | Asset optimization features | Intermediate users |
-
-### For Developers
-
-Perfect for contributors and those wanting to understand Walgo's internals.
-
-| Document | Description | Target Audience |
-|----------|-------------|-----------------|
-| [Architecture](ARCHITECTURE.md) | System design and internal structure | Developers |
-| [Development Guide](DEVELOPMENT.md) | Setup dev environment and contribute | Contributors |
-| [Contributing Guide](CONTRIBUTING.md) | How to contribute to Walgo | Contributors |
-| [Labels Guide](LABELS.md) | GitHub issue labels reference | Maintainers |
-
-## Quick Links
-
 ### Getting Started
-- **⚡ Fastest way:** `walgo quickstart my-blog` - See [Quickstart Command](COMMANDS.md#walgo-quickstart)
-- New to Walgo? Start with [Installation](INSTALLATION.md) → [Getting Started](GETTING_STARTED.md)
-- Want to deploy quickly? See [Getting Started: Your First Site](GETTING_STARTED.md#your-first-site)
-- Need help? Check [Troubleshooting Guide](TROUBLESHOOTING.md)
 
-### Common Tasks
-- [⚡ Quickstart - Fastest way](COMMANDS.md#walgo-quickstart)
-- [Create a new site](GETTING_STARTED.md#step-1-create-a-new-site)
-- [Deploy via HTTP (free)](DEPLOYMENT.md#http-deployment)
-- [Deploy on-chain (permanent)](DEPLOYMENT.md#on-chain-deployment)
-- [Update existing deployment](DEPLOYMENT.md#updating-deployments)
-- [Optimize assets](OPTIMIZER.md)
-- [Import from Obsidian](GETTING_STARTED.md#obsidian-to-blog-workflow)
-- [Setup custom domain](DEPLOYMENT.md#custom-domains)
+| Document | Description |
+|----------|-------------|
+| [Quickstart Guide](QUICKSTART.md) | Deploy your first site in 2 minutes |
+| [Installation Guide](INSTALLATION.md) | Platform-specific installation instructions |
+| [Getting Started](GETTING_STARTED.md) | Complete first deployment walkthrough |
+
+### User Guides
+
+| Document | Description |
+|----------|-------------|
+| [Commands Reference](COMMANDS.md) | All 29+ commands with examples |
+| [Launch Wizard](LAUNCH_WIZARD.md) | Interactive deployment guide (**recommended**) |
+| [Configuration](CONFIGURATION.md) | All configuration options |
+| [Deployment Guide](DEPLOYMENT.md) | HTTP vs on-chain deployment strategies |
+| [AI Features](AI_FEATURES.md) | AI-powered content generation |
+| [Desktop Integration](DESKTOP_INTEGRATION.md) | Desktop application features |
+| [Troubleshooting](TROUBLESHOOTING.md) | Solutions to common issues |
+| [Uninstall Guide](UNINSTALL.md) | Complete uninstallation instructions |
 
 ### Reference
-- [All commands](COMMANDS.md)
-- [All configuration options](CONFIGURATION.md)
-- [Environment variables](CONFIGURATION.md#environment-variables)
 
-## Documentation Structure
+| Document | Description |
+|----------|-------------|
+| [Optimizer Documentation](OPTIMIZER.md) | Asset optimization features |
+| [Blockchain Data FAQ](BLOCKCHAIN_DATA_FAQ.md) | Understanding blockchain data safety |
+| [Version Management](VERSION_MANAGEMENT.md) | Version control and release process |
 
-```
-docs/
-├── README.md                    # This file - documentation index
-│
-├── User Documentation/
-│   ├── QUICKSTART.md            # ⚡ Get started in 2 minutes!
-│   ├── INSTALLATION.md          # Installation for all platforms
-│   ├── GETTING_STARTED.md       # First deployment walkthrough
-│   ├── COMMANDS.md              # Complete command reference
-│   ├── CONFIGURATION.md         # Configuration options
-│   ├── DEPLOYMENT.md            # Deployment strategies
-│   ├── TROUBLESHOOTING.md       # Common issues and solutions
-│   └── OPTIMIZER.md             # Asset optimization guide
-│
-└── Developer Documentation/
-    ├── ARCHITECTURE.md          # System architecture + diagrams
-    ├── DEVELOPMENT.md           # Development setup and guide
-    ├── CONTRIBUTING.md          # Contribution guidelines
-    └── LABELS.md                # GitHub labels guide
-```
+### Developer Documentation
+
+| Document | Description |
+|----------|-------------|
+| [Architecture](ARCHITECTURE.md) | System design and internal structure |
+| [Development Guide](DEVELOPMENT.md) | Setup dev environment and contribute |
+| [Contributing Guide](CONTRIBUTING.md) | How to contribute to Walgo |
+| [Labels Guide](LABELS.md) | GitHub issue labels reference |
+
+---
 
 ## Learning Paths
 
-### Path 1: Quickstart (2 minutes) ⚡
+### Path 1: Instant Deploy (2 minutes)
 
-Perfect for: "I want a site live RIGHT NOW"
+For users who want a site live immediately:
 
-1. [Install Walgo](INSTALLATION.md#quick-install)
-2. Run: `walgo quickstart my-blog`
-3. Done! Your site is live.
+```bash
+walgo quickstart my-blog
+cd my-blog
+walgo launch
+```
 
-**Read:** [Complete Quickstart Guide](QUICKSTART.md)
+**Read:** [Quickstart Guide](QUICKSTART.md)
 
-### Path 2: Quick Start (15 minutes)
+### Path 2: Standard Workflow (15 minutes)
 
-Perfect for: "I just want to deploy my Hugo site"
+For users who want to understand the process:
 
-1. [Install Walgo](INSTALLATION.md#quick-install)
-2. [Create your first site](GETTING_STARTED.md#your-first-site)
-3. [Deploy via HTTP](DEPLOYMENT.md#http-deployment)
+1. [Install Walgo](INSTALLATION.md)
+2. Create your site: `walgo init my-site`
+3. Build: `walgo build`
+4. Deploy: `walgo launch`
 
-### Path 3: Complete User Guide (1 hour)
+**Read:** [Getting Started](GETTING_STARTED.md)
 
-Perfect for: "I want to master Walgo"
+### Path 3: Complete Mastery (1 hour)
 
-1. [Installation Guide](INSTALLATION.md) - Set up everything
-2. [Getting Started](GETTING_STARTED.md) - First deployment
-3. [Configuration Reference](CONFIGURATION.md) - Customize settings
-4. [Deployment Guide](DEPLOYMENT.md) - Master both modes
-5. [Commands Reference](COMMANDS.md) - Learn all commands
+For users who want to learn all features:
+
+1. [Installation Guide](INSTALLATION.md)
+2. [Getting Started](GETTING_STARTED.md)
+3. [Launch Wizard](LAUNCH_WIZARD.md)
+4. [Commands Reference](COMMANDS.md)
+5. [Configuration](CONFIGURATION.md)
 
 ### Path 4: Developer Journey (2-3 hours)
 
-Perfect for: "I want to contribute to Walgo"
+For contributors and maintainers:
 
-1. [Architecture](ARCHITECTURE.md) - Understand the design
-2. [Development Guide](DEVELOPMENT.md) - Set up dev environment
-3. [Contributing Guide](CONTRIBUTING.md) - Make your first contribution
+1. [Architecture](ARCHITECTURE.md)
+2. [Development Guide](DEVELOPMENT.md)
+3. [Contributing Guide](CONTRIBUTING.md)
 
-### Path 5: Troubleshooting
+---
 
-Perfect for: "Something isn't working"
+## Essential Commands
 
-1. [Troubleshooting Guide](TROUBLESHOOTING.md) - Find your issue
-2. [Commands Reference](COMMANDS.md) - Verify command usage
-3. [Configuration Reference](CONFIGURATION.md) - Check config
+### Create & Build
 
-## Features by Document
-
-### Installation Guide
-- Platform-specific installation (macOS, Linux, Windows)
-- Dependency installation
-- Building from source
-- Troubleshooting installation issues
-
-### Getting Started Guide
-- Creating your first site
-- Adding content
-- Building and previewing
-- HTTP vs on-chain deployment
-- Complete workflow examples
-
-### Commands Reference
-- All 15+ commands documented
-- Flags and options
-- Usage examples
-- Output examples
-
-### Configuration Reference
-- All configuration sections (Hugo, Walrus, Optimizer, Obsidian)
-- Configuration file format
-- Environment variables
-- Configuration examples
-
-### Deployment Guide
-- HTTP deployment (free, temporary)
-- On-chain deployment (permanent)
-- Updating deployments
-- Custom domains with SuiNS
-- Cost optimization
-- Best practices
-
-### Troubleshooting Guide
-- Installation issues
-- Build issues
-- Deployment issues
-- Optimization issues
-- Network issues
-- Wallet issues
-
-### Optimizer Documentation
-- HTML optimization
-- CSS optimization
-- JavaScript optimization
-- Configuration options
-- Performance impact
-- Safety and best practices
-
-### Architecture
-- High-level overview
-- Component diagrams (Mermaid)
-- Data flow diagrams
-- Design patterns
-- Package structure
-- Technology stack
-
-### Development Guide
-- Development setup
-- Building and testing
-- Code style standards
-- Adding new features
-- Testing strategy
-- CI/CD pipeline
-
-### Contributing Guide
-- Getting started
-- Filing issues
-- Submitting pull requests
-- Coding standards
-- Testing guidelines
-
-## Visual Guides
-
-The documentation includes various Mermaid diagrams:
-
-### Architecture Diagrams
-- [System Architecture](ARCHITECTURE.md#architecture-diagram)
-- [Component Structure](ARCHITECTURE.md#core-components)
-- [Deployment Flow](ARCHITECTURE.md#deployment-flow)
-- [Data Flow](ARCHITECTURE.md#data-flow)
-
-### Workflow Diagrams
-- [Development Cycle](GETTING_STARTED.md#understanding-the-workflow)
-- [HTTP Deployment Workflow](DEPLOYMENT.md#http-deployment-workflow)
-- [On-Chain Deployment Workflow](DEPLOYMENT.md#on-chain-deployment-workflow)
-- [Optimizer Pipeline](ARCHITECTURE.md#optimizer-engine)
-
-## Cheat Sheets
-
-### Essential Commands
 ```bash
-# Quickstart (Recommended)
-walgo quickstart my-blog     # 🚀 Create, configure, and deploy in one command!
-
-# Site Management
-walgo init my-site           # Create new site
-walgo build                  # Build site
-walgo serve                  # Preview locally
-
-# Deployment
-walgo deploy-http            # Deploy via HTTP (free)
-walgo deploy --epochs 5      # Deploy on-chain
-walgo update <object-id>     # Update existing site
-walgo status <object-id>     # Check status
-
-# Utilities
-walgo doctor                 # Diagnose issues
-walgo optimize               # Optimize assets
-walgo setup                  # Configure wallet
+walgo quickstart <name>   # Create, configure, and build a new site
+walgo init <name>         # Initialize a new Hugo site
+walgo build               # Build site with optimization
+walgo serve               # Preview locally
 ```
 
-### Configuration Quick Reference
+### Deploy
+
+```bash
+walgo launch              # Interactive deployment wizard (RECOMMENDED)
+walgo projects update     # Update existing deployment
+```
+
+### Manage Projects
+
+```bash
+walgo projects            # List all your deployed sites
+walgo projects show       # View project details and metadata
+walgo projects edit       # Edit project metadata (name, description, category, image)
+walgo projects update     # Update site on-chain
+walgo status <id>         # Check deployment status
+```
+
+### Utilities
+
+```bash
+walgo doctor              # Diagnose issues
+walgo optimize            # Optimize assets
+walgo ai generate         # Generate content with AI
+```
+
+---
+
+## Deployment Methods
+
+### Recommended: `walgo launch`
+
+The **Launch Wizard** is the recommended way to deploy. It provides:
+
+- Step-by-step guidance through the deployment process
+- Automatic wallet and network configuration
+- Project tracking and management
+- Cost estimation before deployment
+- SuiNS domain setup instructions
+
+```bash
+walgo build
+walgo launch
+```
+
+### Alternative Methods
+
+| Method | Use Case |
+|--------|----------|
+| `walgo launch` | Interactive wizard, project tracking (**recommended**) |
+| `walgo deploy` | Direct deployment for automation/scripts |
+| `walgo deploy-http` | Free testing without wallet (testnet only) |
+| `walgo projects update` | Update existing project content on-chain |
+| `walgo projects edit` | Edit metadata (name, description, category, image) with optional on-chain update |
+
+---
+
+## Configuration Quick Reference
+
+Minimal `walgo.yaml`:
+
 ```yaml
-# Minimal walgo.yaml
+hugo:
+  publishDir: "public"
+
 walrus:
   epochs: 5
 
 optimizer:
   enabled: true
-
-hugo:
-  publishDir: "public"
 ```
 
-### Troubleshooting Quick Reference
-```bash
-# Common diagnostic commands
-walgo version               # Check version
-walgo doctor               # Full diagnostics
-walgo <command> --verbose  # Verbose output
-hugo version               # Check Hugo
-```
+Full configuration: [Configuration Reference](CONFIGURATION.md)
+
+---
 
 ## Getting Help
 
-### Within Documentation
-1. Use the search function (Ctrl/Cmd+F)
-2. Check the [Troubleshooting Guide](TROUBLESHOOTING.md)
-3. Review relevant command in [Commands Reference](COMMANDS.md)
+### Documentation
 
-### External Resources
-- **GitHub Issues:** [Report bugs](https://github.com/selimozten/walgo/issues)
-- **GitHub Discussions:** [Ask questions](https://github.com/selimozten/walgo/discussions)
-- **Walrus Docs:** [Walrus documentation](https://docs.walrus.site)
-- **Sui Docs:** [Sui documentation](https://docs.sui.io)
+- Use browser search (Ctrl/Cmd+F) within documents
+- Check [Troubleshooting Guide](TROUBLESHOOTING.md)
+- Review [Commands Reference](COMMANDS.md)
 
 ### Command-Line Help
-```bash
-# Help for any command
-walgo --help
-walgo <command> --help
 
-# Examples
-walgo deploy --help
-walgo build --help
+```bash
+walgo --help              # List all commands
+walgo <command> --help    # Help for specific command
+walgo doctor              # Diagnose environment issues
 ```
+
+### Community
+
+- **GitHub Issues:** [Report bugs](https://github.com/selimozten/walgo/issues)
+- **GitHub Discussions:** [Ask questions](https://github.com/selimozten/walgo/discussions)
+
+### External Resources
+
+- **Walrus Docs:** [docs.walrus.site](https://docs.walrus.site)
+- **Sui Docs:** [docs.sui.io](https://docs.sui.io)
+- **SuiNS:** [suins.io](https://suins.io)
+
+---
 
 ## Contributing to Documentation
 
@@ -288,39 +226,27 @@ Documentation contributions are welcome! See [Contributing Guide](CONTRIBUTING.m
 
 ### How to Improve Docs
 
-1. **Fix typos or errors**
-   - Submit PR with corrections
-   - Reference line numbers
-
-2. **Add examples**
-   - Real-world use cases
-   - Common workflows
-   - Code snippets
-
-3. **Improve clarity**
-   - Simplify complex explanations
-   - Add diagrams
-   - Include screenshots
-
-4. **Add missing content**
-   - FAQ entries
-   - Troubleshooting scenarios
-   - Configuration examples
+1. **Fix typos or errors** — Submit PR with corrections
+2. **Add examples** — Real-world use cases and workflows
+3. **Improve clarity** — Simplify complex explanations
+4. **Add missing content** — FAQ entries, troubleshooting scenarios
 
 ### Documentation Standards
 
 - Use clear, concise language
-- Include code examples
-- Add mermaid diagrams where helpful
-- Link to related documentation
+- Include working code examples
 - Test all commands before documenting
-- Follow the existing structure and style
+- Link to related documentation
+
+---
 
 ## Version Information
 
-- **Current Version:** 1.0.0
+- **Current Version:** 0.2.1
 - **Last Updated:** January 2025
 - **Documentation Version:** Matches Walgo version
+
+---
 
 ## License
 
@@ -328,4 +254,4 @@ Documentation is released under the MIT License, same as Walgo.
 
 ---
 
-**Ready to get started?** Jump to [Installation Guide](INSTALLATION.md) →
+**Ready to start?** Begin with the [Quickstart Guide](QUICKSTART.md) →

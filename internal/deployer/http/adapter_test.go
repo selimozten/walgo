@@ -15,7 +15,7 @@ import (
 	"testing"
 	"time"
 
-	"walgo/internal/deployer"
+	"github.com/selimozten/walgo/internal/deployer"
 )
 
 // TestDeployBlobs_ConcurrencyAndRetry validates worker cap and retry policy.

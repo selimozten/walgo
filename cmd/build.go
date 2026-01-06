@@ -6,26 +6,27 @@ import (
 	"path/filepath"
 	"time"
 
-	"walgo/internal/compress"
-	"walgo/internal/config"
-	"walgo/internal/hugo"
-	"walgo/internal/metrics"
-	"walgo/internal/optimizer"
+	"github.com/selimozten/walgo/internal/compress"
+	"github.com/selimozten/walgo/internal/config"
+	"github.com/selimozten/walgo/internal/hugo"
+	"github.com/selimozten/walgo/internal/metrics"
+	"github.com/selimozten/walgo/internal/optimizer"
+	"github.com/selimozten/walgo/internal/projects"
+	"github.com/selimozten/walgo/internal/ui"
 
 	"github.com/spf13/cobra"
 )
 
-// buildCmd represents the build command
 var buildCmd = &cobra.Command{
 	Use:   "build",
 	Short: "Build the Hugo site.",
 	Long: `Builds the Hugo site using the configuration found in the current directory
 (or the directory specified by global --config flag if walgo.yaml is there).
 This command runs the 'hugo' command to generate static files typically into the 'public' directory.`,
-	Run: func(cmd *cobra.Command, args []string) {
+	RunE: func(cmd *cobra.Command, args []string) error {
+		icons := ui.GetIcons()
 		quiet, _ := cmd.Flags().GetBool("quiet")
 
-		// Initialize telemetry if enabled
 		telemetry, _ := cmd.Flags().GetBool("telemetry")
 		var collector *metrics.Collector
 		var startTime time.Time
@@ -41,30 +42,24 @@ This command runs the 'hugo' command to generate static files typically into the
 			}()
 		}
 
-		// Determine site path (current directory by default)
 		sitePath, err := os.Getwd()
 		if err != nil {
-			fmt.Fprintf(os.Stderr, "❌ Error: Cannot determine current directory: %v\n", err)
-			os.Exit(1)
+			return fmt.Errorf("cannot determine current directory: %w", err)
 		}
 
-		// Load Walgo configuration
 		walgoCfg, err := config.LoadConfig()
 		if err != nil {
-			fmt.Fprintf(os.Stderr, "❌ Error: %v\n", err)
-			fmt.Fprintf(os.Stderr, "\n💡 Did you run 'walgo init' to create a site?\n")
-			os.Exit(1)
+			fmt.Fprintf(os.Stderr, "\n%s Did you run 'walgo init' to create a site?\n", icons.Lightbulb)
+			return err
 		}
 
 		if !quiet {
-			fmt.Println("🔨 Building site...")
+			fmt.Printf("%s Building site...\n", icons.Package)
 		}
 
-		// Check if clean flag is set
 		clean, err := cmd.Flags().GetBool("clean")
 		if err != nil {
-			fmt.Fprintf(os.Stderr, "Error reading clean flag: %v\n", err)
-			os.Exit(1)
+			return fmt.Errorf("error reading clean flag: %w", err)
 		}
 		if clean {
 			publishDir := filepath.Join(sitePath, walgoCfg.HugoConfig.PublishDir)
@@ -73,14 +68,13 @@ This command runs the 'hugo' command to generate static files typically into the
 			}
 			if err := os.RemoveAll(publishDir); err != nil {
 				if !quiet {
-					fmt.Fprintf(os.Stderr, "  ⚠ Warning: Failed to clean: %v\n", err)
+					fmt.Fprintf(os.Stderr, "  %s Warning: Failed to clean: %v\n", icons.Warning, err)
 				}
 			} else if !quiet {
-				fmt.Println("  ✓ Cleaned")
+				fmt.Printf("  %s Cleaned\n", icons.Check)
 			}
 		}
 
-		// Execute Hugo build
 		if !quiet {
 			stepNum := 2
 			if !clean {
@@ -90,42 +84,36 @@ This command runs the 'hugo' command to generate static files typically into the
 		}
 		hugoStart := time.Now()
 		if err := hugo.BuildSite(sitePath); err != nil {
-			fmt.Fprintf(os.Stderr, "❌ Error: Hugo build failed: %v\n\n", err)
-			fmt.Fprintf(os.Stderr, "💡 Troubleshooting:\n")
+			fmt.Fprintf(os.Stderr, "\n%s Troubleshooting:\n", icons.Lightbulb)
 			fmt.Fprintf(os.Stderr, "  - Check that Hugo is installed: hugo version\n")
 			fmt.Fprintf(os.Stderr, "  - Check hugo.toml for syntax errors\n")
 			fmt.Fprintf(os.Stderr, "  - Run: hugo --verbose (for detailed output)\n")
-			os.Exit(1)
+			return fmt.Errorf("hugo build failed: %w", err)
 		}
 		if telemetry {
 			buildMetrics.HugoDuration = time.Since(hugoStart).Milliseconds()
 		}
 		if !quiet {
-			fmt.Println("  ✓ Hugo build complete")
+			fmt.Printf("  %s Hugo build complete\n", icons.Check)
 		}
 
 		publishDirPath := filepath.Join(sitePath, walgoCfg.HugoConfig.PublishDir)
 
-		// Get flags
 		noOptimize, err := cmd.Flags().GetBool("no-optimize")
 		if err != nil {
-			fmt.Fprintf(os.Stderr, "Error reading no-optimize flag: %v\n", err)
-			os.Exit(1)
+			return fmt.Errorf("error reading no-optimize flag: %w", err)
 		}
 
 		noCompress, err := cmd.Flags().GetBool("no-compress")
 		if err != nil {
-			fmt.Fprintf(os.Stderr, "Error reading no-compress flag: %v\n", err)
-			os.Exit(1)
+			return fmt.Errorf("error reading no-compress flag: %w", err)
 		}
 
 		verbose, err := cmd.Flags().GetBool("verbose")
 		if err != nil {
-			fmt.Fprintf(os.Stderr, "Error reading verbose flag: %v\n", err)
-			os.Exit(1)
+			return fmt.Errorf("error reading verbose flag: %w", err)
 		}
 
-		// Calculate step number
 		var currentStep int
 		if clean {
 			currentStep = 3
@@ -133,7 +121,6 @@ This command runs the 'hugo' command to generate static files typically into the
 			currentStep = 2
 		}
 
-		// Run optimization if enabled and --no-optimize flag is not set
 		if walgoCfg.OptimizerConfig.Enabled && !cmd.Flags().Changed("no-optimize") && !noOptimize {
 			if !quiet {
 				fmt.Printf("  [%d] Optimizing assets...\n", currentStep)
@@ -148,15 +135,14 @@ This command runs the 'hugo' command to generate static files typically into the
 			}
 			if err != nil {
 				if !quiet {
-					fmt.Fprintf(os.Stderr, "  ⚠ Warning: Optimization failed: %v\n", err)
+					fmt.Fprintf(os.Stderr, "  %s Warning: Optimization failed: %v\n", icons.Warning, err)
 				}
 			} else if !quiet {
 				optimizerEngine.PrintStats(stats)
-				fmt.Println("  ✓ Optimization complete")
+				fmt.Printf("  %s Optimization complete\n", icons.Check)
 			}
 		}
 
-		// Run compression if enabled and --no-compress flag is not set
 		var compressionStats *compress.DirectoryCompressionStats
 		if walgoCfg.CompressConfig.Enabled && !noCompress {
 			if !quiet {
@@ -164,7 +150,6 @@ This command runs the 'hugo' command to generate static files typically into the
 			}
 			currentStep++
 
-			// Configure compression
 			compressConfig := compress.Config{
 				Enabled:        true,
 				BrotliLevel:    walgoCfg.CompressConfig.Level,
@@ -189,7 +174,7 @@ This command runs the 'hugo' command to generate static files typically into the
 			}
 			if err != nil {
 				if !quiet {
-					fmt.Fprintf(os.Stderr, "  ⚠ Warning: Compression failed: %v\n", err)
+					fmt.Fprintf(os.Stderr, "  %s Warning: Compression failed: %v\n", icons.Warning, err)
 				}
 			} else {
 				compressionStats = stats
@@ -199,18 +184,16 @@ This command runs the 'hugo' command to generate static files typically into the
 					} else {
 						stats.PrintSummary()
 					}
-					fmt.Println("  ✓ Compression complete")
+					fmt.Printf("  %s Compression complete\n", icons.Check)
 				}
 			}
 		}
 
-		// Generate ws-resources.json if enabled
 		if walgoCfg.CompressConfig.GenerateWSResources {
 			if !quiet {
 				fmt.Printf("  [%d] Generating ws-resources.json...\n", currentStep)
 			}
 
-			// Configure cache control
 			cacheConfig := compress.CacheControlConfig{
 				Enabled:         walgoCfg.CacheConfig.Enabled,
 				ImmutableMaxAge: walgoCfg.CacheConfig.ImmutableMaxAge,
@@ -224,37 +207,81 @@ This command runs the 'hugo' command to generate static files typically into the
 				cacheConfig.MutableMaxAge = 300 // 5 minutes default
 			}
 
-			// Add default immutable patterns if empty
 			if len(cacheConfig.ImmutablePatterns) == 0 {
 				cacheConfig.ImmutablePatterns = compress.DefaultCacheControlConfig().ImmutablePatterns
 			}
+			wsOptions := compress.WSResourcesOptions{
+				CompressionStats: compressionStats,
+				CacheConfig:      cacheConfig,
+				CustomRoutes:     walgoCfg.CompressConfig.CustomRoutes,
+				CustomIgnore:     walgoCfg.CompressConfig.IgnorePatterns,
+			}
+			pm, err := projects.NewManager()
+			if err != nil {
+				fmt.Fprintf(os.Stderr, "%s Warning: Failed to get project manager: %v\n", icons.Warning, err)
+				return fmt.Errorf("failed to get project manager: %w", err)
+			}
+			defer pm.Close()
+			project, err := pm.GetProjectBySitePath(sitePath)
+			if err != nil || project == nil {
+				if !quiet {
+					fmt.Fprintf(os.Stderr, "%s Warning: Project not found for path: %s (using defaults)\n", icons.Warning, publishDirPath)
+				}
+				// Use default values if project not found
+				wsOptions.SiteName = filepath.Base(sitePath)
+				wsOptions.Description = ""
+				wsOptions.ImageURL = ""
+				wsOptions.Link = compress.DefaultLink
+				wsOptions.ProjectURL = compress.DefaultProjectURL
+				wsOptions.Creator = compress.DefaultCreator
+				wsOptions.Category = ""
+			} else {
+				// Use project metadata if available
+				wsOptions.SiteName = project.Name
+				wsOptions.Description = project.Description
+				wsOptions.ImageURL = project.ImageURL
+				wsOptions.Link = compress.DefaultLink
+				wsOptions.ProjectURL = compress.DefaultProjectURL
+				wsOptions.Creator = compress.DefaultCreator
+				wsOptions.Category = project.Category
+			}
 
-			wsConfig, err := compress.GenerateWSResourcesConfig(publishDirPath, compressionStats, cacheConfig)
+			wsConfig, err := compress.GenerateWSResourcesConfig(publishDirPath, wsOptions)
 			if err != nil {
 				if !quiet {
-					fmt.Fprintf(os.Stderr, "  ⚠ Warning: Failed to generate ws-resources.json: %v\n", err)
+					fmt.Fprintf(os.Stderr, "  %s Warning: Failed to generate ws-resources.json: %v\n", icons.Warning, err)
 				}
 			} else {
 				outputPath := filepath.Join(publishDirPath, "ws-resources.json")
 				if err := compress.WriteWSResourcesConfig(wsConfig, outputPath); err != nil {
 					if !quiet {
-						fmt.Fprintf(os.Stderr, "  ⚠ Warning: Failed to write ws-resources.json: %v\n", err)
+						fmt.Fprintf(os.Stderr, "  %s Warning: Failed to write ws-resources.json: %v\n", icons.Warning, err)
 					}
 				} else if !quiet {
-					fmt.Printf("  ✓ Generated ws-resources.json (%d resources)\n", len(wsConfig.Headers))
+					fmt.Printf("  %s Generated ws-resources.json (%d resources)\n", icons.Check, len(wsConfig.Headers))
 				}
 			}
 		}
 
-		// Mark build as successful
+		routes, err := compress.GenerateRoutesFromPublic(publishDirPath)
+		if err != nil {
+			if !quiet {
+				fmt.Fprintf(os.Stderr, "  %s Warning: Failed to generate routes: %v\n", icons.Warning, err)
+			}
+		} else {
+			compress.MergeRoutesIntoWSResources(filepath.Join(publishDirPath, "ws-resources.json"), routes)
+		}
+
 		success = true
 
 		if !quiet {
-			fmt.Printf("\n✅ Build complete! Output: %s\n", publishDirPath)
-			fmt.Printf("\n💡 Next steps:\n")
+			fmt.Printf("\n%s Build complete! Output: %s\n", icons.Success, publishDirPath)
+			fmt.Printf("\n%s Next steps:\n", icons.Lightbulb)
 			fmt.Printf("  - Preview: walgo serve\n")
-			fmt.Printf("  - Deploy: walgo deploy --epochs 1\n")
+			fmt.Printf("  - Deploy:  walgo launch\n")
 		}
+
+		return nil
 	},
 }
 

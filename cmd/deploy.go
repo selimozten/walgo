@@ -7,16 +7,17 @@ import (
 	"path/filepath"
 	"time"
 
-	"walgo/internal/cache"
-	"walgo/internal/config"
-	"walgo/internal/deployer"
-	sb "walgo/internal/deployer/sitebuilder"
-	"walgo/internal/metrics"
+	"github.com/selimozten/walgo/internal/config"
+	"github.com/selimozten/walgo/internal/deployment"
+	"github.com/selimozten/walgo/internal/metrics"
+	"github.com/selimozten/walgo/internal/projects"
+	"github.com/selimozten/walgo/internal/sui"
+	"github.com/selimozten/walgo/internal/ui"
+	"github.com/selimozten/walgo/internal/version"
 
 	"github.com/spf13/cobra"
 )
 
-// deployCmd represents the deploy command
 var deployCmd = &cobra.Command{
 	Use:   "deploy",
 	Short: "Deploy your Hugo site to Walrus Sites.",
@@ -28,10 +29,9 @@ After deployment, you'll receive an object ID that you can use to access
 your site and configure domain names.
 
 Example: walgo deploy --epochs 5`,
-	Run: func(cmd *cobra.Command, args []string) {
+	RunE: func(cmd *cobra.Command, args []string) error {
 		quiet, _ := cmd.Flags().GetBool("quiet")
 
-		// Initialize telemetry if enabled
 		telemetry, _ := cmd.Flags().GetBool("telemetry")
 		var collector *metrics.Collector
 		var startTime time.Time
@@ -47,175 +47,160 @@ Example: walgo deploy --epochs 5`,
 			}()
 		}
 
-		// Get current working directory
+		icons := ui.GetIcons()
+
 		sitePath, err := os.Getwd()
 		if err != nil {
-			fmt.Fprintf(os.Stderr, "❌ Error: Cannot determine current directory: %v\n", err)
-			os.Exit(1)
+			fmt.Fprintf(os.Stderr, "%s Error: Cannot determine current directory: %v\n", icons.Error, err)
+			return fmt.Errorf("error getting current directory: %w", err)
 		}
 
-		// Load Walgo configuration
 		walgoCfg, err := config.LoadConfig()
 		if err != nil {
-			fmt.Fprintf(os.Stderr, "❌ Error: %v\n", err)
-			fmt.Fprintf(os.Stderr, "\n💡 Tip: Run 'walgo init <site-name>' to create a new site\n")
-			os.Exit(1)
+			fmt.Fprintf(os.Stderr, "%s Error: %v\n", icons.Error, err)
+			fmt.Fprintf(os.Stderr, "\n%s Tip: Run 'walgo init <site-name>' to create a new site\n", icons.Lightbulb)
+			return fmt.Errorf("error loading config: %w", err)
 		}
 
-		// Get flags
-		epochs, err := cmd.Flags().GetInt("epochs")
-		if err != nil {
-			fmt.Fprintf(os.Stderr, "Error reading epochs flag: %v\n", err)
-			os.Exit(1)
-		}
-		force, err := cmd.Flags().GetBool("force")
-		if err != nil {
-			fmt.Fprintf(os.Stderr, "Error reading force flag: %v\n", err)
-			os.Exit(1)
-		}
-		verbose, err := cmd.Flags().GetBool("verbose")
-		if err != nil {
-			fmt.Fprintf(os.Stderr, "Error reading verbose flag: %v\n", err)
-			os.Exit(1)
+		epochs, _ := cmd.Flags().GetInt("epochs")
+		force, _ := cmd.Flags().GetBool("force")
+		verbose, _ := cmd.Flags().GetBool("verbose")
+		dryRun, _ := cmd.Flags().GetBool("dry-run")
+		forceNew, _ := cmd.Flags().GetBool("force-new")
+		skipVersionCheck, _ := cmd.Flags().GetBool("skip-version-check")
+		saveProject, _ := cmd.Flags().GetBool("save-project")
+		projectName, _ := cmd.Flags().GetString("project-name")
+		category, _ := cmd.Flags().GetString("category")
+		description, _ := cmd.Flags().GetString("description")
+		imageURL, _ := cmd.Flags().GetString("image-url")
+
+		// Check if project should be saved and validate project name
+		if saveProject || projectName != "" {
+			// Determine project name
+			if projectName == "" {
+				projectName = filepath.Base(sitePath)
+				if projectName == "" || projectName == "." || projectName == "/" {
+					projectName = "my-walgo-site"
+				}
+			}
+
+			// Check if project name already exists
+			pm, err := projects.NewManager()
+			if err == nil {
+				defer pm.Close()
+				exists, err := pm.ProjectNameExists(projectName)
+				if err == nil && exists {
+					return fmt.Errorf("project name '%s' already exists. Use 'walgo projects' to view existing projects or choose a different name with --project-name", projectName)
+				}
+			}
 		}
 
-		// Prepare deployer
-		d := sb.New()
-
-		// Check if public directory exists
 		publishDir := filepath.Join(sitePath, walgoCfg.HugoConfig.PublishDir)
 		if _, err := os.Stat(publishDir); os.IsNotExist(err) {
-			fmt.Fprintf(os.Stderr, "❌ Error: Build directory '%s' not found\n\n", publishDir)
-			fmt.Fprintf(os.Stderr, "💡 Run this first:\n")
+			fmt.Fprintf(os.Stderr, "%s Error: Build directory '%s' not found\n\n", icons.Error, publishDir)
+			fmt.Fprintf(os.Stderr, "%s Run this first:\n", icons.Lightbulb)
 			fmt.Fprintf(os.Stderr, "   walgo build\n")
 			if !force {
-				os.Exit(1)
+				return fmt.Errorf("publish directory not found: %s", publishDir)
 			}
 		}
 
 		if !quiet {
-			fmt.Println("🚀 Deploying to Walrus Sites...")
-			fmt.Println("  [1/4] Checking environment...")
+			fmt.Printf("%s Deploying to Walrus Sites...\n", icons.Rocket)
+			fmt.Println("  [1/5] Verifying site...")
 		}
 
-		// Initialize cache helper
-		cacheHelper, err := cache.NewDeployHelper(sitePath)
-		if err != nil {
-			if !quiet {
-				fmt.Fprintf(os.Stderr, "⚠️  Warning: Cache initialization failed: %v\n", err)
-				fmt.Fprintf(os.Stderr, "  Continuing without incremental build optimization...\n")
-			}
-		} else {
-			defer cacheHelper.Close()
-		}
-
-		// Check for dry-run mode
-		dryRun, err := cmd.Flags().GetBool("dry-run")
-		if err != nil {
-			fmt.Fprintf(os.Stderr, "Error reading dry-run flag: %v\n", err)
-			os.Exit(1)
-		}
-
-		// Prepare deployment plan
-		if cacheHelper != nil && !quiet {
-			fmt.Println("  [2/4] Analyzing changes...")
-			plan, err := cacheHelper.PrepareDeployment(publishDir)
-			if err != nil {
-				fmt.Fprintf(os.Stderr, "⚠️  Warning: Failed to analyze changes: %v\n", err)
-			} else {
-				if telemetry {
-					deployMetrics.TotalFiles = plan.TotalFiles
-					if plan.ChangeSet != nil {
-						deployMetrics.ChangedFiles = len(plan.ChangeSet.Added) + len(plan.ChangeSet.Modified)
-					}
-				}
-
-				if verbose {
-					plan.PrintVerboseSummary()
-				} else {
-					plan.PrintSummary()
-				}
-
-				// If dry-run, stop here
-				if dryRun {
-					fmt.Println("\n🔍 Dry-run mode: No files will be uploaded")
-					fmt.Println("✅ Deployment plan complete!")
-					fmt.Printf("\n💡 To actually deploy, run without --dry-run flag\n")
-					os.Exit(0)
-				}
-			}
-		} else if dryRun && !quiet {
-			// No cache helper but dry-run requested
-			fmt.Println("\n⚠️  Note: Dry-run without cache - cannot show file-level changes")
-			fmt.Printf("🔍 Would deploy all files in: %s\n", publishDir)
-			fmt.Println("\n💡 To see detailed changes, ensure cache is enabled")
-			os.Exit(0)
-		}
-
-		// Deploy the site via adapter interface
 		if !quiet {
-			if cacheHelper != nil {
-				fmt.Println("  [3/4] Uploading site...")
-			} else {
-				fmt.Println("  [2/3] Uploading site...")
+			fmt.Println("  [2/5] Checking environment...")
+		}
+		if !skipVersionCheck {
+			if err := version.CheckAndUpdateVersions(quiet); err != nil && !quiet {
+				fmt.Fprintf(os.Stderr, "%s Warning: Version check failed: %v\n", icons.Warning, err)
+				fmt.Fprintf(os.Stderr, "  Continuing with deployment...\n")
 			}
 		}
-		uploadStart := time.Now()
+
+		opts := deployment.DeploymentOptions{
+			SitePath:    sitePath,
+			PublishDir:  publishDir,
+			Epochs:      epochs,
+			WalgoCfg:    walgoCfg,
+			Quiet:       quiet,
+			Verbose:     verbose,
+			ForceNew:    forceNew,
+			DryRun:      dryRun,
+			SaveProject: saveProject || cmd.Flags().Changed("project-name"),
+			ProjectName: projectName,
+			Category:    category,
+			Description: description,
+			ImageURL:    imageURL,
+		}
+
 		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Minute)
 		defer cancel()
-		output, err := d.Deploy(ctx, publishDir, deployer.DeployOptions{Epochs: epochs, Verbose: verbose && !quiet, WalrusCfg: walgoCfg.WalrusConfig})
-		if telemetry {
-			deployMetrics.UploadDuration = time.Since(uploadStart).Milliseconds()
-		}
+
+		result, err := deployment.PerformDeployment(ctx, opts)
 		if err != nil {
-			fmt.Fprintf(os.Stderr, "\n❌ Deployment failed: %v\n\n", err)
-			fmt.Fprintf(os.Stderr, "💡 Troubleshooting:\n")
-			fmt.Fprintf(os.Stderr, "  - Check setup: walgo doctor\n")
-			fmt.Fprintf(os.Stderr, "  - Verify wallet: sui client active-address\n")
-			fmt.Fprintf(os.Stderr, "  - Check gas: sui client gas\n")
-			fmt.Fprintf(os.Stderr, "  - Try HTTP deploy: walgo deploy-http --help\n")
-			os.Exit(1)
+			fmt.Fprintf(os.Stderr, "\nDeployment failed: %v\n", err)
+			return fmt.Errorf("deployment failed: %w", err)
 		}
 
-		if output.Success && output.ObjectID != "" {
-			// Mark deployment as successful
-			success = true
+		success = result.Success
+		if telemetry {
+			deployMetrics.TotalFiles = 0
+			deployMetrics.ChangedFiles = 0
+			deployMetrics.UploadDuration = 0
+		}
 
-			// Update cache with deployment info
-			if cacheHelper != nil {
-				if !quiet {
-					if cacheHelper != nil {
-						fmt.Println("  [4/4] Updating cache...")
-					} else {
-						fmt.Println("  [3/3] Confirming deployment...")
-					}
-				}
-
-				err := cacheHelper.FinalizeDeployment(publishDir, output.ObjectID, output.ObjectID, output.FileToBlobID)
-				if err != nil && !quiet {
-					fmt.Fprintf(os.Stderr, "⚠️  Warning: Failed to update cache: %v\n", err)
-				} else if !quiet {
-					fmt.Println("  ✓ Cache updated")
-				}
-			} else if !quiet {
-				fmt.Println("  [3/3] Confirming deployment...")
-			}
-
-			if !quiet {
-				fmt.Println("  ✓ Deployment confirmed")
-				fmt.Printf("\n🎉 Deployment successful!\n\n")
-				fmt.Printf("📋 Site Object ID: %s\n", output.ObjectID)
-				fmt.Printf("\n💡 Next steps:\n")
-				fmt.Printf("1. Update walgo.yaml with this Object ID:\n")
-				fmt.Printf("   walrus:\n")
-				fmt.Printf("     projectID: \"%s\"\n", output.ObjectID)
-				fmt.Printf("\n2. Configure a domain: walgo domain <your-domain>\n")
-				fmt.Printf("3. Check status: walgo status\n")
+		if !quiet {
+			fmt.Println()
+			if result.IsUpdate {
+				ui.PrintBox(icons.Success + " Site Updated Successfully!")
 			} else {
-				// In quiet mode, just output the object ID for parsing by quickstart
-				fmt.Printf("Site Object ID: %s\n", output.ObjectID)
+				ui.PrintBox(icons.Celebrate + " Deployment Successful!")
 			}
+			fmt.Println()
+			fmt.Printf("%s Site Object ID: %s\n", icons.File, result.ObjectID)
+			fmt.Println()
+
+			network, err := sui.GetActiveEnv()
+			if err != nil {
+				fmt.Fprintf(os.Stderr, "%s Warning: Failed to get active network: %v\n", icons.Warning, err)
+				network = "testnet"
+			}
+
+			// Show explorer links
+			ui.PrintHeader(icons.Link, "View Your Object on the Sui Network")
+			fmt.Println()
+			suiscanURL := sui.GetSuiscanURL(network, result.ObjectID)
+			suivisionURL := sui.GetSuivisionURL(network, result.ObjectID)
+			fmt.Printf("   • Suiscan:    %s\n", suiscanURL)
+			fmt.Printf("   • Suivision:  %s\n", suivisionURL)
+			fmt.Println()
+
+			// Show SuiNS configuration instructions
+			ui.PrintHeader(icons.Globe, "Next: Configure SuiNS for Public Access")
+			fmt.Println()
+			if network == "mainnet" {
+				fmt.Printf("   1. Visit: https://suins.io\n")
+				fmt.Printf("   2. Connect wallet & purchase domain\n")
+				fmt.Printf("   3. Select 'Link To Walrus Site'\n")
+				fmt.Printf("   4. Enter Object ID: %s\n", result.ObjectID)
+				fmt.Printf("   5. Access at: https://your-domain.wal.app\n")
+				fmt.Println()
+			}
+
+			commands := map[string]string{
+				"walgo status":   "Check deployment status",
+				"walgo update":   "Update your site",
+				"walgo projects": "View all projects",
+			}
+			ui.PrintCommands("Useful Commands", commands)
+		} else {
+			fmt.Printf("Site Object ID: %s\n", result.ObjectID)
 		}
+
+		return nil
 	},
 }
 
@@ -228,4 +213,11 @@ func init() {
 	deployCmd.Flags().BoolP("quiet", "q", false, "Suppress output (used internally by quickstart)")
 	deployCmd.Flags().Bool("dry-run", false, "Preview deployment plan without actually deploying")
 	deployCmd.Flags().Bool("telemetry", false, "Record deployment metrics to local JSON file (~/.walgo/metrics.json)")
+	deployCmd.Flags().Bool("skip-version-check", false, "Skip version checking and updating (not recommended for mainnet)")
+	deployCmd.Flags().Bool("save-project", false, "Save deployment as a project with default name (directory name)")
+	deployCmd.Flags().String("project-name", "", "Custom project name (default: directory name)")
+	deployCmd.Flags().String("category", "", "Project category (default: website)")
+	deployCmd.Flags().String("description", "", "Site description for metadata")
+	deployCmd.Flags().String("image-url", "", "Site image URL for metadata")
+	deployCmd.Flags().Bool("force-new", false, "Force deployment as new site (ignore existing objectID)")
 }

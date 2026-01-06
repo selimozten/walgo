@@ -73,7 +73,6 @@ docker run --rm -v $(pwd):/workspace -w /workspace walgo init my-site
 
 ### Management Commands  
 - `walgo status` - Check site resources and storage status
-- `walgo convert` - Convert object IDs to Base36 format
 - `walgo domain` - SuiNS domain configuration guidance
 - `walgo setup` - Configure site-builder for Walrus deployment
 

@@ -7,6 +7,8 @@ import (
 	"path/filepath"
 	"strings"
 	"time"
+
+	"github.com/selimozten/walgo/internal/ui"
 )
 
 // Engine is the main optimization engine
@@ -251,8 +253,9 @@ func (e *Engine) calculateStats(stats *OptimizationStats) {
 
 // PrintStats prints optimization statistics
 func (e *Engine) PrintStats(stats *OptimizationStats) {
-	fmt.Println("\n🎯 Optimization Results")
-	fmt.Println("======================")
+	icons := ui.GetIcons()
+	fmt.Printf("\n%s Optimization Results\n", icons.Sparkles)
+	fmt.Println(ui.Separator())
 	fmt.Printf("Files processed: %d\n", stats.FilesProcessed)
 	fmt.Printf("Files optimized: %d\n", stats.FilesOptimized)
 	fmt.Printf("Files skipped: %d\n", stats.FilesSkipped)
@@ -260,14 +263,14 @@ func (e *Engine) PrintStats(stats *OptimizationStats) {
 	fmt.Printf("Duration: %v\n", stats.Duration)
 
 	if stats.OriginalSize > 0 {
-		fmt.Printf("\n📊 Size Reduction\n")
+		fmt.Printf("\n%s Size Reduction\n", icons.Chart)
 		fmt.Printf("Original size: %s\n", formatBytes(stats.OriginalSize))
 		fmt.Printf("Optimized size: %s\n", formatBytes(stats.OptimizedSize))
 		fmt.Printf("Bytes saved: %s (%.1f%%)\n", formatBytes(stats.SavingsBytes), stats.SavingsPercent)
 	}
 
 	if stats.HTMLFiles.FilesProcessed > 0 {
-		fmt.Printf("\n📄 HTML Files\n")
+		fmt.Printf("\n%s HTML Files\n", icons.File)
 		fmt.Printf("Files: %d, Saved: %s (%.1f%%)\n",
 			stats.HTMLFiles.FilesProcessed,
 			formatBytes(stats.HTMLFiles.SavingsBytes),
@@ -275,7 +278,7 @@ func (e *Engine) PrintStats(stats *OptimizationStats) {
 	}
 
 	if stats.CSSFiles.FilesProcessed > 0 {
-		fmt.Printf("\n🎨 CSS Files\n")
+		fmt.Printf("\n%s CSS Files\n", icons.File)
 		fmt.Printf("Files: %d, Saved: %s (%.1f%%)\n",
 			stats.CSSFiles.FilesProcessed,
 			formatBytes(stats.CSSFiles.SavingsBytes),
@@ -286,7 +289,7 @@ func (e *Engine) PrintStats(stats *OptimizationStats) {
 	}
 
 	if stats.JSFiles.FilesProcessed > 0 {
-		fmt.Printf("\n📜 JavaScript Files\n")
+		fmt.Printf("\n%s JavaScript Files\n", icons.File)
 		fmt.Printf("Files: %d, Saved: %s (%.1f%%)\n",
 			stats.JSFiles.FilesProcessed,
 			formatBytes(stats.JSFiles.SavingsBytes),

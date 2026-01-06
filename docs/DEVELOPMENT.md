@@ -118,7 +118,6 @@ walgo/
 │   ├── doctor.go           # walgo doctor
 │   ├── serve.go            # walgo serve
 │   ├── domain.go           # walgo domain
-│   ├── convert.go          # walgo convert
 │   ├── version.go          # walgo version
 │   └── *_test.go           # Command tests
 │

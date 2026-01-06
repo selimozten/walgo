@@ -8,7 +8,8 @@ import (
 	"strings"
 	"time"
 
-	"walgo/internal/config"
+	"github.com/selimozten/walgo/internal/config"
+	"github.com/selimozten/walgo/internal/ui"
 )
 
 // LinkStyle determines how wikilinks are converted
@@ -19,24 +20,15 @@ const (
 	LinkStyleRelref LinkStyle = "relref"
 	// LinkStyleMarkdown uses plain markdown links (permissive, works even if target missing)
 	LinkStyleMarkdown LinkStyle = "markdown"
+
+	// defaultLinkStyle is the default link conversion style
+	// Using markdown by default to avoid REF_NOT_FOUND errors
+	defaultLinkStyle LinkStyle = LinkStyleMarkdown
 )
-
-// DefaultLinkStyle is the default link conversion style
-// Using markdown by default to avoid REF_NOT_FOUND errors
-var DefaultLinkStyle = LinkStyleMarkdown
-
-// convertWikilinksEnhanced converts Obsidian [[wikilinks]] with enhanced support for:
-// - Aliases: [[link|display text]]
-// - Headings: [[note#heading]]
-// - Blocks: [[note^block-id]]
-// - Transclusions: ![[note]] or ![[note#heading]]
-func convertWikilinksEnhanced(content, attachmentDir string) string {
-	return convertWikilinksWithStyle(content, attachmentDir, DefaultLinkStyle)
-}
 
 // ConvertWikilinksWithConfig converts wikilinks using the config's link style setting
 func ConvertWikilinksWithConfig(content, attachmentDir, linkStyleStr string) string {
-	style := DefaultLinkStyle
+	style := defaultLinkStyle
 	if linkStyleStr == "relref" {
 		style = LinkStyleRelref
 	}
@@ -81,7 +73,8 @@ func convertWikilinksWithStyle(content, attachmentDir string, style LinkStyle) s
 
 	content = wikilinkRegex.ReplaceAllStringFunc(content, func(match string) string {
 		submatch := wikilinkRegex.FindStringSubmatch(match)
-		if len(submatch) < 2 {
+		// Validate submatch length (5 groups + full match = 6)
+		if len(submatch) < 6 {
 			return match
 		}
 
@@ -90,18 +83,15 @@ func convertWikilinksWithStyle(content, attachmentDir string, style LinkStyle) s
 		blockID := ""
 		displayText := target
 
-		// Extract heading if present (#heading)
-		if len(submatch) > 2 && submatch[2] != "" {
+		if submatch[2] != "" {
 			heading = strings.TrimSpace(strings.TrimPrefix(submatch[2], "#"))
 		}
 
-		// Extract block ID if present (^block-id)
-		if len(submatch) > 3 && submatch[3] != "" {
+		if submatch[3] != "" {
 			blockID = strings.TrimSpace(strings.TrimPrefix(submatch[3], "^"))
 		}
 
-		// Use custom display text if provided (|text)
-		if len(submatch) >= 6 && submatch[5] != "" {
+		if submatch[5] != "" {
 			displayText = strings.TrimSpace(submatch[5])
 		} else if heading != "" {
 			displayText = fmt.Sprintf("%s - %s", target, heading)
@@ -347,12 +337,13 @@ func DryRunImport(vaultPath, hugoContentDir string, cfg config.ObsidianConfig) (
 
 // PrintDryRunStats prints dry-run statistics
 func (s *DryRunStats) PrintSummary() {
-	fmt.Println("\n🔍 Dry-run Import Summary:")
+	icons := ui.GetIcons()
+	fmt.Printf("\n%s Dry-run Import Summary:\n", icons.Info)
 	fmt.Printf("  Total files found: %d (%.2f MB)\n", s.TotalFiles, float64(s.EstimatedSize)/(1024*1024))
-	fmt.Printf("  📝 Markdown files: %d\n", s.MarkdownFiles)
-	fmt.Printf("  📎 Attachments: %d\n", s.Attachments)
-	fmt.Printf("  ⏭️  Would skip: %d\n", s.WouldSkip)
-	fmt.Printf("\n  🔗 Wikilinks found: %d\n", s.WikilinksFound)
-	fmt.Printf("  📋 Transclusions found: %d\n", s.TransclusionsFound)
-	fmt.Printf("\n✅ Would process %d files\n", s.WouldProcess)
+	fmt.Printf("  %s Markdown files: %d\n", icons.File, s.MarkdownFiles)
+	fmt.Printf("  %s Attachments: %d\n", icons.Package, s.Attachments)
+	fmt.Printf("  %s Would skip: %d\n", icons.Cross, s.WouldSkip)
+	fmt.Printf("\n  %s Wikilinks found: %d\n", icons.Book, s.WikilinksFound)
+	fmt.Printf("  %s Transclusions found: %d\n", icons.Book, s.TransclusionsFound)
+	fmt.Printf("\n%s Would process %d files\n", icons.Check, s.WouldProcess)
 }

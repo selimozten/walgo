@@ -83,7 +83,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Improved `init` guidance to show HTTP vs on-chain deployment options.
 
 ### Fixed
-- `convert` command now parses Base36 cleanly even when `site-builder` prints log lines; outputs proper Base36 IDs and URLs.
 - Fixed ineffectual assignment in build command step counter
 - Replaced deprecated `filepath.HasPrefix` with `strings.HasPrefix`
 - Fixed unhandled errors in compression and cache cleanup paths

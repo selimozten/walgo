@@ -13,8 +13,8 @@ import (
 	"testing"
 	"time"
 
-	"walgo/internal/config"
-	"walgo/internal/deployer"
+	"github.com/selimozten/walgo/internal/config"
+	"github.com/selimozten/walgo/internal/deployer"
 )
 
 func TestUpdate(t *testing.T) {

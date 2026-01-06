@@ -1,6 +1,6 @@
 package config
 
-import "walgo/internal/optimizer"
+import "github.com/selimozten/walgo/internal/optimizer"
 
 // WalgoConfig is the top-level configuration for Walgo.
 // It will be stored in walgo.yaml in the site root.
@@ -11,7 +11,7 @@ type WalgoConfig struct {
 	OptimizerConfig optimizer.OptimizerConfig `mapstructure:"optimizer" yaml:"optimizer,omitempty"`
 	CompressConfig  CompressConfig            `mapstructure:"compress" yaml:"compress,omitempty"`
 	CacheConfig     CacheConfig               `mapstructure:"cache" yaml:"cache,omitempty"`
-	// Future: Additional integrations
+	// Note: AI credentials are stored in ~/.walgo/ai-credentials.yaml, not in walgo.yaml
 }
 
 // HugoConfig holds Hugo-specific settings relevant to Walgo.
@@ -31,7 +31,10 @@ type WalrusConfig struct {
 	BucketName  string `mapstructure:"bucketName" yaml:"bucketName,omitempty"`   // Optional: specific bucket if not default
 	Entrypoint  string `mapstructure:"entrypoint" yaml:"entrypoint,omitempty"`   // Default: "index.html"
 	SuiNSDomain string `mapstructure:"suinsDomain" yaml:"suinsDomain,omitempty"` // SuiNS domain to associate
-	// Future: API keys, access tokens (consider secure storage/env vars)
+
+	// Network selection (testnet or mainnet)
+	// Gas budget is managed in ~/.config/walrus/sites-config.yaml
+	Network string `mapstructure:"network" yaml:"network,omitempty"` // Default: testnet
 }
 
 // ObsidianConfig holds settings for importing from Obsidian vaults.
@@ -46,9 +49,11 @@ type ObsidianConfig struct {
 
 // CompressConfig holds settings for Brotli compression
 type CompressConfig struct {
-	Enabled             bool `mapstructure:"enabled" yaml:"enabled"`                         // Enable compression
-	Level               int  `mapstructure:"level" yaml:"level,omitempty"`                   // Brotli level 0-11, default: 6
-	GenerateWSResources bool `mapstructure:"generateWSResources" yaml:"generateWSResources"` // Generate ws-resources.json
+	Enabled             bool              `mapstructure:"enabled" yaml:"enabled"`                         // Enable compression
+	Level               int               `mapstructure:"level" yaml:"level,omitempty"`                   // Brotli level 0-11, default: 6
+	GenerateWSResources bool              `mapstructure:"generateWSResources" yaml:"generateWSResources"` // Generate ws-resources.json
+	CustomRoutes        map[string]string `mapstructure:"customRoutes" yaml:"customRoutes,omitempty"`     // Custom route mappings for ws-resources.json
+	IgnorePatterns      []string          `mapstructure:"ignorePatterns" yaml:"ignorePatterns,omitempty"` // Additional files/folders to ignore during upload
 }
 
 // CacheConfig holds settings for caching and cache-control headers
@@ -77,8 +82,8 @@ func NewDefaultWalgoConfig() WalgoConfig {
 		},
 		OptimizerConfig: optimizer.NewDefaultOptimizerConfig(),
 		CompressConfig: CompressConfig{
-			Enabled:             true,
-			Level:               6, // Balanced compression
+			Enabled:             false, // Disabled by default during build, enabled during deploy
+			Level:               6,     // Balanced compression
 			GenerateWSResources: true,
 		},
 		CacheConfig: CacheConfig{

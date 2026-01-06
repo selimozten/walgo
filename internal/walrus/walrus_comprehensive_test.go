@@ -1,14 +1,14 @@
 package walrus
 
 import (
+	"context"
 	"fmt"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"strings"
 	"testing"
 
-	"walgo/internal/config"
+	"github.com/selimozten/walgo/internal/config"
 )
 
 func TestSetVerbose(t *testing.T) {
@@ -329,52 +329,6 @@ Invalid object ID`,
 	}
 }
 
-func TestConvertObjectIDComprehensive(t *testing.T) {
-	// Check if site-builder is available
-	if _, err := exec.LookPath("site-builder"); err != nil {
-		t.Skip("site-builder not installed, skipping ConvertObjectID tests")
-	}
-
-	tests := []struct {
-		name     string
-		objectID string
-		wantErr  bool
-	}{
-		{
-			name:     "Valid object ID",
-			objectID: "0x123abc",
-			wantErr:  false,
-		},
-		{
-			name:     "Empty object ID",
-			objectID: "",
-			wantErr:  true,
-		},
-		{
-			name:     "Invalid format",
-			objectID: "invalid-id",
-			wantErr:  true, // site-builder returns error for invalid format
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			result, err := ConvertObjectID(tt.objectID)
-
-			if (err != nil) != tt.wantErr {
-				t.Errorf("ConvertObjectID() error = %v, wantErr %v", err, tt.wantErr)
-			}
-
-			if !tt.wantErr && result != "" {
-				// Check that result is a valid base36 ID (non-empty)
-				if tt.objectID != "" && result == "" {
-					t.Error("Expected non-empty base36 ID result")
-				}
-			}
-		})
-	}
-}
-
 func TestParseSiteBuilderOutputComprehensive(t *testing.T) {
 	t.Skip("Site builder output parser needs enhancement to handle varied output formats")
 	tests := []struct {
@@ -471,7 +425,7 @@ func TestDeploymentFlow(t *testing.T) {
 		}
 
 		// This will fail without site-builder but tests parameter handling
-		result, err := DeploySite("/tmp/test-site", cfg, 1)
+		result, err := DeploySite(context.Background(), "/tmp/test-site", cfg, 1)
 
 		if err == nil {
 			t.Log("Deploy succeeded (site-builder available)")
@@ -488,7 +442,7 @@ func TestDeploymentFlow(t *testing.T) {
 
 	t.Run("Update with all parameters", func(t *testing.T) {
 		// This will fail without site-builder but tests parameter handling
-		result, err := UpdateSite("/tmp/test-site", "0x123abc", 1)
+		result, err := UpdateSite(context.Background(), "/tmp/test-site", "0x123abc", 1)
 
 		if err == nil {
 			t.Log("Update succeeded (site-builder available)")
@@ -526,14 +480,14 @@ func TestErrorScenarios(t *testing.T) {
 			ProjectID: "test",
 		}
 
-		_, err := DeploySite("", cfg, 1)
+		_, err := DeploySite(context.Background(), "", cfg, 1)
 		if err == nil {
 			t.Error("Expected error for empty directory")
 		}
 	})
 
 	t.Run("Update with empty object ID", func(t *testing.T) {
-		_, err := UpdateSite("/tmp/test", "", 1)
+		_, err := UpdateSite(context.Background(), "/tmp/test", "", 1)
 		if err == nil {
 			t.Error("Expected error for empty object ID")
 		}
@@ -546,12 +500,6 @@ func TestErrorScenarios(t *testing.T) {
 		}
 	})
 
-	t.Run("Convert empty object ID", func(t *testing.T) {
-		_, err := ConvertObjectID("")
-		if err == nil {
-			t.Error("Expected error for empty object ID")
-		}
-	})
 }
 
 func TestVerboseOutput(t *testing.T) {
@@ -565,7 +513,7 @@ func TestVerboseOutput(t *testing.T) {
 		}
 
 		// Capture output to verify verbose messages
-		_, _ = DeploySite("/tmp/verbose-test", cfg, 1)
+		_, _ = DeploySite(context.Background(), "/tmp/verbose-test", cfg, 1)
 		// Output would be verbose
 	})
 
@@ -578,7 +526,7 @@ func TestVerboseOutput(t *testing.T) {
 		}
 
 		// Capture output to verify non-verbose
-		_, _ = DeploySite("/tmp/quiet-test", cfg, 1)
+		_, _ = DeploySite(context.Background(), "/tmp/quiet-test", cfg, 1)
 		// Output would be quiet
 	})
 }

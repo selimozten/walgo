@@ -68,3 +68,6 @@ test-blog/
 # Temporary files
 .tmp/
 *.tmp
+
+# AI conversation history
+.walgo/ai-history/

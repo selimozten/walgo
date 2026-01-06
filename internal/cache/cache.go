@@ -29,8 +29,8 @@ func NewManager(siteRoot string) (*Manager, error) {
 	cacheDir := filepath.Join(siteRoot, CacheDir)
 
 	// Create cache directory if it doesn't exist
-	// #nosec G301 - cache directory needs standard permissions
-	if err := os.MkdirAll(cacheDir, 0755); err != nil {
+	// Use 0700 to restrict access to owner only (contains deployment metadata)
+	if err := os.MkdirAll(cacheDir, 0700); err != nil {
 		return nil, fmt.Errorf("failed to create cache directory: %w", err)
 	}
 

@@ -2,7 +2,7 @@ package deployer
 
 import (
 	"context"
-	"walgo/internal/config"
+	"github.com/selimozten/walgo/internal/config"
 )
 
 // Result captures the outcome of a deployment/update/status operation.
@@ -37,4 +37,5 @@ type WalrusDeployer interface {
 	Deploy(ctx context.Context, siteDir string, opts DeployOptions) (*Result, error)
 	Update(ctx context.Context, siteDir string, objectID string, opts DeployOptions) (*Result, error)
 	Status(ctx context.Context, objectID string, opts DeployOptions) (*Result, error)
+	Destroy(ctx context.Context, objectID string) error
 }

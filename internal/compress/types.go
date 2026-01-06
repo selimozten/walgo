@@ -1,6 +1,10 @@
 package compress
 
-import "fmt"
+import (
+	"fmt"
+
+	"github.com/selimozten/walgo/internal/ui"
+)
 
 // CompressionResult holds the result of compressing a single file
 type CompressionResult struct {
@@ -24,21 +28,22 @@ type DirectoryCompressionStats struct {
 
 // PrintSummary prints a human-readable summary of compression stats
 func (s *DirectoryCompressionStats) PrintSummary() {
+	icons := ui.GetIcons()
 	total := s.Compressed + s.NotWorthCompressing + s.Skipped
 
-	fmt.Println("\n📦 Compression Summary:")
+	fmt.Printf("\n%s Compression Summary:\n", icons.Package)
 	fmt.Printf("  Total files processed: %d\n", total)
-	fmt.Printf("  ✅ Compressed: %d\n", s.Compressed)
-	fmt.Printf("  ⏭️  Skipped (already optimal): %d\n", s.NotWorthCompressing)
-	fmt.Printf("  🚫 Skipped (binary/media): %d\n", s.Skipped)
+	fmt.Printf("  %s Compressed: %d\n", icons.Success, s.Compressed)
+	fmt.Printf("  %s Skipped (already optimal): %d\n", icons.Arrow, s.NotWorthCompressing)
+	fmt.Printf("  %s Skipped (binary/media): %d\n", icons.Cross, s.Skipped)
 
 	if s.Errors > 0 {
-		fmt.Printf("  ❌ Errors: %d\n", s.Errors)
+		fmt.Printf("  %s Errors: %d\n", icons.Error, s.Errors)
 	}
 
-	fmt.Printf("\n  💾 Original size: %.2f MB\n", float64(s.TotalOriginalSize)/(1024*1024))
-	fmt.Printf("  📦 Compressed size: %.2f MB\n", float64(s.TotalCompressedSize)/(1024*1024))
-	fmt.Printf("  💰 Total savings: %.1f%% (%.2f MB)\n",
+	fmt.Printf("\n  %s Original size: %.2f MB\n", icons.Database, float64(s.TotalOriginalSize)/(1024*1024))
+	fmt.Printf("  %s Compressed size: %.2f MB\n", icons.Package, float64(s.TotalCompressedSize)/(1024*1024))
+	fmt.Printf("  %s Total savings: %.1f%% (%.2f MB)\n", icons.Money,
 		s.OverallSavingsPercent,
 		float64(s.TotalOriginalSize-s.TotalCompressedSize)/(1024*1024))
 }
@@ -47,8 +52,9 @@ func (s *DirectoryCompressionStats) PrintSummary() {
 func (s *DirectoryCompressionStats) PrintVerboseSummary() {
 	s.PrintSummary()
 
+	icons := ui.GetIcons()
 	if len(s.Files) > 0 {
-		fmt.Println("\n  📄 File details:")
+		fmt.Printf("\n  %s File details:\n", icons.File)
 		count := 0
 		for path, result := range s.Files {
 			if count >= 20 { // Limit to first 20 files
@@ -57,10 +63,10 @@ func (s *DirectoryCompressionStats) PrintVerboseSummary() {
 			}
 
 			if result.Compressed {
-				fmt.Printf("    ✓ %s: %.1f%% savings (%.1f KB → %.1f KB)\n",
-					path,
+				fmt.Printf("    %s %s: %.1f%% savings (%.1f KB %s %.1f KB)\n",
+					icons.Check, path,
 					result.SavingsPercent,
-					float64(result.OriginalSize)/1024,
+					float64(result.OriginalSize)/1024, icons.Arrow,
 					float64(result.CompressedSize)/1024)
 			}
 			count++

@@ -2,62 +2,120 @@ package walrus
 
 import (
 	"bytes"
+	"context"
 	"fmt"
 	"io"
+	"net/http"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"regexp"
 	"strings"
+	"time"
 
-	"walgo/internal/config" // Used for WalrusConfig type
+	"github.com/selimozten/walgo/internal/config"
+	"github.com/selimozten/walgo/internal/deps"
+	"github.com/selimozten/walgo/internal/sui"
+	"github.com/selimozten/walgo/internal/ui"
 )
 
-// Walrus Interaction Strategy
-//
-// Primary Method: site-builder CLI
-// Walgo interacts with Walrus Sites by executing the official `site-builder` command-line tool.
-// This approach leverages the existing official tool dedicated to Walrus Sites operations.
-//
-// Expected `site-builder` CLI Command Structures (based on official documentation):
-// 1. Publishing a new site:
-//    `site-builder publish <directory> --epochs <number>`
-//
-// 2. Updating an existing site:
-//    `site-builder update --epochs <number> <directory> <object-id>`
-//
-// 3. Other commands available:
-//    - `site-builder convert <object-id>` - Convert hex to Base36 format
-//    - `site-builder sitemap <object-id>` - Show site resources
-//    - `site-builder list-directory <directory>` - Generate index.html preview
-//    - `site-builder destroy <object-id>` - Destroy site
-//
-// Authentication for `site-builder`:
-// The `site-builder` CLI handles its own authentication through:
-//   - Configuration file: `sites-config.yaml` (contains wallet paths, RPC URLs, package info)
-//   - Default location: `~/.config/walrus/` or specified via --config flag
-//   - Sui wallet authentication
-//
-// SuiNS domain management is handled separately through the SuiNS interface,
-// not directly through site-builder commands.
+// Package walrus provides integration with Walrus decentralized storage.
+// It wraps the official site-builder CLI for publishing, updating, and managing sites.
+// Authentication is handled via sites-config.yaml in ~/.config/walrus/
 
 const siteBuilderCmd = "site-builder"
 
-// Function variables for dependency injection in tests
+// TokenInfo represents information about a token type
+type TokenInfo struct {
+	Decimals    int    `json:"decimals"`
+	Name        string `json:"name"`
+	Symbol      string `json:"symbol"`
+	Description string `json:"description"`
+	IconURL     string `json:"iconUrl"`
+	ID          string `json:"id"`
+}
+
+// CoinBalance represents a coin balance
+type CoinBalance struct {
+	CoinType            string `json:"coinType"`
+	CoinObjectId        string `json:"coinObjectId"`
+	Version             string `json:"version"`
+	Digest              string `json:"digest"`
+	Balance             string `json:"balance"`
+	PreviousTransaction string `json:"previousTransaction"`
+}
+
+// BalanceEntry is an entry in the balance array containing token info and coins
+type BalanceEntry struct {
+	TokenInfo TokenInfo     `json:"-"`
+	Coins     []CoinBalance `json:"-"`
+}
+
+// WalletBalance represents the full wallet balance response
+type WalletBalance struct {
+	Entries []BalanceEntry
+	HasMore bool `json:"hasMore"`
+}
+
+// DefaultCommandTimeout is the maximum time allowed for site-builder operations
+// Deployments can take a while for large sites, so we use a generous timeout
+const DefaultCommandTimeout = 10 * time.Minute
+
+// Test hooks for dependency injection
 var (
-	execLookPath = exec.LookPath
+	execLookPath = deps.LookPath
 	execCommand  = exec.Command
 	verboseMode  = false
-	runPreflight = true // Can be disabled in tests
+	runPreflight = true
 	osStat       = os.Stat
 )
 
-// SetVerbose enables or disables verbose output
+// execCommandContext is a test hook for creating context-aware commands
+var execCommandContext = func(ctx context.Context, name string, args ...string) *exec.Cmd {
+	return exec.CommandContext(ctx, name, args...)
+}
+
+// runCommandWithTimeout executes a command with a timeout context
+// Returns stdout, stderr, and any error
+func runCommandWithTimeout(ctx context.Context, name string, args []string, streamOutput bool) (string, string, error) {
+	// Create timeout context if none provided
+	if ctx == nil {
+		var cancel context.CancelFunc
+		ctx, cancel = context.WithTimeout(context.Background(), DefaultCommandTimeout)
+		defer cancel()
+	}
+
+	cmd := execCommandContext(ctx, name, args...)
+	var stdout, stderr bytes.Buffer
+
+	if streamOutput {
+		// Stream output in real-time while also capturing it
+		cmd.Stdout = io.MultiWriter(os.Stdout, &stdout)
+		cmd.Stderr = io.MultiWriter(os.Stderr, &stderr)
+	} else {
+		cmd.Stdout = &stdout
+		cmd.Stderr = &stderr
+	}
+
+	err := cmd.Run()
+
+	// Check if the context deadline was exceeded
+	if ctx.Err() == context.DeadlineExceeded {
+		return stdout.String(), stderr.String(), fmt.Errorf("command timed out after %v - the operation took too long", DefaultCommandTimeout)
+	}
+
+	if ctx.Err() == context.Canceled {
+		return stdout.String(), stderr.String(), fmt.Errorf("command was cancelled")
+	}
+
+	return stdout.String(), stderr.String(), err
+}
+
 func SetVerbose(verbose bool) {
 	verboseMode = verbose
 }
 
-// SiteBuilderOutput represents parsed output from site-builder commands
+// SiteBuilderOutput contains the result of site-builder operations
 type SiteBuilderOutput struct {
 	ObjectID   string
 	SiteURL    string
@@ -67,23 +125,45 @@ type SiteBuilderOutput struct {
 	Success    bool
 }
 
-// Resource represents a site resource from sitemap output
 type Resource struct {
 	Path   string
 	BlobID string
 }
 
-// CheckSiteBuilderSetup verifies that site-builder is properly configured
-func CheckSiteBuilderSetup() error {
-	// Check if site-builder is installed
-	builderPath, err := execLookPath(siteBuilderCmd)
-	if err != nil {
-		return fmt.Errorf("'%s' CLI not found. Please install it and ensure it's in your PATH.\n\nInstallation instructions:\n1. Download from: https://storage.googleapis.com/mysten-walrus-binaries/\n2. Choose: site-builder-testnet-latest-<your-system>\n3. Make executable: chmod +x site-builder\n4. Move to PATH: sudo mv site-builder /usr/local/bin/", siteBuilderCmd)
+// validateObjectID ensures objectID is hexadecimal to prevent command injection
+func validateObjectID(objectID string) error {
+	if objectID == "" {
+		return fmt.Errorf("object ID cannot be empty")
 	}
 
-	fmt.Printf("✓ site-builder found at: %s\n", builderPath)
+	validObjectID := regexp.MustCompile(`^(0x)?[0-9a-fA-F]+$`)
+	if !validObjectID.MatchString(objectID) {
+		return fmt.Errorf("invalid object ID format: %s (must be hexadecimal, optionally prefixed with 0x)", objectID)
+	}
 
-	// Check if sites-config.yaml exists
+	if strings.ContainsAny(objectID, "\x00\n\r;|&$`(){}[]<>") {
+		return fmt.Errorf("object ID contains invalid characters")
+	}
+
+	return nil
+}
+
+// CheckSiteBuilderSetup verifies site-builder installation and configuration
+func CheckSiteBuilderSetup() error {
+	builderPath, err := execLookPath(siteBuilderCmd)
+	if err != nil {
+		return fmt.Errorf("'%s' CLI not found. Please install it using suiup:\n\n"+
+			"  1. Install suiup (if not installed):\n"+
+			"     curl -sSfL https://raw.githubusercontent.com/MystenLabs/suiup/main/install.sh | sh\n\n"+
+			"  2. Install site-builder:\n"+
+			"     suiup install site-builder@mainnet\n"+
+			"     suiup default set site-builder@mainnet\n\n"+
+			"  Or run: walgo setup-deps", siteBuilderCmd)
+	}
+
+	icons := ui.GetIcons()
+	fmt.Printf("%s site-builder found at: %s\n", icons.Check, builderPath)
+
 	configPaths := []string{
 		filepath.Join(os.Getenv("HOME"), ".config", "walrus", "sites-config.yaml"),
 		filepath.Join(os.Getenv("XDG_CONFIG_HOME"), "walrus", "sites-config.yaml"),
@@ -104,113 +184,125 @@ func CheckSiteBuilderSetup() error {
 		return fmt.Errorf("site-builder configuration not found. Please run 'walgo setup' to configure site-builder")
 	}
 
-	fmt.Printf("✓ site-builder config found at: %s\n", configPath)
+	fmt.Printf("%s site-builder config found at: %s\n", icons.Check, configPath)
 	return nil
 }
 
-// handleSiteBuilderError analyzes error output and returns user-friendly messages
+// handleSiteBuilderError converts site-builder errors into actionable messages
 func handleSiteBuilderError(err error, errorOutput string) error {
-	// Detect common issues and provide helpful guidance
+	icons := ui.GetIcons()
 	if strings.Contains(errorOutput, "could not retrieve enough confirmations") {
-		return fmt.Errorf("\n❌ Walrus testnet is experiencing network issues\n\n"+
+		return fmt.Errorf("\n%s Walrus testnet is experiencing network issues\n\n"+
 			"The storage nodes couldn't provide enough confirmations.\n"+
 			"This is typically temporary. You can:\n\n"+
-			"  1. Wait 5-10 minutes and retry: walgo deploy --epochs 5\n"+
+			"  1. Wait 5-10 minutes and retry: walgo launch\n"+
 			"  2. Check Walrus status: walrus info\n"+
-			"  3. Try with fewer epochs: walgo deploy --epochs 1\n"+
+			"  3. Try with fewer epochs (select 1 epoch in wizard)\n"+
 			"  4. Join Discord for help: https://discord.gg/walrus\n\n"+
-			"Technical error: %v", err)
+			"Technical error: %v", icons.Error, err)
 	}
 
 	if strings.Contains(errorOutput, "insufficient funds") || strings.Contains(errorOutput, "InsufficientGas") {
-		return fmt.Errorf("\n❌ Insufficient SUI balance\n\n"+
+		return fmt.Errorf("\n%s Insufficient SUI balance\n\n"+
 			"Your wallet doesn't have enough SUI for this transaction.\n\n"+
-			"  Check balance: sui client gas\n"+
+			"  Check balance: sui client balance\n"+
 			"  Get testnet SUI: https://discord.com/channels/916379725201563759/971488439931392130\n\n"+
-			"Technical error: %v", err)
+			"Technical error: %v", icons.Error, err)
 	}
 
 	if strings.Contains(errorOutput, "data did not match any variant") {
-		return fmt.Errorf("\n❌ Configuration format error\n\n"+
+		return fmt.Errorf("\n%s Configuration format error\n\n"+
 			"The Walrus client config file has incorrect formatting.\n"+
 			"Please ensure object IDs are in hex format (starting with 0x).\n\n"+
 			"Config location: ~/.config/walrus/client_config.yaml\n\n"+
-			"Technical error: %v", err)
+			"Technical error: %v", icons.Error, err)
 	}
 
 	if strings.Contains(errorOutput, "wallet not found") || strings.Contains(errorOutput, "Cannot open wallet") {
-		return fmt.Errorf("\n❌ Wallet configuration error\n\n"+
+		return fmt.Errorf("\n%s Wallet configuration error\n\n"+
 			"Cannot find or open the Sui wallet.\n\n"+
 			"  Setup wallet: sui client\n"+
 			"  Check config: cat ~/.sui/sui_config/client.yaml\n\n"+
-			"Technical error: %v", err)
+			"Technical error: %v", icons.Error, err)
 	}
 
 	if strings.Contains(errorOutput, "Request rejected `429`") || strings.Contains(errorOutput, "rate limit") {
-		return fmt.Errorf("\n❌ Rate limit error\n\n"+
+		return fmt.Errorf("\n%s Rate limit error\n\n"+
 			"The Sui RPC node is rate limiting requests.\n"+
 			"This is common on public RPC endpoints.\n\n"+
 			"Solutions:\n"+
-			"  1. Wait 30-60 seconds and retry: walgo deploy --epochs 5\n"+
+			"  1. Wait 30-60 seconds and retry: walgo launch\n"+
 			"  2. Use a private RPC endpoint (update sites-config.yaml)\n"+
 			"  3. Try again during off-peak hours\n\n"+
-			"Technical error: %v", err)
+			"Technical error: %v", icons.Error, err)
 	}
 
-	// Generic error fallback
 	return fmt.Errorf("failed to execute site-builder: %v", err)
 }
 
-// PreflightCheck runs validation checks before deployment
+// PreflightCheck validates environment before deployment
 func PreflightCheck() error {
-	fmt.Println("🔍 Running pre-flight checks...")
+	icons := ui.GetIcons()
+	fmt.Printf("%s Running pre-flight checks...\n", icons.Search)
 
-	// Check if walrus binary is accessible
 	walrusPath, err := execLookPath("walrus")
 	if err != nil {
-		return fmt.Errorf("⚠️  Walrus CLI not found in PATH. Please install it first")
+		return fmt.Errorf("walrus CLI not found in PATH")
 	}
-	fmt.Printf("   ✓ Walrus CLI found at: %s\n", walrusPath)
+	fmt.Printf("   %s Walrus CLI found at: %s\n", icons.Check, walrusPath)
 
-	// Check Walrus network connectivity
-	infoCmd := execCommand("walrus", "info")
+	// Check Walrus network connectivity (using --json and --context for correct network)
+	walrusContext := GetWalrusContext()
+	infoCmd := execCommand("walrus", "info", "--json", "--context", walrusContext)
 	infoCmd.Stdout = nil
 	infoCmd.Stderr = nil
 	if err := infoCmd.Run(); err != nil {
-		return fmt.Errorf("⚠️  Cannot connect to Walrus network. Check your internet connection and try again")
+		return fmt.Errorf("cannot connect to Walrus network (%s)", walrusContext)
 	}
-	fmt.Println("   ✓ Walrus network is reachable")
+	fmt.Printf("   %s Walrus network is reachable (%s)\n", icons.Check, walrusContext)
 
 	// Check if sui CLI is available
 	suiPath, err := execLookPath("sui")
 	if err != nil {
-		return fmt.Errorf("⚠️  Sui CLI not found. Please install it from https://docs.sui.io/build/install")
+		return fmt.Errorf("sui CLI not found. Install via suiup:\n   curl -sSfL https://raw.githubusercontent.com/MystenLabs/suiup/main/install.sh | sh\n   suiup install sui@testnet\n\n   Or run: walgo setup-deps")
 	}
-	fmt.Printf("   ✓ Sui CLI found at: %s\n", suiPath)
+	fmt.Printf("   %s Sui CLI found at: %s\n", icons.Check, suiPath)
 
-	// Check wallet balance
-	gasCmd := execCommand("sui", "client", "gas", "--json")
-	output, err := gasCmd.Output()
+	// Check wallet balance using sui package
+	balance, err := sui.GetBalance()
 	if err != nil {
-		fmt.Println("   ⚠️  Could not check wallet balance (continuing anyway)")
+		fmt.Printf("   %s Could not check wallet balance (continuing anyway)\n", icons.Warning)
 	} else {
-		// Simple check if there's any gas output
-		if len(output) < 10 || !strings.Contains(string(output), "balance") {
-			fmt.Println("   ⚠️  Warning: No SUI balance detected. You may need testnet SUI from:")
-			fmt.Println("      https://discord.com/channels/916379725201563759/971488439931392130")
+		// Display SUI balance
+		if balance.SUI > 0 {
+			fmt.Printf("   %s SUI balance: %.2f SUI\n", icons.Check, balance.SUI)
 		} else {
-			fmt.Println("   ✓ Wallet has SUI balance")
+			fmt.Printf("   %s Warning: No SUI balance detected. You may need testnet SUI from:\n", icons.Warning)
+			fmt.Println("      https://discord.com/channels/916379725201563759/971488439931392130")
+		}
+
+		// Display WAL balance (if available)
+		if balance.WAL > 0 {
+			fmt.Printf("   %s WAL balance: %.2f WAL\n", icons.Check, balance.WAL)
+		} else {
+			fmt.Printf("   %s No WAL tokens found (may need for storage quota)\n", icons.Info)
 		}
 	}
 
-	fmt.Println("✅ Pre-flight checks passed")
+	fmt.Printf("%s Pre-flight checks passed\n", icons.Success)
 	return nil
 }
 
-// SetupSiteBuilder helps users set up the site-builder configuration
+// SetupSiteBuilder helps users set up the site-builder configuration.
+// Uses the same approach as install.sh - downloads official configs from upstream.
 func SetupSiteBuilder(network string, force bool) error {
 	if network == "" {
 		network = "testnet" // Default to testnet for development
+	}
+
+	// Validate network
+	if network != "mainnet" && network != "testnet" {
+		return fmt.Errorf("unsupported network: %s. Use 'mainnet', 'testnet'", network)
 	}
 
 	homeDir, err := os.UserHomeDir()
@@ -224,16 +316,168 @@ func SetupSiteBuilder(network string, force bool) error {
 		return fmt.Errorf("failed to create config directory: %w", err)
 	}
 
-	configPath := filepath.Join(configDir, "sites-config.yaml")
+	icons := ui.GetIcons()
+	fmt.Printf("%s Setting up Walrus configuration...\n", icons.Wrench)
+	fmt.Printf("   Network: %s\n", network)
+	fmt.Println()
 
-	// If config exists and not forcing, stop. If forcing, proceed to overwrite
-	if _, err := os.Stat(configPath); err == nil && !force {
-		return fmt.Errorf("site-builder config already exists at %s. Use --force to overwrite", configPath)
+	// Check if required tools are installed
+	fmt.Printf("%s Checking dependencies...\n", icons.Clipboard)
+	missingTools := checkWalrusDependencies()
+
+	if len(missingTools) > 0 {
+		fmt.Printf("%s Missing tools: %s\n", icons.Warning, strings.Join(missingTools, ", "))
+		fmt.Println()
+		fmt.Printf("%s To install missing dependencies:\n", icons.Lightbulb)
+		fmt.Println("   1. Install suiup:")
+		fmt.Println("      curl -sSfL https://raw.githubusercontent.com/MystenLabs/suiup/main/install.sh | sh")
+		fmt.Println()
+		fmt.Println("   2. Install tools via suiup:")
+		fmt.Printf("      suiup install sui@%s\n", network)
+		fmt.Printf("      suiup install walrus@%s\n", network)
+		fmt.Println("      suiup install site-builder@mainnet")
+		fmt.Println("      suiup default set site-builder@mainnet")
+		fmt.Println()
+		fmt.Println("   Or run: walgo setup-deps")
+		fmt.Println()
+	} else {
+		fmt.Printf("%s All required tools found\n", icons.Check)
 	}
 
-	// Create default configuration based on network
+	// Download Walrus client config
+	clientConfigPath := filepath.Join(configDir, "client_config.yaml")
+	if _, err := os.Stat(clientConfigPath); os.IsNotExist(err) || force {
+		fmt.Printf("%s Downloading Walrus client configuration...\n", icons.Download)
+		if err := downloadConfig(
+			"https://docs.wal.app/setup/client_config.yaml",
+			clientConfigPath,
+		); err != nil {
+			fmt.Printf("   %s Warning: Failed to download client config: %v\n", icons.Warning, err)
+			fmt.Println("   Continuing with site-builder setup...")
+		} else {
+			fmt.Printf("%s Walrus client config downloaded\n", icons.Check)
+		}
+	} else {
+		fmt.Printf("%s Walrus client config exists\n", icons.Check)
+	}
+
+	// Download site-builder config
+	sitesConfigPath := filepath.Join(configDir, "sites-config.yaml")
+	if _, err := os.Stat(sitesConfigPath); err == nil && !force {
+		return fmt.Errorf("site-builder config already exists at %s. Use --force to overwrite", sitesConfigPath)
+	}
+
+	fmt.Printf("%s Downloading site-builder configuration...\n", icons.Download)
+
+	// Use the official config from GitHub
+	configURL := "https://raw.githubusercontent.com/MystenLabs/walrus-sites/refs/heads/mainnet/sites-config.yaml"
+	if err := downloadConfig(configURL, sitesConfigPath); err != nil {
+		// Fallback to creating config manually if download fails
+		fmt.Printf("   %s Warning: Failed to download config: %v\n", icons.Warning, err)
+		fmt.Println("   Creating config from template...")
+
+		if err := createSiteBuilderConfigFromTemplate(sitesConfigPath, network); err != nil {
+			return fmt.Errorf("failed to create site-builder config: %w", err)
+		}
+	} else {
+		fmt.Printf("%s site-builder config downloaded\n", icons.Check)
+
+		// Update default context if needed
+		if network != "testnet" {
+			if err := updateDefaultContext(sitesConfigPath, network); err != nil {
+				fmt.Printf("   %s Warning: Failed to update default context: %v\n", icons.Warning, err)
+			}
+		}
+	}
+
+	// Also update client_config.yaml default context if it was downloaded
+	if network != "testnet" {
+		if _, err := os.Stat(clientConfigPath); err == nil {
+			if err := updateDefaultContext(clientConfigPath, network); err != nil {
+				fmt.Printf("   %s Warning: Failed to update client config context: %v\n", icons.Warning, err)
+			}
+		}
+	}
+
+	fmt.Println()
+	fmt.Printf("%s Setup complete!\n", icons.Success)
+	fmt.Printf("   Config directory: %s\n", configDir)
+	fmt.Println()
+	fmt.Println("Next steps:")
+	fmt.Println("  1. Ensure Sui wallet is configured:")
+	fmt.Println("     sui client addresses")
+	fmt.Println()
+	fmt.Println("  2. Fund your wallet:")
+	if network == "testnet" {
+		fmt.Println("     Visit: https://faucet.sui.io/")
+		fmt.Println("     Get WAL tokens: walrus get-wal --context testnet")
+	} else {
+		fmt.Println("     Buy SUI and send to: $(sui client active-address)")
+	}
+	fmt.Println()
+	fmt.Println("  3. Test the setup:")
+	fmt.Println("     site-builder --help")
+	fmt.Println()
+	fmt.Println("  4. Deploy your site:")
+	fmt.Println("     walgo launch")
+	fmt.Println()
+
+	return nil
+}
+
+// checkWalrusDependencies checks if required tools are installed
+func checkWalrusDependencies() []string {
+	var missing []string
+
+	tools := []string{"sui", "walrus", "site-builder"}
+	for _, tool := range tools {
+		if _, err := execLookPath(tool); err != nil {
+			missing = append(missing, tool)
+		}
+	}
+
+	return missing
+}
+
+// downloadConfig downloads a configuration file from a URL
+func downloadConfig(url, destPath string) error {
+	// Create HTTP client with timeout
+	client := &http.Client{
+		Timeout: 30 * time.Second,
+	}
+
+	// Download the config
+	resp, err := client.Get(url)
+	if err != nil {
+		return fmt.Errorf("failed to download: %w", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		return fmt.Errorf("download failed with status: %d", resp.StatusCode)
+	}
+
+	// Read the response
+	content, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return fmt.Errorf("failed to read response: %w", err)
+	}
+
+	// Write to file
+	// #nosec G306 - config file needs to be readable
+	if err := os.WriteFile(destPath, content, 0644); err != nil {
+		return fmt.Errorf("failed to write config: %w", err)
+	}
+
+	return nil
+}
+
+// createSiteBuilderConfigFromTemplate creates a config file from hardcoded template
+// This is a fallback when downloading the official config fails
+func createSiteBuilderConfigFromTemplate(configPath, network string) error {
 	var packageID string
 	var rpcURL string
+
 	switch network {
 	case "mainnet":
 		packageID = "0x26eb7ee8688da02c5f671679524e379f0b837a12f1d1d799f255b7eea260ad27"
@@ -241,13 +485,13 @@ func SetupSiteBuilder(network string, force bool) error {
 	case "testnet":
 		packageID = "0xf99aee9f21493e1590e7e5a9aea6f343a1f381031a04a732724871fc294be799"
 		rpcURL = "https://fullnode.testnet.sui.io:443"
-	case "devnet":
-		// Devnet package may change frequently; using testnet package as a placeholder is not ideal,
-		// but allows configuration to proceed for HTTP-only workflows.
-		packageID = "0xf99aee9f21493e1590e7e5a9aea6f343a1f381031a04a732724871fc294be799"
-		rpcURL = "https://fullnode.devnet.sui.io:443"
 	default:
-		return fmt.Errorf("unsupported network: %s. Use 'mainnet', 'testnet' or 'devnet'", network)
+		return fmt.Errorf("unsupported network: %s", network)
+	}
+
+	homeDir, err := os.UserHomeDir()
+	if err != nil {
+		return fmt.Errorf("failed to get home directory: %w", err)
 	}
 
 	walletPath := filepath.Join(homeDir, ".sui", "sui_config", "client.yaml")
@@ -269,40 +513,49 @@ default_context: %s
 
 	// #nosec G306 - config file needs to be readable for site-builder
 	if err := os.WriteFile(configPath, []byte(configContent), 0644); err != nil {
-		return fmt.Errorf("failed to write site-builder config: %w", err)
+		return fmt.Errorf("failed to write config: %w", err)
 	}
 
-	fmt.Printf("✓ Created site-builder configuration at: %s\n", configPath)
-	fmt.Printf("✓ Network: %s\n", network)
-	fmt.Printf("✓ Package ID: %s\n", packageID)
-	fmt.Println("\nNext steps:")
-	fmt.Println("1. Ensure you have a Sui wallet configured: sui client addresses")
-	fmt.Println("2. Test the setup: site-builder --help")
-	fmt.Println("3. You're ready to deploy: walgo deploy")
+	return nil
+}
+
+// updateDefaultContext updates the default_context field in a YAML config file
+func updateDefaultContext(configPath, network string) error {
+	// Read the file
+	content, err := os.ReadFile(configPath)
+	if err != nil {
+		return err
+	}
+
+	// Replace the default context line
+	// This is a simple regex replacement - for production use a proper YAML parser
+	oldContext := "default_context: testnet"
+	newContext := fmt.Sprintf("default_context: %s", network)
+
+	updated := strings.ReplaceAll(string(content), oldContext, newContext)
+
+	// Write back
+	// #nosec G306 - config file needs to be readable
+	if err := os.WriteFile(configPath, []byte(updated), 0644); err != nil {
+		return err
+	}
 
 	return nil
 }
 
 // DeploySite handles the deployment of the site to Walrus.
 // It executes the `site-builder publish` command for new sites.
-func DeploySite(deployDir string, walrusCfg config.WalrusConfig, epochs int) (*SiteBuilderOutput, error) {
-	// Run pre-flight checks (can be disabled in tests)
-	if runPreflight {
-		if err := PreflightCheck(); err != nil {
-			return nil, err
-		}
+// The context can be used to cancel or timeout the operation.
+func DeploySite(ctx context.Context, deployDir string, walrusCfg config.WalrusConfig, epochs int) (*SiteBuilderOutput, error) {
+	// Validate epochs
+	if epochs <= 0 {
+		return nil, fmt.Errorf("epochs must be greater than 0, got %d", epochs)
 	}
 
-	// Check setup
-	if err := CheckSiteBuilderSetup(); err != nil {
-		return nil, fmt.Errorf("site-builder setup issue: %w\n\nRun 'walgo setup' to configure site-builder", err)
-	}
-
-	// For new deployments, we don't need the ProjectID to be set yet
-	// (it will be set after successful deployment)
+	icons := ui.GetIcons()
 
 	// Analyze deployment directory
-	fmt.Println("📊 Analyzing deployment directory...")
+	fmt.Printf("%s Analyzing deployment directory...\n", icons.Chart)
 	fileCount := 0
 	totalSize := int64(0)
 
@@ -318,64 +571,95 @@ func DeploySite(deployDir string, walrusCfg config.WalrusConfig, epochs int) (*S
 	})
 
 	if err != nil {
-		fmt.Printf("   ⚠️  Warning: Could not analyze directory: %v\n", err)
+		fmt.Printf("   %s Warning: Could not analyze directory: %v\n", icons.Warning, err)
 	} else {
-		sizeMB := float64(totalSize) / (1024 * 1024)
-		fmt.Printf("   Files to upload: %d\n", fileCount)
-		fmt.Printf("   Total size: %.2f MB\n", sizeMB)
-		fmt.Printf("   Storage duration: %d epochs (~%d days)\n", epochs, epochs)
+		// Use robust cost estimation with detailed breakdown
+		icons := ui.GetIcons()
+		fmt.Printf("%s Calculating deployment costs...\n", icons.Chart)
 
-		// Rough cost estimate (this is approximate)
-		estimatedCost := sizeMB * 0.01 * float64(epochs)
-		fmt.Printf("   Estimated cost: ~%.4f SUI\n\n", estimatedCost)
+		// Get network context from config
+		network := "testnet" // Default
+		if walrusCfg.Network != "" {
+			network = walrusCfg.Network
+		}
+
+		// Use robust cost estimation
+		options := CostOptions{
+			SiteSize:  totalSize,
+			Epochs:    epochs,
+			Network:   network,
+			FileCount: fileCount,
+			RPCURL:    "", // Will use default from sites-config.yaml
+		}
+
+		breakdown, err := CalculateCost(options)
+		if err != nil {
+			fmt.Printf("   %s Warning: Cost estimation failed: %v\n", icons.Warning, err)
+			// Fall back to simple estimate
+			sizeMB := float64(totalSize) / (1024 * 1024)
+			fallbackCost := sizeMB * 0.01 * float64(epochs)
+			fmt.Printf("   %s Using fallback estimate: ~%.4f SUI\n", icons.Info, fallbackCost)
+		} else {
+			// Display detailed cost breakdown
+			fmt.Printf("%s\n", FormatCostBreakdown(*breakdown))
+			fmt.Printf("\n%s Summary: %s\n\n", icons.Info,
+				FormatCostSummary(breakdown.GasCostSUI+breakdown.TotalWAL, breakdown.FileCount, epochs))
+
+			// Show practical guidance
+			if breakdown.GasCostSUI+breakdown.TotalWAL > 0.5 {
+				fmt.Printf("%s %s Tip: Consider using `update-resources` for small changes\n", icons.Lightbulb, icons.Info)
+				fmt.Printf("%s %s Tip: Use longer epochs for storage duration efficiency\n", icons.Lightbulb, icons.Info)
+			}
+		}
 	}
 
 	builderPath, err := execLookPath(siteBuilderCmd)
 	if err != nil {
-		return nil, fmt.Errorf("'%s' CLI not found. Please install it and ensure it's in your PATH", siteBuilderCmd)
+		return nil, fmt.Errorf("'%s' CLI not found in PATH", siteBuilderCmd)
 	}
 
-	// For new sites, use 'site-builder publish'
-	// site-builder publish <directory> --epochs <number>
+	// For new sites, use 'site-builder --context <network> publish <directory> --epochs <number>'
+	// Get context from Sui active environment to ensure correct network
+	// Note: --context must come BEFORE the subcommand
+	siteBuilderContext := GetWalrusContext()
 	args := []string{
+		"--context", siteBuilderContext,
 		"publish",
 		deployDir,
 		"--epochs", fmt.Sprintf("%d", epochs),
 	}
 
 	if verboseMode {
-		fmt.Printf("🔧 Verbose mode enabled\n")
-		fmt.Printf("🔧 Builder path: %s\n", builderPath)
-		fmt.Printf("🔧 Arguments: %v\n", args)
+		fmt.Printf("%s Verbose mode enabled\n", icons.Wrench)
+		fmt.Printf("%s Builder path: %s\n", icons.Wrench, builderPath)
+		fmt.Printf("%s Arguments: %v\n", icons.Wrench, args)
 	}
 
-	fmt.Printf("Executing: %s %s\n", builderPath, strings.Join(args, " "))
-	fmt.Println("📤 Uploading site files to Walrus...")
-	fmt.Println("⏳ This may take several minutes depending on file count and network conditions...")
+	fmt.Printf("%s Executing: %s %s\n", icons.Info, builderPath, strings.Join(args, " "))
+	fmt.Printf("%s Uploading site files to Walrus...\n", icons.Upload)
+	fmt.Printf("%s This may take several minutes depending on file count and network conditions...\n", icons.Hourglass)
+	fmt.Printf("   (timeout: %v)\n", DefaultCommandTimeout)
 	fmt.Println()
 
-	cmd := execCommand(builderPath, args...)
-	var stdout, stderr bytes.Buffer
-
-	// Stream output in real-time while also capturing it for parsing
-	cmd.Stdout = io.MultiWriter(os.Stdout, &stdout)
-	cmd.Stderr = io.MultiWriter(os.Stderr, &stderr)
-
-	if err := cmd.Run(); err != nil {
-		return nil, handleSiteBuilderError(err, stderr.String())
+	// Run with timeout to prevent hanging indefinitely
+	stdoutStr, stderrStr, err := runCommandWithTimeout(ctx, builderPath, args, true)
+	if err != nil {
+		return nil, handleSiteBuilderError(err, stderrStr)
 	}
 
-	fmt.Println("\n✅ Site deployment command executed successfully.")
+	fmt.Printf("\n%s Site deployment command executed successfully.\n", icons.Success)
 
-	// Parse the output
-	output := parseSiteBuilderOutput(stdout.String())
+	// Parse the output - check both stdout and stderr as site-builder may output to either
+	// Combine both streams for parsing since the "New site object ID:" line may be in stderr
+	combinedOutput := stdoutStr + "\n" + stderrStr
+	output := parseSiteBuilderOutput(combinedOutput)
 	output.Success = true
 
 	// Provide helpful guidance
 	if output.ObjectID != "" {
-		fmt.Println("\n🎉 Deployment successful!")
-		fmt.Printf("📋 Site Object ID: %s\n", output.ObjectID)
-		fmt.Println("\n📝 Next steps:")
+		fmt.Printf("\n%s Deployment successful!\n", icons.Celebrate)
+		fmt.Printf("%s Site Object ID: %s\n", icons.Clipboard, output.ObjectID)
+		fmt.Printf("\n%s Next steps:\n", icons.Pencil)
 		fmt.Printf("1. Save this Object ID in your walgo.yaml:\n")
 		fmt.Printf("   walrus:\n")
 		fmt.Printf("     projectID: \"%s\"\n", output.ObjectID)
@@ -384,7 +668,7 @@ func DeploySite(deployDir string, walrusCfg config.WalrusConfig, epochs int) (*S
 		fmt.Printf("4. Check status: walgo status\n")
 
 		if len(output.BrowseURLs) > 0 {
-			fmt.Printf("\n🌐 Browse your site:\n")
+			fmt.Printf("\n%s Browse your site:\n", icons.Globe)
 			for _, url := range output.BrowseURLs {
 				fmt.Printf("   %s\n", url)
 			}
@@ -396,9 +680,16 @@ func DeploySite(deployDir string, walrusCfg config.WalrusConfig, epochs int) (*S
 
 // UpdateSite handles updating an existing site on Walrus.
 // It executes the `site-builder update` command.
-func UpdateSite(deployDir, objectID string, epochs int) (*SiteBuilderOutput, error) {
-	if objectID == "" {
-		return nil, fmt.Errorf("object ID is required for updating a site")
+// The context can be used to cancel or timeout the operation.
+func UpdateSite(ctx context.Context, deployDir, objectID string, epochs int) (*SiteBuilderOutput, error) {
+	// Validate objectID to prevent command injection
+	if err := validateObjectID(objectID); err != nil {
+		return nil, fmt.Errorf("invalid object ID: %w", err)
+	}
+
+	// Validate epochs
+	if epochs <= 0 {
+		return nil, fmt.Errorf("epochs must be greater than 0, got %d", epochs)
 	}
 
 	// Check setup first
@@ -411,17 +702,98 @@ func UpdateSite(deployDir, objectID string, epochs int) (*SiteBuilderOutput, err
 		return nil, fmt.Errorf("'%s' CLI not found. Please install it and ensure it's in your PATH", siteBuilderCmd)
 	}
 
-	// site-builder update --epochs <number> <directory> <object-id>
+	// site-builder --context <network> update --epochs <number> <directory> <object-id>
+	// Get context from Sui active environment to ensure correct network
+	// Note: --context must come BEFORE the subcommand
+	siteBuilderContext := GetWalrusContext()
 	args := []string{
+		"--context", siteBuilderContext,
 		"update",
 		"--epochs", fmt.Sprintf("%d", epochs),
 		deployDir,
 		objectID,
 	}
 
-	fmt.Printf("Executing: %s %s\n", builderPath, strings.Join(args, " "))
-	fmt.Println("📤 Updating site files on Walrus...")
-	fmt.Println("⏳ This may take several minutes depending on file count and network conditions...")
+	icons := ui.GetIcons()
+	fmt.Printf("%s Executing: %s %s\n", icons.Info, builderPath, strings.Join(args, " "))
+	fmt.Printf("%s Updating site files on Walrus...\n", icons.Upload)
+
+	// Calculate size for cost estimation
+	var totalSize int64
+	var fileCount int
+	_ = filepath.Walk(deployDir, func(path string, info os.FileInfo, err error) error {
+		if err != nil {
+			return nil
+		}
+		if !info.IsDir() {
+			fileCount++
+			totalSize += info.Size()
+		}
+		return nil
+	})
+
+	// Display basic cost estimate for updates
+	sizeMB := float64(totalSize) / (1024 * 1024)
+	simpleCost := sizeMB * 0.01 * float64(epochs)
+	fmt.Printf("   %s Estimated cost: ~%.4f SUI (%d files, %.2f MB)\n", icons.Info, simpleCost, fileCount, sizeMB)
+
+	fmt.Printf("%s This may take several minutes depending on file count and network conditions...\n", icons.Hourglass)
+	fmt.Printf("   (timeout: %v)\n", DefaultCommandTimeout)
+	fmt.Println()
+
+	// Run with timeout to prevent hanging indefinitely
+	stdoutStr, stderrStr, err := runCommandWithTimeout(ctx, builderPath, args, true)
+	if err != nil {
+		return nil, handleSiteBuilderError(err, stderrStr)
+	}
+
+	fmt.Printf("\n%s Site update command executed successfully.\n", icons.Success)
+
+	// Parse the output - combine stdout and stderr for parsing
+	combinedOutput := stdoutStr + "\n" + stderrStr
+	output := parseSiteBuilderOutput(combinedOutput)
+	output.Success = true
+	output.ObjectID = objectID // For updates, we know the object ID
+
+	fmt.Printf("\n%s Site updated successfully!\n", icons.Success)
+	fmt.Printf("%s Object ID: %s\n", icons.Clipboard, objectID)
+	fmt.Printf("%s Your site should be updated at the same URLs as before\n", icons.Globe)
+
+	return output, nil
+}
+
+// DestroySite handles destroying an existing site on Walrus.
+// It executes the `site-builder destroy` command.
+// The context can be used to cancel or timeout the operation.
+func DestroySite(ctx context.Context, objectID string) error {
+	// Validate objectID to prevent command injection
+	if err := validateObjectID(objectID); err != nil {
+		return fmt.Errorf("invalid object ID: %w", err)
+	}
+
+	// Check setup first
+	if err := CheckSiteBuilderSetup(); err != nil {
+		return fmt.Errorf("site-builder setup issue: %w\n\nRun 'walgo setup' to configure site-builder", err)
+	}
+
+	builderPath, err := execLookPath(siteBuilderCmd)
+	if err != nil {
+		return fmt.Errorf("'%s' CLI not found. Please install it and ensure it's in your PATH", siteBuilderCmd)
+	}
+
+	// site-builder --context <network> destroy <object-id>
+	// Get context from Sui active environment to ensure correct network
+	// Note: --context must come BEFORE the subcommand
+	siteBuilderContext := GetWalrusContext()
+	args := []string{
+		"--context", siteBuilderContext,
+		"destroy",
+		objectID,
+	}
+
+	icons := ui.GetIcons()
+	fmt.Printf("%s Executing: %s %s\n", icons.Info, builderPath, strings.Join(args, " "))
+	fmt.Printf("%s Destroying site on Walrus...\n", icons.Garbage)
 	fmt.Println()
 
 	cmd := execCommand(builderPath, args...)
@@ -431,29 +803,49 @@ func UpdateSite(deployDir, objectID string, epochs int) (*SiteBuilderOutput, err
 	cmd.Stdout = io.MultiWriter(os.Stdout, &stdout)
 	cmd.Stderr = io.MultiWriter(os.Stderr, &stderr)
 
-	if err := cmd.Run(); err != nil {
-		return nil, handleSiteBuilderError(err, stderr.String())
+	// Set up context cancellation
+	if ctx != nil {
+		// Start command
+		if err := cmd.Start(); err != nil {
+			return handleSiteBuilderError(err, stderr.String())
+		}
+
+		// Wait for either completion or context cancellation
+		done := make(chan error, 1)
+		go func() {
+			done <- cmd.Wait()
+		}()
+
+		select {
+		case <-ctx.Done():
+			// Context cancelled, kill the process
+			if cmd.Process != nil {
+				_ = cmd.Process.Kill()
+			}
+			return fmt.Errorf("destroy operation cancelled: %w", ctx.Err())
+		case err := <-done:
+			if err != nil {
+				return handleSiteBuilderError(err, stderr.String())
+			}
+		}
+	} else {
+		// No context, just run normally
+		if err := cmd.Run(); err != nil {
+			return handleSiteBuilderError(err, stderr.String())
+		}
 	}
 
-	fmt.Println("\n✅ Site update command executed successfully.")
+	fmt.Printf("\n%s Site destroyed successfully on Walrus!\n", icons.Success)
 
-	// Parse the output
-	output := parseSiteBuilderOutput(stdout.String())
-	output.Success = true
-	output.ObjectID = objectID // For updates, we know the object ID
-
-	fmt.Println("\n✅ Site updated successfully!")
-	fmt.Printf("📋 Object ID: %s\n", objectID)
-	fmt.Println("🌐 Your site should be updated at the same URLs as before")
-
-	return output, nil
+	return nil
 }
 
 // GetSiteStatus checks the status of a Walrus site.
 // Note: The site-builder doesn't have a direct "status" command, but we can use sitemap.
 func GetSiteStatus(objectID string) (*SiteBuilderOutput, error) {
-	if objectID == "" {
-		return nil, fmt.Errorf("object ID is required for checking site status")
+	// Validate objectID to prevent command injection
+	if err := validateObjectID(objectID); err != nil {
+		return nil, fmt.Errorf("invalid object ID: %w", err)
 	}
 
 	// Check setup first
@@ -467,25 +859,31 @@ func GetSiteStatus(objectID string) (*SiteBuilderOutput, error) {
 	}
 
 	// Use sitemap to show site resources as a form of status
+	// Get context from Sui active environment to ensure correct network
+	// Note: --context must come BEFORE the subcommand
+	siteBuilderContext := GetWalrusContext()
 	args := []string{
+		"--context", siteBuilderContext,
 		"sitemap",
 		objectID,
 	}
 
-	fmt.Printf("Executing: %s %s\n", builderPath, strings.Join(args, " "))
+	icons := ui.GetIcons()
+	fmt.Printf("%s Executing: %s %s\n", icons.Info, builderPath, strings.Join(args, " "))
 
-	cmd := execCommand(builderPath, args...)
-	var stdout, stderr bytes.Buffer
-	cmd.Stdout = &stdout
-	cmd.Stderr = &stderr
+	// Run with timeout (shorter timeout for status checks)
+	statusTimeout := 2 * time.Minute
+	ctx, cancel := context.WithTimeout(context.Background(), statusTimeout)
+	defer cancel()
 
-	if err := cmd.Run(); err != nil {
+	stdoutStr, stderrStr, err := runCommandWithTimeout(ctx, builderPath, args, false)
+	if err != nil {
 		errorMsg := fmt.Sprintf("failed to execute %s: %v", siteBuilderCmd, err)
-		if stderr.Len() > 0 {
-			errorMsg += fmt.Sprintf("\nstderr:\n%s", stderr.String())
+		if stderrStr != "" {
+			errorMsg += fmt.Sprintf("\nstderr:\n%s", stderrStr)
 		}
-		if stdout.Len() > 0 {
-			errorMsg += fmt.Sprintf("\nstdout:\n%s", stdout.String())
+		if stdoutStr != "" {
+			errorMsg += fmt.Sprintf("\nstdout:\n%s", stdoutStr)
 		}
 		return nil, fmt.Errorf("%s", errorMsg)
 	}
@@ -493,101 +891,23 @@ func GetSiteStatus(objectID string) (*SiteBuilderOutput, error) {
 	fmt.Println("Site status retrieved successfully.")
 
 	// Parse the sitemap output
-	output := parseSitemapOutput(stdout.String())
+	output := parseSitemapOutput(stdoutStr)
 	output.Success = true
 	output.ObjectID = objectID
 
-	if stdout.Len() > 0 {
-		fmt.Printf("Site resources:\n%s\n", stdout.String())
+	if stdoutStr != "" {
+		fmt.Printf("Site resources:\n%s\n", stdoutStr)
 	}
 
-	if stderr.Len() > 0 {
-		fmt.Printf("Stderr from %s:\n%s\n", siteBuilderCmd, stderr.String())
+	if stderrStr != "" {
+		fmt.Printf("Stderr from %s:\n%s\n", siteBuilderCmd, stderrStr)
 	}
 
 	return output, nil
 }
 
-// ConvertObjectID converts a hex object ID to Base36 format
-func ConvertObjectID(objectID string) (string, error) {
-	if objectID == "" {
-		return "", fmt.Errorf("object ID is required for conversion")
-	}
-
-	// Check setup first
-	if err := CheckSiteBuilderSetup(); err != nil {
-		return "", fmt.Errorf("site-builder setup issue: %w\n\nRun 'walgo setup' to configure site-builder", err)
-	}
-
-	builderPath, err := execLookPath(siteBuilderCmd)
-	if err != nil {
-		return "", fmt.Errorf("'%s' CLI not found. Please install it and ensure it's in your PATH", siteBuilderCmd)
-	}
-
-	args := []string{
-		"convert",
-		objectID,
-	}
-
-	fmt.Printf("Executing: %s %s\n", builderPath, strings.Join(args, " "))
-
-	cmd := execCommand(builderPath, args...)
-	var stdout, stderr bytes.Buffer
-	cmd.Stdout = &stdout
-	cmd.Stderr = &stderr
-
-	if err := cmd.Run(); err != nil {
-		errorMsg := fmt.Sprintf("failed to execute %s: %v", siteBuilderCmd, err)
-		if stderr.Len() > 0 {
-			errorMsg += fmt.Sprintf("\nstderr:\n%s", stderr.String())
-		}
-		if stdout.Len() > 0 {
-			errorMsg += fmt.Sprintf("\nstdout:\n%s", stdout.String())
-		}
-		return "", fmt.Errorf("%s", errorMsg)
-	}
-
-	var base36ID string
-	if stdout.Len() > 0 {
-		// Extract the last non-empty token that looks like base36 (lowercase letters and digits)
-		out := stdout.String()
-		lines := strings.Split(out, "\n")
-		for i := len(lines) - 1; i >= 0; i-- {
-			candidate := strings.TrimSpace(lines[i])
-			if candidate == "" {
-				continue
-			}
-			// If line contains spaces, take the last whitespace-separated token
-			if strings.Contains(candidate, " ") {
-				parts := strings.Fields(candidate)
-				candidate = parts[len(parts)-1]
-			}
-			lower := strings.ToLower(candidate)
-			if lower == candidate && regexp.MustCompile(`^[0-9a-z]+$`).MatchString(candidate) {
-				base36ID = candidate
-				break
-			}
-		}
-
-		if base36ID != "" {
-			fmt.Printf("Base36 representation: %s\n", base36ID)
-			fmt.Printf("\n🌐 Direct access URLs:\n")
-			fmt.Printf("   https://%s.wal.app\n", base36ID)
-			fmt.Printf("   http://%s.localhost:3000 (local portal)\n", base36ID)
-		} else {
-			// Fallback: show raw output for debugging
-			fmt.Printf("Warning: could not parse Base36 ID from output. Raw output follows:\n%s\n", out)
-		}
-	}
-
-	if stderr.Len() > 0 {
-		fmt.Printf("Stderr from %s:\n%s\n", siteBuilderCmd, stderr.String())
-	}
-
-	return base36ID, nil
-}
-
 // parseSiteBuilderOutput extracts key information from site-builder command output
+// This parser is designed to be resilient to format changes in site-builder output
 func parseSiteBuilderOutput(output string) *SiteBuilderOutput {
 	result := &SiteBuilderOutput{
 		BrowseURLs: make([]string, 0),
@@ -595,31 +915,49 @@ func parseSiteBuilderOutput(output string) *SiteBuilderOutput {
 	}
 
 	lines := strings.Split(output, "\n")
+
+	// Strict patterns for site object ID - these are the ONLY patterns we trust
+	// Ordered by priority (most specific first)
+	siteObjectPatterns := []string{
+		"New site object ID:",
+		"Site object ID:",
+		"site object ID:",
+	}
+
+	// Regex to extract hex object IDs (0x followed by 64 hex chars)
+	objectIDRegex := regexp.MustCompile(`0x[0-9a-fA-F]{64}`)
+
+	// First pass: Look ONLY for the specific "site object ID" patterns
+	// Parse in reverse order to get the LAST matching pattern (most relevant)
+	for i := len(lines) - 1; i >= 0; i-- {
+		line := strings.TrimSpace(lines[i])
+
+		if result.ObjectID == "" {
+			for _, pattern := range siteObjectPatterns {
+				if strings.Contains(line, pattern) {
+					if match := objectIDRegex.FindString(line); match != "" {
+						result.ObjectID = match
+						break
+					}
+				}
+			}
+		}
+	}
+
+	// Second pass: Extract browse URLs (scan forward)
 	for _, line := range lines {
 		line = strings.TrimSpace(line)
-
-		// Extract object ID
-		if strings.Contains(line, "New site object ID:") {
-			parts := strings.Split(line, ":")
-			if len(parts) > 1 {
-				result.ObjectID = strings.TrimSpace(parts[1])
-			}
-		}
-
-		// Extract site object ID (for updates)
-		if strings.Contains(line, "Site object ID:") {
-			parts := strings.Split(line, ":")
-			if len(parts) > 1 {
-				result.ObjectID = strings.TrimSpace(parts[1])
-			}
-		}
 
 		// Extract browse URLs
 		if strings.Contains(line, "http://") || strings.Contains(line, "https://") {
 			// Extract URLs from the line
-			urlRegex := regexp.MustCompile(`https?://[^\s]+`)
+			urlRegex := regexp.MustCompile(`https?://[^\s\]\)\"\']+`)
 			urls := urlRegex.FindAllString(line, -1)
-			result.BrowseURLs = append(result.BrowseURLs, urls...)
+			for _, url := range urls {
+				// Clean up trailing punctuation
+				url = strings.TrimRight(url, ".,;:")
+				result.BrowseURLs = append(result.BrowseURLs, url)
+			}
 		}
 	}
 
