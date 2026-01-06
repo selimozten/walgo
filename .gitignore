@@ -12,6 +12,8 @@
 *.out
 *.cover
 *.html
+# But allow desktop frontend html files
+!desktop/frontend/*.html
 
 # Go workspace file
 go.work
