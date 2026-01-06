@@ -44,7 +44,7 @@ func (g *Generator) GeneratePage(ctx context.Context, plan *SitePlan, page *Page
 
 	// Check if file already exists
 	fullPath := filepath.Join(g.config.ContentDir, page.Path)
-	fullPath = strings.TrimPrefix(fullPath, "content/") // Remove duplicate content/
+	_ = strings.TrimPrefix(fullPath, "content/") // Remove duplicate content/ (not used)
 	fullPath = filepath.Join(g.config.ContentDir, strings.TrimPrefix(page.Path, "content/"))
 
 	if !g.config.OverwriteExisting {

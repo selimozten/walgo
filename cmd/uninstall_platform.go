@@ -200,16 +200,16 @@ func uninstallDesktopLinux() error {
 				cmd := exec.Command("sudo", "rm", "-f", desktopFile)
 				cmd.Stdout = os.Stdout
 				cmd.Stderr = os.Stderr
-				cmd.Run()
+				_ = cmd.Run() // Best-effort cleanup
 			} else {
-				os.Remove(desktopFile)
+				_ = os.Remove(desktopFile) // Best-effort cleanup
 			}
 
 			fmt.Printf("%s Removed: %s\n", icons.Check, desktopFile)
 
 			if exec.Command("which", "update-desktop-database").Run() == nil {
 				desktopDir := filepath.Dir(desktopFile)
-				exec.Command("update-desktop-database", desktopDir).Run()
+				_ = exec.Command("update-desktop-database", desktopDir).Run() // Best-effort cleanup
 			}
 		}
 	}

@@ -669,7 +669,7 @@ func ValidateBlogContent(sitePath string) []string {
 
 	// Validate blog posts have required fields
 	if _, err := os.Stat(postsDir); err == nil {
-		filepath.Walk(postsDir, func(path string, info os.FileInfo, err error) error {
+		_ = filepath.Walk(postsDir, func(path string, info os.FileInfo, err error) error {
 			if err != nil || info.IsDir() || filepath.Ext(path) != ".md" {
 				return nil
 			}
@@ -851,7 +851,7 @@ func ValidatePortfolioContent(sitePath string) []string {
 
 	// Validate projects have required fields
 	if _, err := os.Stat(projectsDir); err == nil {
-		filepath.Walk(projectsDir, func(path string, info os.FileInfo, err error) error {
+		_ = filepath.Walk(projectsDir, func(path string, info os.FileInfo, err error) error {
 			if err != nil || info.IsDir() || filepath.Ext(path) != ".md" {
 				return nil
 			}
@@ -948,7 +948,7 @@ func ValidateBusinessContent(sitePath string) []string {
 
 	// Validate services have required fields
 	if _, err := os.Stat(servicesDir); err == nil {
-		filepath.Walk(servicesDir, func(path string, info os.FileInfo, err error) error {
+		_ = filepath.Walk(servicesDir, func(path string, info os.FileInfo, err error) error {
 			if err != nil || info.IsDir() || filepath.Ext(path) != ".md" {
 				return nil
 			}

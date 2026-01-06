@@ -127,7 +127,7 @@ Example:
 		// Step 5: Verify site is built
 		fmt.Println("Step 5: Verify Site")
 		fmt.Println("━━━━━━━━━━━━━━━━━━━━━━━━━")
-		sitePath, publishDir, siteSize, err := launch.VerifySite()
+		_, publishDir, siteSize, err := launch.VerifySite()
 		if err != nil {
 			return err
 		}
