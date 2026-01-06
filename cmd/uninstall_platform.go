@@ -112,6 +112,11 @@ func uninstallDesktopWindows() error {
 	}
 
 	appPaths := []string{
+		// New naming (v0.3.0+)
+		filepath.Join(homePath, "Programs", "Walgo", "Walgo.exe"),
+		filepath.Join(os.Getenv("PROGRAMFILES"), "Walgo", "Walgo.exe"),
+		filepath.Join(os.Getenv("PROGRAMFILES(X86)"), "Walgo", "Walgo.exe"),
+		// Old naming (backward compatibility)
 		filepath.Join(homePath, "Programs", "Walgo", "walgo-desktop.exe"),
 		filepath.Join(os.Getenv("PROGRAMFILES"), "Walgo", "walgo-desktop.exe"),
 		filepath.Join(os.Getenv("PROGRAMFILES(X86)"), "Walgo", "walgo-desktop.exe"),
@@ -152,6 +157,11 @@ func uninstallDesktopLinux() error {
 	homeDir := os.Getenv("HOME")
 
 	binaryPaths := []string{
+		// New naming (v0.3.0+)
+		filepath.Join(homeDir, ".local", "bin", "Walgo"),
+		"/usr/local/bin/Walgo",
+		"/usr/bin/Walgo",
+		// Old naming (backward compatibility)
 		filepath.Join(homeDir, ".local", "bin", "walgo-desktop"),
 		"/usr/local/bin/walgo-desktop",
 		"/usr/bin/walgo-desktop",

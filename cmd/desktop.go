@@ -42,20 +42,20 @@ Example:
 			binaryPath = filepath.Join(homeDir, "Applications", "Walgo.app")
 			installLocation = filepath.Join(homeDir, "Applications")
 		case "windows":
-			// Windows: %LOCALAPPDATA%\Programs\Walgo\walgo-desktop.exe
+			// Windows: %LOCALAPPDATA%\Programs\Walgo\Walgo.exe
 			localAppData := os.Getenv("LOCALAPPDATA")
 			if localAppData != "" {
-				binaryPath = filepath.Join(localAppData, "Programs", "Walgo", "walgo-desktop.exe")
+				binaryPath = filepath.Join(localAppData, "Programs", "Walgo", "Walgo.exe")
 				installLocation = filepath.Join(localAppData, "Programs", "Walgo")
 			} else {
 				// Fallback
-				binaryPath = filepath.Join(os.Getenv("USERPROFILE"), "AppData", "Local", "Programs", "Walgo", "walgo-desktop.exe")
+				binaryPath = filepath.Join(os.Getenv("USERPROFILE"), "AppData", "Local", "Programs", "Walgo", "Walgo.exe")
 				installLocation = filepath.Join(os.Getenv("USERPROFILE"), "AppData", "Local", "Programs", "Walgo")
 			}
 		default: // linux
-			// Linux: ~/.local/bin/walgo-desktop
+			// Linux: ~/.local/bin/Walgo
 			homeDir, _ := os.UserHomeDir()
-			binaryPath = filepath.Join(homeDir, ".local", "bin", "walgo-desktop")
+			binaryPath = filepath.Join(homeDir, ".local", "bin", "Walgo")
 			installLocation = filepath.Join(homeDir, ".local", "bin")
 		}
 

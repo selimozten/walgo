@@ -323,13 +323,14 @@ install_desktop() {
     local filename=""
     case "$OS" in
         darwin)
-            filename="walgo-desktop-${VERSION}-macos-universal.zip"
+            # Use architecture-specific builds (arm64 or amd64)
+            filename="walgo-desktop_${VERSION}_darwin_${ARCH}.tar.gz"
             ;;
         windows)
-            filename="walgo-desktop-${VERSION}-windows-amd64.zip"
+            filename="walgo-desktop_${VERSION}_windows_amd64.zip"
             ;;
         linux)
-            filename="walgo-desktop-${VERSION}-linux-amd64.tar.gz"
+            filename="walgo-desktop_${VERSION}_linux_amd64.tar.gz"
             ;;
         *)
             print_warning "Desktop app not available for platform: $OS"
@@ -395,7 +396,6 @@ install_desktop() {
 # Install desktop app on macOS
 install_desktop_macos() {
     local tmp_dir="$1"
-    local install_dir="$2"
 
     # Look for .app bundle
     local app_bundle=$(find "$tmp_dir" -maxdepth 2 -name "*.app" -type d | head -n1)
@@ -460,9 +460,9 @@ install_desktop_windows() {
     mkdir -p "$install_dir"
 
     # Copy executable
-    cp "$exe_file" "$install_dir/walgo-desktop.exe"
+    cp "$exe_file" "$install_dir/Walgo.exe"
 
-    if [ -f "$install_dir/walgo-desktop.exe" ]; then
+    if [ -f "$install_dir/Walgo.exe" ]; then
         print_success "Walgo Desktop installed to $install_dir"
         print_info "Run with: walgo desktop"
     else
@@ -474,8 +474,8 @@ install_desktop_windows() {
 install_desktop_linux() {
     local tmp_dir="$1"
 
-    # Look for binary
-    local binary=$(find "$tmp_dir" -maxdepth 2 -type f -executable ! -name "*.app" ! -name "*.exe" | head -n1)
+    # Look for Walgo binary specifically
+    local binary=$(find "$tmp_dir" -maxdepth 2 -type f -name "Walgo" | head -n1)
 
     if [ -z "$binary" ]; then
         print_warning "Desktop binary not found in archive. Skipping desktop installation."
@@ -488,10 +488,10 @@ install_desktop_linux() {
     mkdir -p "$install_dir"
 
     # Copy binary
-    cp "$binary" "$install_dir/walgo-desktop"
-    chmod +x "$install_dir/walgo-desktop"
+    cp "$binary" "$install_dir/Walgo"
+    chmod +x "$install_dir/Walgo"
 
-    if [ -f "$install_dir/walgo-desktop" ]; then
+    if [ -f "$install_dir/Walgo" ]; then
         print_success "Walgo Desktop installed to $install_dir"
         print_info "Run with: walgo desktop"
     else
@@ -662,7 +662,11 @@ check_dependencies() {
                 darwin)
                     if command -v brew >/dev/null 2>&1; then
                         print_info "Homebrew detected. Install Hugo? [y/N]"
-                        read -r response
+                        if [ -t 0 ]; then
+                            read -r response
+                        else
+                            read -r response < /dev/tty 2>/dev/null || response="n"
+                        fi
                         if [[ "$response" =~ ^[Yy]$ ]]; then
                             print_info "Installing Hugo via Homebrew..."
                             brew install hugo
@@ -676,7 +680,11 @@ check_dependencies() {
                         echo "  1) Install Hugo directly (recommended)"
                         echo "  2) Install Homebrew first, then Hugo"
                         echo "  3) Skip Hugo installation"
-                        read -r -p "Choose option [1-3]: " choice
+                        if [ -t 0 ]; then
+                            read -r -p "Choose option [1-3]: " choice
+                        else
+                            read -r choice < /dev/tty 2>/dev/null || choice="1"
+                        fi
 
                         case "$choice" in
                             1)
@@ -701,7 +709,11 @@ check_dependencies() {
                     ;;
                 linux)
                     print_info "Install Hugo? [y/N]"
-                    read -r response
+                    if [ -t 0 ]; then
+                        read -r response
+                    else
+                        read -r response < /dev/tty 2>/dev/null || response="n"
+                    fi
                     if [[ "$response" =~ ^[Yy]$ ]]; then
                         if command -v apt-get >/dev/null 2>&1; then
                             print_info "Installing Hugo via apt..."
@@ -726,7 +738,11 @@ check_dependencies() {
                 windows)
                     if command -v choco >/dev/null 2>&1; then
                         print_info "Install Hugo via Chocolatey? [y/N]"
-                        read -r response
+                        if [ -t 0 ]; then
+                            read -r response
+                        else
+                            read -r response < /dev/tty 2>/dev/null || response="n"
+                        fi
                         if [[ "$response" =~ ^[Yy]$ ]]; then
                             choco install hugo-extended -y
                         fi
@@ -784,7 +800,13 @@ add_path_to_profile() {
 install_walrus_dependencies() {
     echo ""
     print_info "Would you like to install Walrus dependencies (Sui, Walrus CLI, site-builder)? [y/N]"
-    read -r response
+
+    # Read from /dev/tty to work with piped installation
+    if [ -t 0 ]; then
+        read -r response
+    else
+        read -r response < /dev/tty 2>/dev/null || response="n"
+    fi
 
     if [[ ! "$response" =~ ^[Yy]$ ]]; then
         print_info "Skipping Walrus dependencies installation"
@@ -820,7 +842,11 @@ install_walrus_dependencies() {
     echo "  1) Testnet (recommended for development)"
     echo "  2) Mainnet (production)"
     echo "  3) Both"
-    read -r -p "Choose option [1-3]: " network_choice
+    if [ -t 0 ]; then
+        read -r -p "Choose option [1-3]: " network_choice
+    else
+        read -r network_choice < /dev/tty 2>/dev/null || network_choice="1"
+    fi
 
     local install_testnet=false
     local install_mainnet=false
@@ -1122,10 +1148,10 @@ show_next_steps() {
             echo "       /Applications/Walgo.app"
             ;;
         windows)
-            echo "       %LOCALAPPDATA%\\Programs\\Walgo\\walgo-desktop.exe"
+            echo "       %LOCALAPPDATA%\\Programs\\Walgo\\Walgo.exe"
             ;;
         linux)
-            echo "       ~/.local/bin/walgo-desktop"
+            echo "       ~/.local/bin/Walgo"
             ;;
     esac
     echo ""

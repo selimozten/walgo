@@ -16,17 +16,17 @@ func GetBinaryPath() string {
 		homeDir, _ := os.UserHomeDir()
 		return filepath.Join(homeDir, "Applications", "Walgo.app")
 	case "windows":
-		// Windows: %LOCALAPPDATA%\Programs\Walgo\walgo-desktop.exe
+		// Windows: %LOCALAPPDATA%\Programs\Walgo\Walgo.exe
 		localAppData := os.Getenv("LOCALAPPDATA")
 		if localAppData != "" {
-			return filepath.Join(localAppData, "Programs", "Walgo", "walgo-desktop.exe")
+			return filepath.Join(localAppData, "Programs", "Walgo", "Walgo.exe")
 		}
 		// Fallback
-		return filepath.Join(os.Getenv("USERPROFILE"), "AppData", "Local", "Programs", "Walgo", "walgo-desktop.exe")
+		return filepath.Join(os.Getenv("USERPROFILE"), "AppData", "Local", "Programs", "Walgo", "Walgo.exe")
 	default: // linux
-		// Linux: ~/.local/bin/walgo-desktop
+		// Linux: ~/.local/bin/Walgo
 		homeDir, _ := os.UserHomeDir()
-		return filepath.Join(homeDir, ".local", "bin", "walgo-desktop")
+		return filepath.Join(homeDir, ".local", "bin", "Walgo")
 	}
 }
 
