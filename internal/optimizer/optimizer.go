@@ -6,21 +6,24 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/selimozten/walgo/internal/ui"
 )
 
-// Engine is the main optimization engine
+// Engine manages the entire optimization process for HTML, CSS, and JavaScript files.
+// Thread-safe for concurrent use.
 type Engine struct {
 	config        OptimizerConfig
 	htmlOptimizer *HTMLOptimizer
 	cssOptimizer  *CSSOptimizer
 	jsOptimizer   *JSOptimizer
-	htmlContent   map[string][]byte // Store HTML content for CSS unused rule detection
+	mu            sync.RWMutex       // Protects htmlContent
+	htmlContent   map[string][]byte  // Store HTML content for CSS unused rule detection
 }
 
-// NewEngine creates a new optimization engine
+// NewEngine initializes and returns a new optimization engine with provided configuration.
 func NewEngine(config OptimizerConfig) *Engine {
 	return &Engine{
 		config:        config,
@@ -31,7 +34,7 @@ func NewEngine(config OptimizerConfig) *Engine {
 	}
 }
 
-// OptimizeDirectory optimizes all files in a directory recursively
+// OptimizeDirectory recursively processes and optimizes all files in the specified directory.
 func (e *Engine) OptimizeDirectory(sourceDir string) (*OptimizationStats, error) {
 	if !e.config.Enabled {
 		return &OptimizationStats{}, nil
@@ -82,7 +85,7 @@ func (e *Engine) OptimizeDirectory(sourceDir string) (*OptimizationStats, error)
 	return stats, err
 }
 
-// optimizeFile optimizes a single file based on its extension
+// optimizeFile processes and optimizes a single file according to its file type.
 func (e *Engine) optimizeFile(filePath string, stats *OptimizationStats) error {
 	ext := strings.ToLower(filepath.Ext(filePath))
 
@@ -141,7 +144,8 @@ func (e *Engine) optimizeFile(filePath string, stats *OptimizationStats) error {
 	return nil
 }
 
-// collectHTMLContent collects all HTML content for CSS unused rule detection
+// collectHTMLContent gathers all HTML content to detect unused CSS rules.
+// Thread-safe for concurrent access.
 func (e *Engine) collectHTMLContent(sourceDir string) error {
 	return filepath.WalkDir(sourceDir, func(path string, d fs.DirEntry, err error) error {
 		if err != nil {
@@ -158,15 +162,21 @@ func (e *Engine) collectHTMLContent(sourceDir string) error {
 			if err != nil {
 				return err
 			}
+			e.mu.Lock()
 			e.htmlContent[path] = content
+			e.mu.Unlock()
 		}
 
 		return nil
 	})
 }
 
-// applyCSSUnusedRuleRemoval applies unused CSS rule removal using collected HTML content
+// applyCSSUnusedRuleRemoval removes unused CSS rules using the collected HTML content.
+// Thread-safe for concurrent access.
 func (e *Engine) applyCSSUnusedRuleRemoval(cssContent []byte) []byte {
+	e.mu.RLock()
+	defer e.mu.RUnlock()
+
 	// Combine all HTML content
 	var allHTML []byte
 	for _, htmlContent := range e.htmlContent {
@@ -181,7 +191,7 @@ func (e *Engine) applyCSSUnusedRuleRemoval(cssContent []byte) []byte {
 	return cssContent
 }
 
-// shouldSkipFile determines if a file should be skipped based on patterns
+// shouldSkipFile checks whether a file should be skipped based on configured patterns.
 func (e *Engine) shouldSkipFile(filePath string) bool {
 	// Check skip patterns
 	for _, pattern := range e.config.SkipPatterns {
@@ -204,7 +214,7 @@ func (e *Engine) shouldSkipFile(filePath string) bool {
 	return strings.Contains(fileName, ".min.")
 }
 
-// updateHTMLStats updates HTML-specific statistics
+// updateHTMLStats updates optimization statistics for HTML files.
 func (e *Engine) updateHTMLStats(stats *OptimizationStats, originalSize, optimizedSize int64) {
 	stats.HTMLFiles.FilesProcessed++
 	stats.HTMLFiles.OriginalSize += originalSize
@@ -216,7 +226,7 @@ func (e *Engine) updateHTMLStats(stats *OptimizationStats, originalSize, optimiz
 	}
 }
 
-// updateCSSStats updates CSS-specific statistics
+// updateCSSStats updates optimization statistics for CSS files.
 func (e *Engine) updateCSSStats(stats *OptimizationStats, originalSize, optimizedSize int64) {
 	stats.CSSFiles.FilesProcessed++
 	stats.CSSFiles.OriginalSize += originalSize
@@ -228,7 +238,7 @@ func (e *Engine) updateCSSStats(stats *OptimizationStats, originalSize, optimize
 	}
 }
 
-// updateJSStats updates JavaScript-specific statistics
+// updateJSStats updates optimization statistics for JavaScript files.
 func (e *Engine) updateJSStats(stats *OptimizationStats, originalSize, optimizedSize int64) {
 	stats.JSFiles.FilesProcessed++
 	stats.JSFiles.OriginalSize += originalSize
@@ -240,7 +250,7 @@ func (e *Engine) updateJSStats(stats *OptimizationStats, originalSize, optimized
 	}
 }
 
-// calculateStats calculates overall statistics
+// calculateStats computes overall optimization statistics from all file type statistics.
 func (e *Engine) calculateStats(stats *OptimizationStats) {
 	stats.OriginalSize = stats.HTMLFiles.OriginalSize + stats.CSSFiles.OriginalSize + stats.JSFiles.OriginalSize
 	stats.OptimizedSize = stats.HTMLFiles.OptimizedSize + stats.CSSFiles.OptimizedSize + stats.JSFiles.OptimizedSize
@@ -251,7 +261,7 @@ func (e *Engine) calculateStats(stats *OptimizationStats) {
 	}
 }
 
-// PrintStats prints optimization statistics
+// PrintStats displays optimization statistics in a formatted manner.
 func (e *Engine) PrintStats(stats *OptimizationStats) {
 	icons := ui.GetIcons()
 	fmt.Printf("\n%s Optimization Results\n", icons.Sparkles)
@@ -297,7 +307,7 @@ func (e *Engine) PrintStats(stats *OptimizationStats) {
 	}
 }
 
-// formatBytes formats byte count into human-readable format
+// formatBytes converts byte count to human-readable format with appropriate units.
 func formatBytes(bytes int64) string {
 	const unit = 1024
 	if bytes < unit {

@@ -48,7 +48,7 @@ The optimization settings can be configured in walgo.yaml under the 'optimizer' 
 				return fmt.Errorf("error getting current directory: %w", err)
 			}
 
-			if cfg, err := config.LoadConfig(); err == nil {
+			if cfg, err := config.LoadConfigFrom(sitePath); err == nil {
 				publishDir := filepath.Join(sitePath, cfg.HugoConfig.PublishDir)
 				if _, err := os.Stat(publishDir); err == nil {
 					targetDir = publishDir
@@ -69,7 +69,7 @@ The optimization settings can be configured in walgo.yaml under the 'optimizer' 
 		fmt.Printf("Optimizing files in: %s\n", targetDir)
 
 		var optimizerConfig optimizer.OptimizerConfig
-		if cfg, err := config.LoadConfig(); err == nil {
+		if cfg, err := config.LoadConfigFrom(targetDir); err == nil {
 			optimizerConfig = cfg.OptimizerConfig
 		} else {
 			optimizerConfig = optimizer.NewDefaultOptimizerConfig()

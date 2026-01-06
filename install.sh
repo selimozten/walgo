@@ -395,6 +395,7 @@ install_desktop() {
 # Install desktop app on macOS
 install_desktop_macos() {
     local tmp_dir="$1"
+    local install_dir="$2"
 
     # Look for .app bundle
     local app_bundle=$(find "$tmp_dir" -maxdepth 2 -name "*.app" -type d | head -n1)
@@ -405,31 +406,40 @@ install_desktop_macos() {
     fi
 
     local app_name=$(basename "$app_bundle")
+    local install_dir="/Applications"
     print_info "Moving $app_name to /Applications..."
 
     # Remove existing if present
-    if [ -d "/Applications/$app_name" ]; then
-        if [ -w "/Applications" ]; then
-            rm -rf "/Applications/$app_name"
+    if [ -d "$install_dir/$app_name" ]; then
+        if [ -w "$install_dir" ]; then
+            rm -rf "$install_dir/$app_name"
         else
-            sudo rm -rf "/Applications/$app_name"
+            sudo rm -rf "$install_dir/$app_name"
         fi
     fi
 
-    # Move to Applications
-    if [ -w "/Applications" ]; then
-        mv "$app_bundle" "/Applications/"
+    # Move to /Applications
+    if [ -w "$install_dir" ]; then
+        mv "$app_bundle" "$install_dir/"
     else
-        sudo mv "$app_bundle" "/Applications/"
+        sudo mv "$app_bundle" "$install_dir/"
     fi
 
     # Remove quarantine attribute
-    if [ -d "/Applications/$app_name" ]; then
-        xattr -d com.apple.quarantine "/Applications/$app_name" 2>/dev/null || true
+    if [ -d "$install_dir/$app_name" ]; then
+        xattr -d com.apple.quarantine "$install_dir/$app_name" 2>/dev/null || true
     fi
 
-    print_success "Walgo Desktop installed to /Applications/$app_name"
-    print_info "You can launch it from Spotlight or Applications folder"
+    print_success "Walgo Desktop installed to $install_dir/$app_name"
+    echo ""
+    print_info "macOS Security Note:"
+    echo "  The app is not signed with an Apple Developer certificate."
+    echo "  If macOS blocks it on first launch:"
+    echo ""
+    echo "  1. Right-click on Walgo.app → Open → Open again"
+    echo "  2. Or go to System Settings → Privacy & Security → Open Anyway"
+    echo ""
+    print_info "Run with: walgo desktop"
 }
 
 # Install desktop app on Windows
@@ -444,30 +454,17 @@ install_desktop_windows() {
         return
     fi
 
-    # Determine install location
-    local install_path="${LOCALAPPDATA}/Programs/Walgo"
+    local install_dir="${LOCALAPPDATA}/Programs/Walgo"
 
-    # Create directory if it doesn't exist
-    mkdir -p "$install_path" 2>/dev/null || {
-        print_warning "Cannot create directory: $install_path"
-        print_info "You can manually copy the desktop app from: $tmp_dir"
-        return
-    }
+    # Create directory
+    mkdir -p "$install_dir"
 
     # Copy executable
-    cp "$exe_file" "$install_path/walgo-desktop.exe"
+    cp "$exe_file" "$install_dir/walgo-desktop.exe"
 
-    if [ -f "$install_path/walgo-desktop.exe" ]; then
-        print_success "Walgo Desktop installed to $install_path"
-        print_info "You can run it from: $install_path/walgo-desktop.exe"
-
-        # Create Start Menu shortcut if possible
-        local start_menu="${APPDATA}/Microsoft/Windows/Start Menu/Programs"
-        if [ -d "$start_menu" ]; then
-            # Note: Creating .lnk files requires PowerShell or external tools
-            print_info "To add to Start Menu, create a shortcut to:"
-            echo "    $install_path/walgo-desktop.exe"
-        fi
+    if [ -f "$install_dir/walgo-desktop.exe" ]; then
+        print_success "Walgo Desktop installed to $install_dir"
+        print_info "Run with: walgo desktop"
     else
         print_warning "Failed to copy desktop app"
     fi
@@ -485,43 +482,18 @@ install_desktop_linux() {
         return
     fi
 
-    # Determine install location
     local install_dir="${HOME}/.local/bin"
-    local desktop_dir="${HOME}/.local/share/applications"
 
-    # Create directories
+    # Create directory
     mkdir -p "$install_dir"
-    mkdir -p "$desktop_dir"
 
     # Copy binary
     cp "$binary" "$install_dir/walgo-desktop"
     chmod +x "$install_dir/walgo-desktop"
 
     if [ -f "$install_dir/walgo-desktop" ]; then
-        print_success "Walgo Desktop binary installed to $install_dir/walgo-desktop"
-
-        # Create .desktop file for application menu
-        cat > "$desktop_dir/walgo-desktop.desktop" << EOF
-[Desktop Entry]
-Version=1.0
-Type=Application
-Name=Walgo Desktop
-Comment=Walgo Desktop Application - Walrus Static Site Manager
-Exec=$install_dir/walgo-desktop
-Terminal=false
-Categories=Development;Utility;
-Keywords=walgo;walrus;hugo;static-site;
-EOF
-
-        chmod +x "$desktop_dir/walgo-desktop.desktop"
-
-        print_success "Desktop entry created: $desktop_dir/walgo-desktop.desktop"
-        print_info "You can launch it from your application menu or run: walgo-desktop"
-
-        # Update desktop database if available
-        if command -v update-desktop-database >/dev/null 2>&1; then
-            update-desktop-database "$desktop_dir" 2>/dev/null || true
-        fi
+        print_success "Walgo Desktop installed to $install_dir"
+        print_info "Run with: walgo desktop"
     else
         print_warning "Failed to copy desktop app"
     fi
@@ -1136,6 +1108,26 @@ show_next_steps() {
     else
         echo "     walgo uninstall"
     fi
+    echo ""
+    echo "  6. To launch the desktop app:"
+    if [ "$USE_COLORS" = true ]; then
+        echo -e "     ${GREEN}walgo desktop${NC}"
+    else
+        echo "     walgo desktop"
+    fi
+    echo ""
+    echo "     Desktop app installed to standard location:"
+    case "$OS" in
+        darwin)
+            echo "       /Applications/Walgo.app"
+            ;;
+        windows)
+            echo "       %LOCALAPPDATA%\\Programs\\Walgo\\walgo-desktop.exe"
+            ;;
+        linux)
+            echo "       ~/.local/bin/walgo-desktop"
+            ;;
+    esac
     echo ""
     echo "Documentation: https://github.com/$REPO"
     echo ""

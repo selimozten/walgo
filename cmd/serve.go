@@ -8,16 +8,73 @@ import (
 	"os/exec"
 	"strconv"
 	"strings"
+	"syscall"
 
+	"github.com/selimozten/walgo/internal/hugo"
 	"github.com/selimozten/walgo/internal/ui"
 	"github.com/spf13/cobra"
 )
+
+// killExistingHugoProcesses finds and kills any existing 'hugo serve' processes
+func killExistingHugoProcesses() error {
+	icons := ui.GetIcons()
+
+	// On macOS, use ps to find hugo processes
+	cmd := exec.Command("ps", "ax")
+	output, err := cmd.CombinedOutput()
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "%s Warning: Could not check for running Hugo processes: %v\n", icons.Warning, err)
+		return nil // Don't fail, just continue
+	}
+
+	lines := strings.Split(string(output), "\n")
+	var killedPIDs []int
+
+	for _, line := range lines {
+		// Look for lines containing 'hugo' and 'server'
+		if strings.Contains(line, "hugo") && strings.Contains(line, "server") {
+			// Parse PID (first field in ps ax output)
+			fields := strings.Fields(line)
+			if len(fields) == 0 {
+				continue
+			}
+
+			// Try to parse PID from first field
+			pid, err := strconv.Atoi(fields[0])
+			if err != nil {
+				continue
+			}
+
+			// Skip self (this process)
+			if pid == os.Getpid() || pid == os.Getppid() {
+				continue
+			}
+
+			// Kill the process
+			if err := syscall.Kill(pid, syscall.SIGTERM); err != nil {
+				fmt.Fprintf(os.Stderr, "%s Warning: Could not kill Hugo process %d: %v\n", icons.Warning, pid, err)
+			} else {
+				killedPIDs = append(killedPIDs, pid)
+			}
+		}
+	}
+
+	if len(killedPIDs) > 0 {
+		fmt.Printf("%s Killed %d existing Hugo serve process(es)\n", icons.Info, len(killedPIDs))
+		for _, pid := range killedPIDs {
+			fmt.Printf("  - PID: %d\n", pid)
+		}
+		// Give processes a moment to terminate
+	}
+
+	return nil
+}
 
 // serveCmd represents the serve command
 var serveCmd = &cobra.Command{
 	Use:   "serve",
 	Short: "Serve the Hugo site locally using Hugo's built-in server.",
-	Long: `Builds and serves the Hugo site locally using 'hugo server'.
+	Long: `Builds and serves your Hugo site locally using 'hugo server'.
 This command is a wrapper around 'hugo server' and supports common flags.
 The server will typically be available at http://localhost:1313 (or the port you specify).
 Any unrecognized flags will be passed directly to 'hugo server'.
@@ -25,6 +82,11 @@ Press Ctrl+C to stop the server.`,
 	RunE: func(cmd *cobra.Command, args []string) error {
 		icons := ui.GetIcons()
 		fmt.Printf("%s Starting local Hugo development server...\n", icons.Rocket)
+
+		// Kill any existing Hugo serve processes
+		if err := killExistingHugoProcesses(); err != nil {
+			fmt.Fprintf(os.Stderr, "%s Warning: Error cleaning up existing Hugo processes: %v\n", icons.Warning, err)
+		}
 
 		// Check if Hugo is installed
 		if _, err := exec.LookPath("hugo"); err != nil {
@@ -73,6 +135,11 @@ Press Ctrl+C to stop the server.`,
 		}
 		if port != 0 {
 			hugoArgs = append(hugoArgs, "--port", strconv.Itoa(port))
+		}
+
+		err = hugo.BuildSite(sitePath)
+		if err != nil {
+			return fmt.Errorf("failed to build site: %w", err)
 		}
 
 		// Append any remaining arguments (including unrecognized flags) to be passed to hugo server

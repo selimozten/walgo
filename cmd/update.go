@@ -12,6 +12,7 @@ import (
 	"github.com/selimozten/walgo/internal/config"
 	"github.com/selimozten/walgo/internal/deployer"
 	sb "github.com/selimozten/walgo/internal/deployer/sitebuilder"
+	"github.com/selimozten/walgo/internal/hugo"
 	"github.com/selimozten/walgo/internal/metrics"
 	"github.com/selimozten/walgo/internal/projects"
 	"github.com/selimozten/walgo/internal/ui"
@@ -53,7 +54,7 @@ Assumes the site has been built using 'walgo build'.`,
 			return fmt.Errorf("cannot determine current directory: %w", err)
 		}
 
-		cfg, err := config.LoadConfig()
+		cfg, err := config.LoadConfigFrom(sitePath)
 		if err != nil {
 			fmt.Fprintf(os.Stderr, "%s Error: %v\n", icons.Error, err)
 			return fmt.Errorf("error loading config: %w", err)
@@ -158,6 +159,11 @@ Assumes the site has been built using 'walgo build'.`,
 
 		fmt.Printf("\n%s Storing for %d epoch(s)\n", icons.Database, epochs)
 
+		err = hugo.BuildSite(sitePath)
+		if err != nil {
+			return fmt.Errorf("failed to build site: %w", err)
+		}
+
 		uploadStart := time.Now()
 		d := sb.New()
 		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Minute)
@@ -186,17 +192,17 @@ Assumes the site has been built using 'walgo build'.`,
 				fmt.Printf("\n%s Updating metadata...\n", icons.Package)
 				wsResourcesPath := filepath.Join(deployDir, "ws-resources.json")
 				if err := compress.UpdateObjectID(wsResourcesPath, objectID); err != nil {
-					fmt.Fprintf(os.Stderr, "%s Warning: Failed to save objectID to ws-resources.json: %v\n", icons.Warning, err)
-				} else {
-					fmt.Printf("  %s ObjectID saved to ws-resources.json\n", icons.Check)
+					fmt.Fprintf(os.Stderr, "%s Error: Failed to save objectID to ws-resources.json: %v\n", icons.Error, err)
+					return fmt.Errorf("failed to save objectID to ws-resources.json: %w", err)
 				}
+				fmt.Printf("  %s ObjectID saved to ws-resources.json\n", icons.Check)
 
 				// Update walgo.yaml with objectID
 				if err := config.UpdateWalgoYAMLProjectID(sitePath, objectID); err != nil {
-					fmt.Fprintf(os.Stderr, "%s Warning: Failed to update walgo.yaml: %v\n", icons.Warning, err)
-				} else {
-					fmt.Printf("  %s Updated walgo.yaml\n", icons.Check)
+					fmt.Fprintf(os.Stderr, "%s Error: Failed to update walgo.yaml: %v\n", icons.Error, err)
+					return fmt.Errorf("failed to update walgo.yaml with Object ID: %w", err)
 				}
+				fmt.Printf("  %s Updated walgo.yaml\n", icons.Check)
 
 				pm, err := projects.NewManager()
 				if err == nil {

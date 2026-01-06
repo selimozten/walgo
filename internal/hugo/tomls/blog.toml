@@ -1,0 +1,57 @@
+baseURL = "/"
+title = "{{SITE_NAME}}"
+languageCode = "en-us"
+theme = "ananke"
+
+canonifyURLs = false
+relativeURLs = false
+removePathAccents = true
+
+enableRobotsTXT = true
+summaryLength = 30
+
+# Gas-friendly: disable taxonomy by default
+disableKinds = ["taxonomy", "term"]
+
+[pagination]
+  pagerSize = 20
+
+[outputs]
+  home = ["HTML", "RSS"]
+  section = ["HTML", "RSS"]
+  page = ["HTML"]
+
+[minify]
+  disableXML = true
+  minifyOutput = true
+
+[markup]
+  [markup.goldmark.renderer]
+    unsafe = false
+  [markup.highlight]
+    noClasses = false
+    lineNos = true
+    guessSyntax = true
+
+[build]
+  useResourceCacheWhen = "fallback"
+
+[imaging]
+  quality = 82
+  resampleFilter = "Lanczos"
+  anchor = "Smart"
+
+# Ananke theme params
+[params]
+  favicon = "/favicon.svg"
+  site_logo = ""
+  text_color = ""
+  author = ""
+  description = "A blog powered by Walgo"
+  # Featured image for social sharing
+  featured_image = ""
+  # Show reading time on posts
+  show_reading_time = true
+  # Social links (optional)
+  # twitter = "https://twitter.com/username"
+  # github = "https://github.com/username"

@@ -242,7 +242,7 @@ Documentation contributions are welcome! See [Contributing Guide](CONTRIBUTING.m
 
 ## Version Information
 
-- **Current Version:** 0.2.1
+- **Current Version:** 0.3.0
 - **Last Updated:** January 2025
 - **Documentation Version:** Matches Walgo version
 

@@ -9,6 +9,7 @@ import (
 
 	"github.com/selimozten/walgo/internal/config"
 	"github.com/selimozten/walgo/internal/deployment"
+	"github.com/selimozten/walgo/internal/hugo"
 	"github.com/selimozten/walgo/internal/metrics"
 	"github.com/selimozten/walgo/internal/projects"
 	"github.com/selimozten/walgo/internal/sui"
@@ -55,7 +56,7 @@ Example: walgo deploy --epochs 5`,
 			return fmt.Errorf("error getting current directory: %w", err)
 		}
 
-		walgoCfg, err := config.LoadConfig()
+		walgoCfg, err := config.LoadConfigFrom(sitePath)
 		if err != nil {
 			fmt.Fprintf(os.Stderr, "%s Error: %v\n", icons.Error, err)
 			fmt.Fprintf(os.Stderr, "\n%s Tip: Run 'walgo init <site-name>' to create a new site\n", icons.Lightbulb)
@@ -74,9 +75,7 @@ Example: walgo deploy --epochs 5`,
 		description, _ := cmd.Flags().GetString("description")
 		imageURL, _ := cmd.Flags().GetString("image-url")
 
-		// Check if project should be saved and validate project name
 		if saveProject || projectName != "" {
-			// Determine project name
 			if projectName == "" {
 				projectName = filepath.Base(sitePath)
 				if projectName == "" || projectName == "." || projectName == "/" {
@@ -84,7 +83,6 @@ Example: walgo deploy --epochs 5`,
 				}
 			}
 
-			// Check if project name already exists
 			pm, err := projects.NewManager()
 			if err == nil {
 				defer pm.Close()
@@ -118,6 +116,11 @@ Example: walgo deploy --epochs 5`,
 				fmt.Fprintf(os.Stderr, "%s Warning: Version check failed: %v\n", icons.Warning, err)
 				fmt.Fprintf(os.Stderr, "  Continuing with deployment...\n")
 			}
+		}
+
+		err = hugo.BuildSite(sitePath)
+		if err != nil {
+			return fmt.Errorf("failed to build site: %w", err)
 		}
 
 		opts := deployment.DeploymentOptions{
@@ -169,7 +172,6 @@ Example: walgo deploy --epochs 5`,
 				network = "testnet"
 			}
 
-			// Show explorer links
 			ui.PrintHeader(icons.Link, "View Your Object on the Sui Network")
 			fmt.Println()
 			suiscanURL := sui.GetSuiscanURL(network, result.ObjectID)
@@ -178,7 +180,6 @@ Example: walgo deploy --epochs 5`,
 			fmt.Printf("   • Suivision:  %s\n", suivisionURL)
 			fmt.Println()
 
-			// Show SuiNS configuration instructions
 			ui.PrintHeader(icons.Globe, "Next: Configure SuiNS for Public Access")
 			fmt.Println()
 			if network == "mainnet" {
@@ -187,6 +188,8 @@ Example: walgo deploy --epochs 5`,
 				fmt.Printf("   3. Select 'Link To Walrus Site'\n")
 				fmt.Printf("   4. Enter Object ID: %s\n", result.ObjectID)
 				fmt.Printf("   5. Access at: https://your-domain.wal.app\n")
+				fmt.Println()
+				fmt.Printf("   %s Guide: https://docs.wal.app/docs/walrus-sites/tutorial-suins\n", icons.Info)
 				fmt.Println()
 			}
 

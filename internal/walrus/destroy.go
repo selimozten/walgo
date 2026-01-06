@@ -1,0 +1,78 @@
+package walrus
+
+import (
+	"bytes"
+	"context"
+	"fmt"
+	"io"
+	"os"
+
+	"github.com/selimozten/walgo/internal/ui"
+)
+
+// DestroySite handles destroying an existing site on Walrus.
+// It executes the `site-builder destroy` command.
+// The context can be used to cancel or timeout the operation.
+func DestroySite(ctx context.Context, objectID string) error {
+	if err := validateObjectID(objectID); err != nil {
+		return fmt.Errorf("invalid object ID: %w", err)
+	}
+
+	if err := CheckSiteBuilderSetup(); err != nil {
+		return fmt.Errorf("site-builder setup issue: %w\n\nRun 'walgo setup' to configure site-builder", err)
+	}
+
+	builderPath, err := execLookPath(siteBuilderCmd)
+	if err != nil {
+		return fmt.Errorf("'%s' CLI not found. Please install it and ensure it's in your PATH", siteBuilderCmd)
+	}
+
+	siteBuilderContext := GetWalrusContext()
+	args := []string{
+		"--context", siteBuilderContext,
+		"destroy",
+		objectID,
+	}
+
+	icons := ui.GetIcons()
+	fmt.Printf("%s Executing: %s %s\n", icons.Info, builderPath, args)
+	fmt.Printf("%s Destroying site on Walrus...\n", icons.Garbage)
+	fmt.Println()
+
+	cmd := execCommand(builderPath, args...)
+	var stdout, stderr bytes.Buffer
+
+	cmd.Stdout = io.MultiWriter(os.Stdout, &stdout)
+	cmd.Stderr = io.MultiWriter(os.Stderr, &stderr)
+
+	if ctx != nil {
+		if err := cmd.Start(); err != nil {
+			return handleSiteBuilderError(err, stderr.String())
+		}
+
+		done := make(chan error, 1)
+		go func() {
+			done <- cmd.Wait()
+		}()
+
+		select {
+		case <-ctx.Done():
+			if cmd.Process != nil {
+				_ = cmd.Process.Kill()
+			}
+			return fmt.Errorf("destroy operation cancelled: %w", ctx.Err())
+		case err := <-done:
+			if err != nil {
+				return handleSiteBuilderError(err, stderr.String())
+			}
+		}
+	} else {
+		if err := cmd.Run(); err != nil {
+			return handleSiteBuilderError(err, stderr.String())
+		}
+	}
+
+	fmt.Printf("\n%s Site destroyed successfully on Walrus!\n", icons.Success)
+
+	return nil
+}

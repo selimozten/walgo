@@ -4,9 +4,12 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 
 	"github.com/selimozten/walgo/internal/config"
+	"github.com/selimozten/walgo/internal/hugo"
 	"github.com/selimozten/walgo/internal/obsidian"
+	"github.com/selimozten/walgo/internal/projects"
 
 	"github.com/selimozten/walgo/internal/ui"
 	"github.com/spf13/cobra"
@@ -14,9 +17,12 @@ import (
 
 var importCmd = &cobra.Command{
 	Use:   "import [obsidian-vault-path]",
-	Short: "Import content from an Obsidian vault.",
-	Long: `Imports content from a specified Obsidian vault path into the Hugo site structure.
-This command will attempt to convert Obsidian markdown and attachments into a Hugo-compatible format.
+	Short: "Import content from an Obsidian vault into a new Hugo site.",
+	Long: `Imports content from a specified Obsidian vault path into a new Hugo site.
+This command will:
+1. Create a new Hugo site
+2. Add walgo.yaml configuration
+3. Import and convert Obsidian markdown and attachments
 
 Features:
 - Converts [[wikilinks]] to Hugo markdown links
@@ -29,17 +35,84 @@ Features:
 	RunE: func(cmd *cobra.Command, args []string) error {
 		icons := ui.GetIcons()
 		vaultPath := args[0]
-		fmt.Printf("%s Importing content from Obsidian vault: %s\n", icons.Book, vaultPath)
 
-		sitePath, err := os.Getwd()
+		// Validate and sanitize vault path to prevent path traversal attacks
+		absVaultPath, err := filepath.Abs(vaultPath)
 		if err != nil {
-			fmt.Fprintf(os.Stderr, "%s Error: Cannot determine current directory: %v\n", icons.Error, err)
-			return fmt.Errorf("cannot determine current directory: %w", err)
+			return fmt.Errorf("invalid vault path: %w", err)
+		}
+		vaultPath = filepath.Clean(absVaultPath)
+
+		// Verify the path exists and is a directory
+		info, err := os.Stat(vaultPath)
+		if err != nil {
+			if os.IsNotExist(err) {
+				return fmt.Errorf("vault path does not exist: %s", vaultPath)
+			}
+			return fmt.Errorf("cannot access vault path: %w", err)
+		}
+		if !info.IsDir() {
+			return fmt.Errorf("vault path is not a directory: %s", vaultPath)
 		}
 
-		cfg, err := config.LoadConfig()
+		// Get site name from flag or use vault directory name
+		siteName, err := cmd.Flags().GetString("site-name")
 		if err != nil {
-			fmt.Fprintf(os.Stderr, "%s Error: %v\n", icons.Error, err)
+			return fmt.Errorf("error reading site-name flag: %w", err)
+		}
+		siteName = strings.TrimSpace(siteName)
+		if siteName == "" {
+			// Use vault directory name as default
+			siteName = filepath.Base(vaultPath)
+		}
+
+		// Get parent directory for site creation
+		parentDir, err := cmd.Flags().GetString("parent-dir")
+		if err != nil {
+			return fmt.Errorf("error reading parent-dir flag: %w", err)
+		}
+		if parentDir == "" {
+			parentDir, err = os.Getwd()
+			if err != nil {
+				return fmt.Errorf("cannot determine current directory: %w", err)
+			}
+		}
+
+		sitePath := filepath.Join(parentDir, siteName)
+
+		// Check if site already exists
+		if _, err := os.Stat(sitePath); err == nil {
+			return fmt.Errorf("site directory already exists: %s", sitePath)
+		}
+
+		fmt.Printf("%s Creating new Hugo site and importing Obsidian vault\n", icons.Rocket)
+		fmt.Printf("   Vault: %s\n", vaultPath)
+		fmt.Printf("   Site:  %s\n\n", sitePath)
+
+		// Step 1: Create site directory
+		if err := os.MkdirAll(sitePath, 0755); err != nil {
+			return fmt.Errorf("failed to create site directory: %w", err)
+		}
+		fmt.Printf("%s Created site directory\n", icons.Check)
+
+		// Step 2: Initialize Hugo site
+		if err := hugo.InitializeSite(sitePath); err != nil {
+			return fmt.Errorf("failed to initialize Hugo site: %w", err)
+		}
+		fmt.Printf("%s Initialized Hugo site\n", icons.Check)
+
+		// Step 3: Create walgo.yaml
+		if err := config.CreateDefaultWalgoConfig(sitePath); err != nil {
+			return fmt.Errorf("failed to create walgo.yaml: %w", err)
+		}
+		fmt.Printf("%s Created walgo.yaml configuration\n", icons.Check)
+
+		// Step 4: Import Obsidian vault
+		fmt.Printf("\n%s Importing Obsidian content...\n", icons.Book)
+
+		// Load config from the new site
+		cfg, err := config.LoadConfigFrom(sitePath)
+		if err != nil {
 			return fmt.Errorf("error loading config: %w", err)
 		}
 
@@ -47,11 +120,6 @@ Features:
 		if err != nil {
 			fmt.Fprintf(os.Stderr, "Error reading output-dir flag: %v\n", err)
 			return fmt.Errorf("error reading output-dir flag: %w", err)
-		}
-		overwrite, err := cmd.Flags().GetBool("overwrite")
-		if err != nil {
-			fmt.Fprintf(os.Stderr, "Error reading overwrite flag: %v\n", err)
-			return fmt.Errorf("error reading overwrite flag: %w", err)
 		}
 		dryRun, err := cmd.Flags().GetBool("dry-run")
 		if err != nil {
@@ -110,18 +178,13 @@ Features:
 
 			stats.PrintSummary()
 			fmt.Printf("\n%s To actually import, run without --dry-run flag\n", icons.Lightbulb)
+			// Clean up the created site directory in dry-run mode
+			os.RemoveAll(sitePath)
 			return nil
 		}
 
-		if !overwrite {
-			if files, err := os.ReadDir(hugoContentDir); err == nil && len(files) > 0 {
-				fmt.Fprintf(os.Stderr, "%s Error: Target directory %s is not empty\n", icons.Error, hugoContentDir)
-				fmt.Fprintf(os.Stderr, "\n%s Use --overwrite to proceed anyway\n", icons.Lightbulb)
-				return fmt.Errorf("target directory is not empty: %s", hugoContentDir)
-			}
-		}
-
-		fmt.Printf("\n%s Importing content...\n", icons.Package)
+		// No need for overwrite check - we just created the site
+		fmt.Printf("%s Importing content...\n", icons.Package)
 		stats, err := obsidian.ImportVault(vaultPath, hugoContentDir, obsidianCfg)
 		if err != nil {
 			fmt.Fprintf(os.Stderr, "\n%s Error: Import failed: %v\n", icons.Error, err)
@@ -140,10 +203,30 @@ Features:
 			fmt.Printf("\n%s Some files had errors during import. Check the output above for details.\n", icons.Warning)
 		}
 
+		err = hugo.BuildSite(sitePath)
+		if err != nil {
+			return fmt.Errorf("failed to build site: %w", err)
+		}
+
+		// Step 5: Create draft project
+		manager, err := projects.NewManager()
+		if err != nil {
+			return fmt.Errorf("failed to create project manager: %w", err)
+		}
+		defer manager.Close()
+		if err := manager.CreateDraftProject(siteName, sitePath); err != nil {
+			return fmt.Errorf("failed to create draft project: %w", err)
+		}
+		fmt.Printf("\n%s Created draft project: %s\n", icons.Check, siteName)
+
+		fmt.Println("\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
+		fmt.Printf("%s Site created and imported successfully!\n", icons.Success)
+		fmt.Println("━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
 		fmt.Printf("\n%s Next steps:\n", icons.Lightbulb)
-		fmt.Println("   - Review the imported content in your Hugo site")
-		fmt.Println("   - Run 'walgo build' to build your site")
-		fmt.Println("   - Run 'walgo serve' to preview your site locally")
+		fmt.Printf("   - cd %s\n", siteName)
+		fmt.Println("   - Build site: walgo build")
+		fmt.Println("   - Preview: walgo serve")
+		fmt.Println("   - Deploy: walgo launch")
 
 		return nil
 	},
@@ -152,8 +235,9 @@ Features:
 func init() {
 	rootCmd.AddCommand(importCmd)
 
+	importCmd.Flags().StringP("site-name", "n", "", "Name for the new site (defaults to vault directory name)")
+	importCmd.Flags().StringP("parent-dir", "p", "", "Parent directory for site creation (defaults to current directory)")
 	importCmd.Flags().StringP("output-dir", "o", "", "Specify a subdirectory in content for imported files")
-	importCmd.Flags().BoolP("overwrite", "f", false, "Overwrite existing files during import")
 	importCmd.Flags().Bool("convert-wikilinks", true, "Convert [[wikilinks]] to Hugo markdown links")
 	importCmd.Flags().String("attachment-dir", "", "Directory name for attachments (relative to static/)")
 	importCmd.Flags().String("frontmatter-format", "", "Frontmatter format for new files (yaml, toml, json)")

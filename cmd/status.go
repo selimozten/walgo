@@ -30,7 +30,14 @@ You can provide the object ID as an argument, or the command will look for it in
 			objectID = args[0]
 			fmt.Printf("Checking status for object ID: %s\n", objectID)
 		} else {
-			cfg, err := config.LoadConfig()
+
+			sitePath, err := os.Getwd()
+			if err != nil {
+				fmt.Fprintf(os.Stderr, "%s Error: Cannot determine current directory: %v\n", icons.Error, err)
+				return fmt.Errorf("error getting cwd: %w", err)
+			}
+
+			cfg, err := config.LoadConfigFrom(sitePath)
 			if err != nil {
 				fmt.Fprintf(os.Stderr, "%v\n", err)
 				return fmt.Errorf("error loading config: %w", err)

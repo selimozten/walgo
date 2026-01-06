@@ -37,7 +37,7 @@ Alternative deployment methods:
 Docs: https://github.com/selimozten/walgo`,
 }
 
-// Execute runs the root command.
+// Execute runs the root command and returns any error encountered.
 func Execute() error {
 	err := rootCmd.Execute()
 	if err != nil {

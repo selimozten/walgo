@@ -41,9 +41,13 @@ func (a *Adapter) Status(ctx context.Context, objectID string, opts deployer.Dep
 	if err != nil {
 		return nil, err
 	}
-	rc := 0
-	if out != nil {
-		rc = len(out.Resources)
+	if out == nil {
+		return &deployer.Result{Success: false, ObjectID: objectID}, nil
 	}
-	return &deployer.Result{Success: out.Success, ObjectID: objectID, BrowseURLs: out.BrowseURLs, ResourceCount: rc}, nil
+	return &deployer.Result{
+		Success:       out.Success,
+		ObjectID:      objectID,
+		BrowseURLs:    out.BrowseURLs,
+		ResourceCount: len(out.Resources),
+	}, nil
 }

@@ -4,7 +4,9 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 
+	"github.com/selimozten/walgo/internal/sui"
 	"github.com/spf13/viper"
 	"gopkg.in/yaml.v3"
 )
@@ -13,7 +15,7 @@ const (
 	DefaultConfigFileName = "walgo.yaml"
 )
 
-// CreateDefaultWalgoConfig creates a default walgo.yaml file in the specified site path.
+// CreateDefaultWalgoConfig creates a default walgo.yaml configuration file in the specified site directory.
 func CreateDefaultWalgoConfig(sitePath string) error {
 	cfg := NewDefaultWalgoConfig()
 	configFilePath := filepath.Join(sitePath, DefaultConfigFileName)
@@ -22,6 +24,17 @@ func CreateDefaultWalgoConfig(sitePath string) error {
 		return fmt.Errorf("configuration file %s already exists", configFilePath)
 	} else if !os.IsNotExist(err) {
 		return fmt.Errorf("error checking for config file %s: %w", configFilePath, err)
+	}
+
+	// Automatically set network from Sui CLI active environment
+	activeEnv, err := sui.GetActiveEnv()
+	if err == nil {
+		// Normalize the environment name (remove any warnings)
+		network := strings.ToLower(strings.TrimSpace(activeEnv))
+		if network == "mainnet" || network == "testnet" {
+			cfg.WalrusConfig.Network = network
+			fmt.Printf("Detected Sui network: %s\n", network)
+		}
 	}
 
 	data, err := yaml.Marshal(&cfg)
@@ -38,7 +51,7 @@ func CreateDefaultWalgoConfig(sitePath string) error {
 	return nil
 }
 
-// LoadConfig loads the Walgo configuration from walgo.yaml.
+// LoadConfig reads and parses the Walgo configuration from walgo.yaml file.
 func LoadConfig() (*WalgoConfig, error) {
 	if viper.ConfigFileUsed() == "" {
 		return nil, fmt.Errorf("walgo.yaml configuration file not found or failed to load. Ensure you are in a Walgo project directory (where walgo.yaml or .walgo.yaml exists in CWD/home), or use the --config flag to specify the path. You can create a default config with 'walgo init'")
@@ -65,8 +78,8 @@ func LoadConfig() (*WalgoConfig, error) {
 	return &cfg, nil
 }
 
-// LoadConfigFrom loads the Walgo configuration from a specific directory.
-// This is useful when you need to load config from a path different from CWD.
+// LoadConfigFrom reads and parses the Walgo configuration from a specific directory.
+// Useful when configuration needs to be loaded from a path different from the current working directory.
 func LoadConfigFrom(sitePath string) (*WalgoConfig, error) {
 	configPath := filepath.Join(sitePath, DefaultConfigFileName)
 
@@ -103,7 +116,7 @@ func LoadConfigFrom(sitePath string) (*WalgoConfig, error) {
 	return &cfg, nil
 }
 
-// SaveConfig saves the given WalgoConfig to walgo.yaml in the specified directory.
+// SaveConfig persists the provided WalgoConfig to walgo.yaml in the specified directory.
 func SaveConfig(configDir string, cfg *WalgoConfig) error {
 	configFilePath := filepath.Join(configDir, DefaultConfigFileName)
 

@@ -4,9 +4,11 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 
 	"github.com/selimozten/walgo/internal/config"
 	"github.com/selimozten/walgo/internal/hugo"
+	"github.com/selimozten/walgo/internal/projects"
 	"github.com/selimozten/walgo/internal/ui"
 
 	"github.com/spf13/cobra"
@@ -32,6 +34,10 @@ file tailored for Walrus Sites deployment.`,
 		if err != nil {
 			fmt.Fprintf(os.Stderr, "%s Error: Cannot determine current directory: %v\n", icons.Error, err)
 			return fmt.Errorf("cannot determine current directory: %w", err)
+		}
+		siteName = strings.TrimSpace(siteName)
+		if siteName == "" {
+			return fmt.Errorf("site name is required")
 		}
 		sitePath := filepath.Join(cwd, siteName)
 
@@ -59,6 +65,24 @@ file tailored for Walrus Sites deployment.`,
 		if !quiet {
 			fmt.Printf("  %s Created walgo.yaml configuration\n", icons.Check)
 		}
+
+		err = hugo.BuildSite(sitePath)
+		if err != nil {
+			return fmt.Errorf("failed to build site: %w", err)
+		}
+
+		manager, err := projects.NewManager()
+		if err != nil {
+			return fmt.Errorf("failed to create project manager: %w", err)
+		}
+		defer manager.Close()
+
+		// Create draft project
+		if err := manager.CreateDraftProject(siteName, sitePath); err != nil {
+			return fmt.Errorf("failed to create draft project: %w", err)
+		}
+
+		fmt.Printf("   %s Created draft project\n", icons.Check)
 
 		if !quiet {
 			fmt.Println("\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━")

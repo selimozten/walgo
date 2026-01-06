@@ -421,6 +421,8 @@ Use SuiNS domains for human-readable URLs.
 2. **On-chain deployment** - Have a site object ID
 3. **Sui wallet** - Configured and funded
 
+For detailed instructions, see the [SuiNS tutorial](https://docs.wal.app/docs/walrus-sites/tutorial-suins).
+
 ### Linking Domain to Site
 
 ```bash

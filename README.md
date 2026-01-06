@@ -33,17 +33,17 @@ Deploy your Hugo sites to the decentralized web with an interactive wizard. No b
 
 ## Features
 
-| Feature | Description |
-|---------|-------------|
+| Feature                    | Description                                                                  |
+| -------------------------- | ---------------------------------------------------------------------------- |
 | **Interactive Deployment** | `walgo launch` guides you step-by-step through the entire deployment process |
-| **Project Management** | Track all your sites, deployment history, and updates with `walgo projects` |
-| **AI Content Generation** | Generate and update blog posts with AI assistance |
-| **Free Testing Mode** | HTTP deployment requires no wallet or cryptocurrency |
-| **Asset Optimization** | Automatic HTML, CSS, and JavaScript minification |
-| **Brotli Compression** | Pre-compressed files for faster load times |
-| **Obsidian Integration** | Transform your Obsidian vault into a website |
-| **Desktop App** | Optional GUI for visual project management |
-| **SuiNS Support** | Custom domain names via Sui Name Service |
+| **Project Management**     | Track all your sites, deployment history, and updates with `walgo projects`  |
+| **AI Content Generation**  | Generate and update blog posts with AI assistance                            |
+| **Free Testing Mode**      | HTTP deployment requires no wallet or cryptocurrency                         |
+| **Asset Optimization**     | Automatic HTML, CSS, and JavaScript minification                             |
+| **Brotli Compression**     | Pre-compressed files for faster load times                                   |
+| **Obsidian Integration**   | One-command site creation from Obsidian vaults                               |
+| **Desktop App**            | Optional GUI for visual project management                                   |
+| **SuiNS Support**          | Custom domain names via Sui Name Service                                     |
 
 ---
 
@@ -75,6 +75,54 @@ make build
 walgo version
 ```
 
+### Desktop App (Optional)
+
+Download the desktop GUI from the [releases page](https://github.com/selimozten/walgo/releases).
+
+#### macOS Installation
+
+**Security Note:** The desktop app is currently not signed with an Apple Developer certificate. You'll need to allow it manually on first launch.
+
+**Method 1: Right-click to Open (Recommended)**
+
+1. Download and extract `walgo-desktop_*_darwin_*.tar.gz`
+2. Move `Walgo.app` to your Applications folder
+3. **Right-click** on `Walgo.app` and select **"Open"**
+4. Click **"Open"** again in the security dialog
+5. The app will now open and be trusted for future launches
+
+**Method 2: System Settings**
+
+1. Try to open the app normally (it will be blocked)
+2. Go to **System Settings** → **Privacy & Security**
+3. Scroll down and click **"Open Anyway"** next to the Walgo message
+4. Click **"Open"** in the confirmation dialog
+
+**Method 3: Terminal (Advanced Users)**
+
+```bash
+# Remove quarantine attribute
+xattr -cr /Applications/Walgo.app
+
+# Then open normally
+open /Applications/Walgo.app
+```
+
+**Why is this needed?**
+Apple requires apps to be signed with a paid Developer ID certificate ($99/year). As an open-source project, we currently distribute unsigned builds. This is safe - you can verify the source code on GitHub.
+
+#### Windows Installation
+
+1. Download `walgo-desktop_*_windows_amd64.zip`
+2. Extract and run `walgo-desktop.exe`
+3. Windows Defender may show a warning - click "More info" → "Run anyway"
+
+#### Linux Installation
+
+1. Download `walgo-desktop_*_linux_amd64.tar.gz`
+2. Extract and run `./walgo-desktop`
+3. Make executable if needed: `chmod +x walgo-desktop`
+
 ---
 
 ## Quick Start
@@ -88,6 +136,7 @@ walgo quickstart my-blog
 ```
 
 This will:
+
 1. Create a new Hugo site with a theme
 2. Add sample content
 3. Build and optimize the site
@@ -130,50 +179,50 @@ walgo launch
 
 ### Core Workflow
 
-| Command | Description |
-|---------|-------------|
-| `walgo quickstart <name>` | Create, build, and deploy a new site |
-| `walgo init <name>` | Initialize a new Hugo site |
-| `walgo build` | Build site with optimization |
-| `walgo serve` | Start local development server |
-| `walgo launch` | **Interactive deployment wizard (recommended)** |
+| Command                   | Description                                     |
+| ------------------------- | ----------------------------------------------- |
+| `walgo quickstart <name>` | Create, build, and deploy a new site            |
+| `walgo init <name>`       | Initialize a new Hugo site                      |
+| `walgo build`             | Build site with optimization                    |
+| `walgo serve`             | Start local development server                  |
+| `walgo launch`            | **Interactive deployment wizard (recommended)** |
 
 ### Project Management
 
-| Command | Description |
-|---------|-------------|
-| `walgo projects` | List all your deployed sites |
-| `walgo projects show <name>` | View project details and history |
-| `walgo projects update <name>` | Update an existing deployment |
-| `walgo projects archive <name>` | Archive a project |
+| Command                         | Description                      |
+| ------------------------------- | -------------------------------- |
+| `walgo projects`                | List all your deployed sites     |
+| `walgo projects show <name>`    | View project details and history |
+| `walgo projects update <name>`  | Update an existing deployment    |
+| `walgo projects archive <name>` | Archive a project                |
 
 ### Content & AI
 
-| Command | Description |
-|---------|-------------|
-| `walgo new <path>` | Create new content file |
-| `walgo import <vault>` | Import from Obsidian vault |
-| `walgo ai configure` | Set up AI provider (OpenAI/OpenRouter) |
-| `walgo ai generate` | Generate content with AI |
-| `walgo ai update <file>` | Update content with AI |
+| Command                  | Description                                |
+| ------------------------ | ------------------------------------------ |
+| `walgo new <path>`       | Create new content file                    |
+| `walgo import <vault>`   | Create site and import from Obsidian vault |
+| `walgo ai configure`     | Set up AI provider (OpenAI/OpenRouter)     |
+| `walgo ai generate`      | Generate content with AI                   |
+| `walgo ai update <file>` | Update content with AI                     |
 
 ### Utilities
 
-| Command | Description |
-|---------|-------------|
-| `walgo doctor` | Diagnose environment issues |
-| `walgo status <id>` | Check deployment status |
-| `walgo optimize` | Optimize HTML/CSS/JS files |
-| `walgo compress` | Apply Brotli compression |
-| `walgo domain` | SuiNS domain management |
+| Command             | Description                 |
+| ------------------- | --------------------------- |
+| `walgo doctor`      | Diagnose environment issues |
+| `walgo status <id>` | Check deployment status     |
+| `walgo optimize`    | Optimize HTML/CSS/JS files  |
+| `walgo compress`    | Apply Brotli compression    |
+| `walgo domain`      | SuiNS domain management     |
 
 ### Advanced Deployment
 
-| Command | Description |
-|---------|-------------|
-| `walgo deploy` | Direct on-chain deployment (requires wallet) |
-| `walgo deploy-http` | HTTP deployment (no wallet, testnet only) |
-| `walgo update <id>` | Update existing site by object ID |
+| Command             | Description                                  |
+| ------------------- | -------------------------------------------- |
+| `walgo deploy`      | Direct on-chain deployment (requires wallet) |
+| `walgo deploy-http` | HTTP deployment (no wallet, testnet only)    |
+| `walgo update <id>` | Update existing site by object ID            |
 
 > **Note:** For most users, `walgo launch` is the recommended deployment method as it provides guidance and manages your projects automatically.
 
@@ -193,8 +242,8 @@ hugo:
 
 # Walrus deployment settings
 walrus:
-  project_id: ""        # Set automatically after first deploy
-  epochs: 5             # Storage duration
+  project_id: "" # Set automatically after first deploy
+  epochs: 5 # Storage duration
   entrypoint: "index.html"
 
 # Asset optimization
@@ -219,7 +268,7 @@ compress:
 # AI content generation (optional)
 ai:
   enabled: false
-  provider: "openai"    # or "openrouter"
+  provider: "openai" # or "openrouter"
   model: "gpt-4"
 
 # Obsidian import settings (optional)
@@ -231,10 +280,10 @@ obsidian:
 
 ### Environment Variables
 
-| Variable | Description |
-|----------|-------------|
+| Variable        | Description                    |
+| --------------- | ------------------------------ |
 | `WALGO_ASCII=1` | Force ASCII output (no emojis) |
-| `WALGO_EMOJI=1` | Force emoji output |
+| `WALGO_EMOJI=1` | Force emoji output             |
 
 ---
 
@@ -243,11 +292,13 @@ obsidian:
 Comprehensive documentation is available in the [`docs/`](docs/) directory:
 
 ### Getting Started
+
 - [Quickstart Guide](docs/QUICKSTART.md) — Deploy in 2 minutes
 - [Installation Guide](docs/INSTALLATION.md) — All platforms
 - [Getting Started](docs/GETTING_STARTED.md) — First deployment walkthrough
 
 ### User Guides
+
 - [Commands Reference](docs/COMMANDS.md) — All 29+ commands documented
 - [Launch Wizard](docs/LAUNCH_WIZARD.md) — Interactive deployment guide
 - [Configuration](docs/CONFIGURATION.md) — All options explained
@@ -256,6 +307,7 @@ Comprehensive documentation is available in the [`docs/`](docs/) directory:
 - [Troubleshooting](docs/TROUBLESHOOTING.md) — Common issues
 
 ### Developer Guides
+
 - [Architecture](docs/ARCHITECTURE.md) — System design
 - [Development](docs/DEVELOPMENT.md) — Contributing setup
 - [Contributing](docs/CONTRIBUTING.md) — How to contribute
@@ -312,12 +364,12 @@ walgo doctor --fix-all # Auto-fix common issues
 
 ### Common Issues
 
-| Issue | Solution |
-|-------|----------|
-| `site-builder not found` | Run `walgo setup-deps` |
-| `insufficient funds` | Get testnet SUI from [faucet](https://faucet.sui.io) |
-| `Hugo not extended` | Reinstall Hugo Extended version |
-| `network timeout` | Retry with `--epochs 1` or check connectivity |
+| Issue                    | Solution                                             |
+| ------------------------ | ---------------------------------------------------- |
+| `site-builder not found` | Run `walgo setup-deps`                               |
+| `insufficient funds`     | Get testnet SUI from [faucet](https://faucet.sui.io) |
+| `Hugo not extended`      | Reinstall Hugo Extended version                      |
+| `network timeout`        | Retry with `--epochs 1` or check connectivity        |
 
 ### Getting Help
 
@@ -393,7 +445,7 @@ walgo/
 
 - **Walrus Documentation:** [docs.walrus.site](https://docs.walrus.site)
 - **Sui Documentation:** [docs.sui.io](https://docs.sui.io)
-- **SuiNS (Domains):** [suins.io](https://suins.io)
+- **SuiNS (Domains):** [suins.io](https://suins.io) | [Tutorial](https://docs.wal.app/docs/walrus-sites/tutorial-suins)
 
 ---
 

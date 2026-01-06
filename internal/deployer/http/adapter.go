@@ -46,8 +46,55 @@ func (a *Adapter) Update(ctx context.Context, siteDir string, objectID string, o
 }
 
 func (a *Adapter) Status(ctx context.Context, objectID string, opts deployer.DeployOptions) (*deployer.Result, error) {
-	// HTTP path has no status; return success stub
-	return &deployer.Result{Success: true, ObjectID: objectID}, nil
+	// HTTP deployments store blobs, not site objects
+	// We can verify blob existence by checking the aggregator
+	if opts.AggregatorBaseURL == "" {
+		return nil, fmt.Errorf("status check requires AggregatorBaseURL to verify blob existence")
+	}
+
+	if objectID == "" {
+		return &deployer.Result{Success: false, Message: "no object ID provided"}, nil
+	}
+
+	// Check if blob exists on aggregator
+	endpoint := fmt.Sprintf("%s/v1/blobs/%s", strings.TrimRight(opts.AggregatorBaseURL, "/"), objectID)
+	req, err := http.NewRequestWithContext(ctx, http.MethodHead, endpoint, nil)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create status request: %w", err)
+	}
+
+	client := &http.Client{Timeout: 10 * time.Second}
+	resp, err := client.Do(req)
+	if err != nil {
+		return &deployer.Result{
+			Success:  false,
+			ObjectID: objectID,
+			Message:  fmt.Sprintf("failed to reach aggregator: %v", err),
+		}, nil
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode == http.StatusOK || resp.StatusCode == http.StatusPartialContent {
+		return &deployer.Result{
+			Success:  true,
+			ObjectID: objectID,
+			Message:  "blob exists on aggregator",
+		}, nil
+	}
+
+	if resp.StatusCode == http.StatusNotFound {
+		return &deployer.Result{
+			Success:  false,
+			ObjectID: objectID,
+			Message:  "blob not found on aggregator",
+		}, nil
+	}
+
+	return &deployer.Result{
+		Success:  false,
+		ObjectID: objectID,
+		Message:  fmt.Sprintf("aggregator returned status %d", resp.StatusCode),
+	}, nil
 }
 
 func (a *Adapter) Destroy(ctx context.Context, objectID string) error {
@@ -56,10 +103,31 @@ func (a *Adapter) Destroy(ctx context.Context, objectID string) error {
 	return fmt.Errorf("destroy operation not supported for HTTP deployment mode - files must be managed manually")
 }
 
+// calculateUploadTimeout returns a dynamic timeout based on body size
+// Minimum 30 seconds, scales with size (1MB = 30s additional), maximum 10 minutes
+func calculateUploadTimeout(bodySize int) time.Duration {
+	const (
+		minTimeout     = 30 * time.Second
+		maxTimeout     = 10 * time.Minute
+		bytesPerSecond = 100 * 1024 // Assume 100KB/s as conservative upload speed
+	)
+
+	// Calculate time needed at conservative speed, plus buffer
+	estimatedTime := time.Duration(bodySize/bytesPerSecond) * time.Second
+	timeout := minTimeout + estimatedTime
+
+	if timeout > maxTimeout {
+		return maxTimeout
+	}
+	return timeout
+}
+
 // Quilt upload: single multipart request
 func (a *Adapter) deployQuilt(ctx context.Context, siteDir, publisher string, epochs int) (*deployer.Result, error) {
 	var body bytes.Buffer
 	writer := multipart.NewWriter(&body)
+	var fileCount int
+
 	// Walk files and add to multipart
 	err := filepath.Walk(siteDir, func(path string, info os.FileInfo, err error) error {
 		if err != nil {
@@ -92,11 +160,17 @@ func (a *Adapter) deployQuilt(ctx context.Context, siteDir, publisher string, ep
 		if closeErr := f.Close(); closeErr != nil {
 			return fmt.Errorf("failed to close file %s: %w", path, closeErr)
 		}
+		fileCount++
 		return nil
 	})
 	if err != nil {
 		return nil, err
 	}
+
+	if fileCount == 0 {
+		return nil, fmt.Errorf("no files found in directory: %s", siteDir)
+	}
+
 	if err := writer.Close(); err != nil {
 		return nil, fmt.Errorf("failed to close multipart writer: %w", err)
 	}
@@ -109,9 +183,15 @@ func (a *Adapter) deployQuilt(ctx context.Context, siteDir, publisher string, ep
 	req.Header.Set("Accept", "application/json")
 	req.Header.Set("Content-Type", writer.FormDataContentType())
 
-	client := &http.Client{Timeout: 20 * time.Second}
+	// Use dynamic timeout based on body size
+	timeout := calculateUploadTimeout(body.Len())
+	client := &http.Client{Timeout: timeout}
 	resp, err := client.Do(req)
 	if err != nil {
+		if strings.Contains(err.Error(), "timeout") || strings.Contains(err.Error(), "deadline exceeded") {
+			return nil, fmt.Errorf("upload timed out after %v (body size: %s) - try deploying with 'blobs' mode for large sites",
+				timeout, formatBytes(int64(body.Len())))
+		}
 		return nil, err
 	}
 	defer resp.Body.Close()
@@ -173,6 +253,12 @@ func parseQuiltResponse(respBytes []byte) (string, map[string]string, error) {
 	return quiltID, patches, nil
 }
 
+// uploadError tracks a failed file upload
+type uploadError struct {
+	file string
+	err  error
+}
+
 // Blobs upload: concurrent workers with exponential backoff
 func (a *Adapter) deployBlobs(ctx context.Context, siteDir, publisher string, epochs, workers, maxRetries int) (*deployer.Result, error) {
 	type job struct{ rel, abs string }
@@ -194,8 +280,13 @@ func (a *Adapter) deployBlobs(ctx context.Context, siteDir, publisher string, ep
 		return nil, err
 	}
 
+	if len(files) == 0 {
+		return nil, fmt.Errorf("no files found in directory: %s", siteDir)
+	}
+
 	endpointBase := strings.TrimRight(publisher, "/") + "/v1/blobs?epochs=" + fmt.Sprint(epochs)
 	fileToBlob := make(map[string]string, len(files))
+	var uploadErrors []uploadError
 	var mu sync.Mutex
 	jobs := make(chan job)
 	wg := sync.WaitGroup{}
@@ -204,11 +295,15 @@ func (a *Adapter) deployBlobs(ctx context.Context, siteDir, publisher string, ep
 		defer wg.Done()
 		for j := range jobs {
 			blobID, err := uploadWithRetry(ctx, endpointBase, j.abs, maxRetries)
-			if err == nil && blobID != "" {
-				mu.Lock()
+			mu.Lock()
+			if err != nil {
+				uploadErrors = append(uploadErrors, uploadError{file: j.rel, err: err})
+			} else if blobID == "" {
+				uploadErrors = append(uploadErrors, uploadError{file: j.rel, err: fmt.Errorf("empty blob ID returned")})
+			} else {
 				fileToBlob[j.rel] = blobID
-				mu.Unlock()
 			}
+			mu.Unlock()
 		}
 	}
 
@@ -227,12 +322,26 @@ send:
 	close(jobs)
 	wg.Wait()
 
-	// Protect map read with mutex for race detector
-	mu.Lock()
-	result := &deployer.Result{Success: true, FileToBlobID: fileToBlob}
-	mu.Unlock()
+	// Check for context cancellation
+	if ctx.Err() != nil {
+		return nil, fmt.Errorf("deployment cancelled: %w", ctx.Err())
+	}
 
-	return result, nil
+	// Check for upload failures
+	mu.Lock()
+	defer mu.Unlock()
+
+	if len(uploadErrors) > 0 {
+		// Build error message with failed files
+		var errMsgs []string
+		for _, ue := range uploadErrors {
+			errMsgs = append(errMsgs, fmt.Sprintf("  - %s: %v", ue.file, ue.err))
+		}
+		return nil, fmt.Errorf("failed to upload %d of %d files:\n%s",
+			len(uploadErrors), len(files), strings.Join(errMsgs, "\n"))
+	}
+
+	return &deployer.Result{Success: true, FileToBlobID: fileToBlob}, nil
 }
 
 func uploadWithRetry(ctx context.Context, endpoint, filePath string, maxRetries int) (string, error) {
@@ -269,13 +378,22 @@ func putBlob(ctx context.Context, endpoint, filePath string) (string, int, error
 	}
 	defer f.Close()
 
+	// Get file size for dynamic timeout
+	stat, err := f.Stat()
+	if err != nil {
+		return "", 0, fmt.Errorf("failed to stat file: %w", err)
+	}
+
 	req, err := http.NewRequestWithContext(ctx, http.MethodPut, endpoint, f)
 	if err != nil {
 		return "", 0, err
 	}
 	req.Header.Set("Accept", "application/json")
+	req.ContentLength = stat.Size()
 
-	client := &http.Client{Timeout: 20 * time.Second}
+	// Use dynamic timeout based on file size
+	timeout := calculateUploadTimeout(int(stat.Size()))
+	client := &http.Client{Timeout: timeout}
 	resp, err := client.Do(req)
 	if err != nil {
 		return "", 0, err
@@ -306,4 +424,18 @@ func putBlob(ctx context.Context, endpoint, filePath string) (string, int, error
 		id = parsed.AlreadyCertified.BlobId
 	}
 	return id, resp.StatusCode, nil
+}
+
+// formatBytes converts byte count to human-readable format
+func formatBytes(bytes int64) string {
+	const unit = 1024
+	if bytes < unit {
+		return fmt.Sprintf("%d B", bytes)
+	}
+	div, exp := int64(unit), 0
+	for n := bytes / unit; n >= unit; n /= unit {
+		div *= unit
+		exp++
+	}
+	return fmt.Sprintf("%.1f %cB", float64(bytes)/float64(div), "KMGTPE"[exp])
 }

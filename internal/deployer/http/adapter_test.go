@@ -18,9 +18,221 @@ import (
 	"github.com/selimozten/walgo/internal/deployer"
 )
 
+// TestDeployBlobs_FailsWhenAllUploadsFail verifies that deployment fails when all uploads fail.
+// This was a critical bug - previously, failed uploads were silently ignored.
+func TestDeployBlobs_FailsWhenAllUploadsFail(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		// Always return 500 Internal Server Error
+		w.WriteHeader(http.StatusInternalServerError)
+		_, _ = w.Write([]byte("server error"))
+	}))
+	defer srv.Close()
+
+	dir := t.TempDir()
+	if err := os.WriteFile(filepath.Join(dir, "test.html"), []byte("hello"), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	a := New()
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+
+	_, err := a.Deploy(ctx, dir, deployer.DeployOptions{
+		PublisherBaseURL: srv.URL,
+		Mode:             "blobs",
+		Workers:          1,
+		MaxRetries:       1,
+		Epochs:           1,
+	})
+
+	// This MUST fail - uploads failed
+	if err == nil {
+		t.Fatal("Expected error when all uploads fail, but got success")
+	}
+
+	// Error should mention the failed file
+	if !strings.Contains(err.Error(), "test.html") {
+		t.Errorf("Error should mention failed file, got: %v", err)
+	}
+}
+
+// TestDeployBlobs_FailsWhenSomeUploadsFail verifies partial failures are reported.
+func TestDeployBlobs_FailsWhenSomeUploadsFail(t *testing.T) {
+	failedFiles := map[string]bool{"fail-me.html": true}
+
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		body, _ := io.ReadAll(r.Body)
+		r.Body.Close()
+
+		// Fail specific files
+		content := string(body)
+		for failFile := range failedFiles {
+			if strings.Contains(content, failFile) {
+				w.WriteHeader(http.StatusInternalServerError)
+				return
+			}
+		}
+
+		// Succeed others
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(map[string]any{
+			"newlyCreated": map[string]any{
+				"blobObject": map[string]any{"blobId": "blob-123"},
+			},
+		})
+	}))
+	defer srv.Close()
+
+	dir := t.TempDir()
+	os.WriteFile(filepath.Join(dir, "success.html"), []byte("works"), 0644)
+	os.WriteFile(filepath.Join(dir, "fail-me.html"), []byte("fail-me.html"), 0644)
+
+	a := New()
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+
+	_, err := a.Deploy(ctx, dir, deployer.DeployOptions{
+		PublisherBaseURL: srv.URL,
+		Mode:             "blobs",
+		Workers:          1,
+		MaxRetries:       1,
+		Epochs:           1,
+	})
+
+	if err == nil {
+		t.Fatal("Expected error when some uploads fail")
+	}
+
+	if !strings.Contains(err.Error(), "fail-me.html") {
+		t.Errorf("Error should mention the failed file, got: %v", err)
+	}
+}
+
+// TestDeployBlobs_EmptyDirectory fails for empty directories.
+func TestDeployBlobs_EmptyDirectory(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		t.Error("Server should not be called for empty directory")
+	}))
+	defer srv.Close()
+
+	dir := t.TempDir() // Empty directory
+
+	a := New()
+	_, err := a.Deploy(context.Background(), dir, deployer.DeployOptions{
+		PublisherBaseURL: srv.URL,
+		Mode:             "blobs",
+		Epochs:           1,
+	})
+
+	if err == nil {
+		t.Fatal("Expected error for empty directory")
+	}
+
+	if !strings.Contains(err.Error(), "no files found") {
+		t.Errorf("Error should mention no files found, got: %v", err)
+	}
+}
+
+// TestStatus_RequiresAggregatorURL verifies Status requires aggregator URL.
+func TestStatus_RequiresAggregatorURL(t *testing.T) {
+	a := New()
+	_, err := a.Status(context.Background(), "some-id", deployer.DeployOptions{})
+
+	if err == nil {
+		t.Fatal("Expected error when AggregatorBaseURL is not set")
+	}
+
+	if !strings.Contains(err.Error(), "AggregatorBaseURL") {
+		t.Errorf("Error should mention AggregatorBaseURL, got: %v", err)
+	}
+}
+
+// TestStatus_ReturnsFalseForNonexistent verifies Status returns false for missing blobs.
+func TestStatus_ReturnsFalseForNonexistent(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method == http.MethodHead && strings.Contains(r.URL.Path, "/v1/blobs/") {
+			w.WriteHeader(http.StatusNotFound)
+			return
+		}
+		http.NotFound(w, r)
+	}))
+	defer srv.Close()
+
+	a := New()
+	result, err := a.Status(context.Background(), "nonexistent-blob-id", deployer.DeployOptions{
+		AggregatorBaseURL: srv.URL,
+	})
+
+	if err != nil {
+		t.Fatalf("Unexpected error: %v", err)
+	}
+
+	if result.Success {
+		t.Fatal("Status should return false for nonexistent blob")
+	}
+
+	if !strings.Contains(result.Message, "not found") {
+		t.Errorf("Message should indicate not found, got: %s", result.Message)
+	}
+}
+
+// TestStatus_ReturnsTrueForExisting verifies Status returns true for existing blobs.
+func TestStatus_ReturnsTrueForExisting(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method == http.MethodHead && strings.Contains(r.URL.Path, "/v1/blobs/") {
+			w.WriteHeader(http.StatusOK)
+			return
+		}
+		http.NotFound(w, r)
+	}))
+	defer srv.Close()
+
+	a := New()
+	result, err := a.Status(context.Background(), "existing-blob-id", deployer.DeployOptions{
+		AggregatorBaseURL: srv.URL,
+	})
+
+	if err != nil {
+		t.Fatalf("Unexpected error: %v", err)
+	}
+
+	if !result.Success {
+		t.Fatal("Status should return true for existing blob")
+	}
+}
+
+// TestCalculateUploadTimeout verifies dynamic timeout calculation.
+func TestCalculateUploadTimeout(t *testing.T) {
+	tests := []struct {
+		name     string
+		bodySize int
+		wantMin  time.Duration
+		wantMax  time.Duration
+	}{
+		{"small file", 1024, 30 * time.Second, 35 * time.Second},
+		{"1MB file", 1024 * 1024, 30 * time.Second, 45 * time.Second},
+		{"10MB file", 10 * 1024 * 1024, 100 * time.Second, 150 * time.Second},
+		{"100MB file", 100 * 1024 * 1024, 10 * time.Minute, 10 * time.Minute}, // capped at max
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := calculateUploadTimeout(tt.bodySize)
+			if got < tt.wantMin {
+				t.Errorf("Timeout too short: got %v, want >= %v", got, tt.wantMin)
+			}
+			if got > tt.wantMax {
+				t.Errorf("Timeout too long: got %v, want <= %v", got, tt.wantMax)
+			}
+		})
+	}
+}
+
 // TestDeployBlobs_ConcurrencyAndRetry validates worker cap and retry policy.
 func TestDeployBlobs_ConcurrencyAndRetry(t *testing.T) {
-	t.Skip("TestDeployBlobs_ConcurrencyAndRetry skipped: httptest.NewServer requires network/socket access not available in CI")
+	if testing.Short() {
+		t.Skip("Skipping in short mode")
+	}
 	t.Parallel()
 
 	// Track per-file attempts by content signature
@@ -115,7 +327,9 @@ func TestDeployBlobs_ConcurrencyAndRetry(t *testing.T) {
 
 // TestDeployBlobs_Cancel ensures cancellation stops further uploads.
 func TestDeployBlobs_Cancel(t *testing.T) {
-	t.Skip("TestDeployBlobs_Cancel skipped: httptest.NewServer requires network/socket access not available in CI")
+	if testing.Short() {
+		t.Skip("Skipping in short mode")
+	}
 	t.Parallel()
 	blocker := make(chan struct{})
 	var received int32

@@ -11,6 +11,7 @@ import (
 	"github.com/selimozten/walgo/internal/config"
 	"github.com/selimozten/walgo/internal/deployer"
 	httpdep "github.com/selimozten/walgo/internal/deployer/http"
+	"github.com/selimozten/walgo/internal/hugo"
 	"github.com/selimozten/walgo/internal/ui"
 	"github.com/spf13/cobra"
 )
@@ -94,22 +95,28 @@ Example (Mainnet):
 			epochs = 1
 		}
 
-		cfg, err := config.LoadConfig()
-		if err != nil {
-			fmt.Fprintf(os.Stderr, "%s Error: %v\n", icons.Error, err)
-			return fmt.Errorf("error loading config: %w", err)
-		}
-
 		sitePath, err := os.Getwd()
 		if err != nil {
 			fmt.Fprintf(os.Stderr, "%s Error: Cannot determine current directory: %v\n", icons.Error, err)
 			return fmt.Errorf("error getting cwd: %w", err)
 		}
+
+		cfg, err := config.LoadConfigFrom(sitePath)
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "%s Error: %v\n", icons.Error, err)
+			return fmt.Errorf("error loading config: %w", err)
+		}
+
 		publishDir := filepath.Join(sitePath, cfg.HugoConfig.PublishDir)
 		if _, err := os.Stat(publishDir); os.IsNotExist(err) {
 			fmt.Fprintf(os.Stderr, "%s Error: Publish directory '%s' not found\n", icons.Error, publishDir)
 			fmt.Fprintf(os.Stderr, "%s Run 'walgo build' first\n", icons.Lightbulb)
 			return fmt.Errorf("publish directory not found: %s", publishDir)
+		}
+
+		err = hugo.BuildSite(sitePath)
+		if err != nil {
+			return fmt.Errorf("failed to build site: %w", err)
 		}
 
 		// Use HTTP deployer; default to quilt (single request)

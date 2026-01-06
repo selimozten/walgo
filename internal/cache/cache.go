@@ -41,6 +41,23 @@ func NewManager(siteRoot string) (*Manager, error) {
 		return nil, fmt.Errorf("failed to open cache database: %w", err)
 	}
 
+	// Enable WAL mode for better concurrent access
+	// WAL allows readers and writers to operate concurrently without blocking
+	if _, err := db.Exec("PRAGMA journal_mode=WAL"); err != nil {
+		_ = db.Close()
+		return nil, fmt.Errorf("failed to enable WAL mode: %w", err)
+	}
+
+	// Set busy timeout to wait up to 5 seconds for locks to clear
+	// This prevents immediate SQLITE_BUSY errors under contention
+	if _, err := db.Exec("PRAGMA busy_timeout=5000"); err != nil {
+		_ = db.Close()
+		return nil, fmt.Errorf("failed to set busy timeout: %w", err)
+	}
+
+	// Limit connections to prevent excessive file handle usage
+	db.SetMaxOpenConns(1)
+
 	manager := &Manager{
 		db:       db,
 		siteRoot: siteRoot,

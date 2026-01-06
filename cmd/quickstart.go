@@ -5,11 +5,12 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
-	"regexp"
 
 	"github.com/selimozten/walgo/internal/config"
 	"github.com/selimozten/walgo/internal/hugo"
+	"github.com/selimozten/walgo/internal/projects"
 	"github.com/selimozten/walgo/internal/ui"
+	"github.com/selimozten/walgo/internal/utils"
 	"github.com/spf13/cobra"
 )
 
@@ -36,7 +37,7 @@ Example:
 			return fmt.Errorf("failed to read skip-build flag: %w", err)
 		}
 
-		if !isValidSiteName(siteName) {
+		if !utils.IsValidSiteName(siteName) {
 			fmt.Fprintf(os.Stderr, "%s Error: Invalid site name\n", icons.Error)
 			fmt.Fprintf(os.Stderr, "\n%s Use only letters, numbers, hyphens and underscores\n", icons.Lightbulb)
 			return fmt.Errorf("invalid site name: %s", siteName)
@@ -65,12 +66,13 @@ Example:
 		// [2/4] Create site directory and initialize Hugo
 		fmt.Println("\n  [2/4] Creating Hugo site...")
 
-		// Create site directory
-		sitePath, err := filepath.Abs(siteName)
+		sitePath, err := os.Getwd()
 		if err != nil {
-			return fmt.Errorf("invalid site path: %w", err)
+			return fmt.Errorf("getting current directory: %w", err)
 		}
 
+		sitePath = filepath.Join(sitePath, siteName)
+		// Create site directory
 		if err := os.MkdirAll(sitePath, 0755); err != nil {
 			return fmt.Errorf("failed to create site directory: %w", err)
 		}
@@ -124,6 +126,15 @@ Example:
 			fmt.Printf("        %s Theme %s installed\n", icons.Check, themeInfo.Name)
 		}
 
+		// Setup theme-specific overrides (e.g., favicon fix for business theme)
+		if siteType == hugo.SiteTypeBusiness {
+			if err := hugo.SetupBusinessThemeOverrides(sitePath); err != nil {
+				fmt.Fprintf(os.Stderr, "        %s Warning: Could not set up theme overrides: %v\n", icons.Warning, err)
+			} else {
+				fmt.Printf("        %s Theme overrides set up\n", icons.Check)
+			}
+		}
+
 		// [4/4] Create sample content
 		if !skipBuild {
 			fmt.Println("\n  [4/4] Creating sample content...")
@@ -172,6 +183,18 @@ Happy building! ` + icons.Rocket + `
 			fmt.Printf("        %s Site built\n", icons.Check)
 		}
 
+		manager, err := projects.NewManager()
+		if err != nil {
+			return fmt.Errorf("failed to create project manager: %w", err)
+		}
+		defer manager.Close()
+
+		// Create draft project
+		if err := manager.CreateDraftProject(siteName, sitePath); err != nil {
+			return fmt.Errorf("failed to create draft project: %w", err)
+		}
+		fmt.Printf("   %s Created draft project\n", icons.Check)
+
 		fmt.Println("\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
 		fmt.Printf("%s Quick start complete!\n", icons.Success)
 		fmt.Println("━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
@@ -186,11 +209,6 @@ Happy building! ` + icons.Rocket + `
 
 		return nil
 	},
-}
-
-func isValidSiteName(name string) bool {
-	validName := regexp.MustCompile(`^[a-zA-Z0-9_-]+$`)
-	return validName.MatchString(name) && len(name) > 0 && len(name) < 100
 }
 
 func init() {

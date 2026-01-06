@@ -384,7 +384,11 @@ func marshalDeterministicWSResources(obj map[string]any) ([]byte, error) {
 
 			buf.WriteString("{\n")
 			for j, rk := range routeKeys {
-				buf.WriteString(fmt.Sprintf("    %q: %q", rk, routes[rk].(string)))
+				routeVal, ok := routes[rk].(string)
+				if !ok {
+					return nil, fmt.Errorf("route value for %q is not a string", rk)
+				}
+				buf.WriteString(fmt.Sprintf("    %q: %q", rk, routeVal))
 				if j < len(routeKeys)-1 || routes["*"] != nil {
 					buf.WriteString(",")
 				}
@@ -392,7 +396,11 @@ func marshalDeterministicWSResources(obj map[string]any) ([]byte, error) {
 			}
 			// "*" last if present
 			if star, ok := routes["*"]; ok {
-				buf.WriteString(fmt.Sprintf("    %q: %q\n", "*", star.(string)))
+				starVal, isString := star.(string)
+				if !isString {
+					return nil, fmt.Errorf("route value for \"*\" is not a string")
+				}
+				buf.WriteString(fmt.Sprintf("    %q: %q\n", "*", starVal))
 			}
 			buf.WriteString("  }")
 		} else {
@@ -448,14 +456,7 @@ func ReadWSResourcesConfig(path string) (*WSResourcesConfig, error) {
 func UpdateObjectID(wsResourcesPath string, objectID string) error {
 	config, err := ReadWSResourcesConfig(wsResourcesPath)
 	if err != nil {
-		// If file doesn't exist, create minimal config
-		if os.IsNotExist(err) {
-			config = &WSResourcesConfig{
-				Headers: make(map[string]map[string]string),
-			}
-		} else {
-			return err
-		}
+		return fmt.Errorf("failed to read ws-resources.json: %w", err)
 	}
 
 	config.ObjectID = objectID
@@ -478,21 +479,14 @@ type MetadataOptions struct {
 const DefaultCreator = "Walgo"
 const DefaultLink = "https://walgo.xyz"
 const DefaultProjectURL = "https://github.com/selimozten/walgo"
-const DefaultImageURL = "https://walgo.xyz/walgo-logo.png"
+const DefaultImageURL = "https://cdn.jsdelivr.net/gh/selimozten/walgo@main/walgo-logo.svg"
+const DefaultCategory = "Walgo Site"
 
 // UpdateMetadata updates all metadata fields in ws-resources.json
 func UpdateMetadata(wsResourcesPath string, opts MetadataOptions) error {
 	config, err := ReadWSResourcesConfig(wsResourcesPath)
 	if err != nil {
-		// If file doesn't exist, create minimal config
-		if os.IsNotExist(err) {
-			config = &WSResourcesConfig{
-				Headers: make(map[string]map[string]string),
-				Ignore:  DefaultIgnorePatterns(),
-			}
-		} else {
-			return err
-		}
+		return fmt.Errorf("failed to read ws-resources.json: %w", err)
 	}
 
 	// Update object_id if provided

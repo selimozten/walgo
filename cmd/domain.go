@@ -30,7 +30,13 @@ For Mainnet: https://suins.io`,
 			domainName = args[0]
 		}
 
-		cfg, err := config.LoadConfig()
+		sitePath, err := os.Getwd()
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "%s Error: Cannot determine current directory: %v\n", icons.Error, err)
+			return fmt.Errorf("error getting cwd: %w", err)
+		}
+
+		cfg, err := config.LoadConfigFrom(sitePath)
 		if err != nil {
 			fmt.Fprintf(os.Stderr, "%s Error: %v\n", icons.Error, err)
 			return fmt.Errorf("error loading config: %w", err)
@@ -48,7 +54,6 @@ For Mainnet: https://suins.io`,
 			fmt.Printf("%s To use SuiNS, you need to deploy your site to mainnet.\n", icons.Lightbulb)
 			fmt.Println()
 			fmt.Println("To deploy to mainnet:")
-			fmt.Println("  walgo config set network mainnet")
 			fmt.Println("  walgo launch")
 			fmt.Println()
 			return nil
@@ -88,6 +93,7 @@ For Mainnet: https://suins.io`,
 		fmt.Println("  5  Approve transaction in your wallet")
 		fmt.Println()
 		fmt.Println("━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
+		fmt.Printf("\n%s For detailed guide: https://docs.wal.app/docs/walrus-sites/tutorial-suins\n", icons.Info)
 		if domainName != "" {
 			fmt.Printf("%s Your site will be available at: https://%s.wal.app\n", icons.Success, domainName)
 		} else {

@@ -115,31 +115,60 @@ func TestUpdate(t *testing.T) {
 }
 
 func TestStatus(t *testing.T) {
+	// Create a mock aggregator server
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method == http.MethodHead && strings.Contains(r.URL.Path, "/v1/blobs/") {
+			blobID := strings.TrimPrefix(r.URL.Path, "/v1/blobs/")
+			if blobID == "existing-blob" {
+				w.WriteHeader(http.StatusOK)
+			} else {
+				w.WriteHeader(http.StatusNotFound)
+			}
+			return
+		}
+		http.NotFound(w, r)
+	}))
+	defer srv.Close()
+
 	tests := []struct {
-		name     string
-		objectID string
-		opts     deployer.DeployOptions
-		wantErr  bool
+		name        string
+		objectID    string
+		opts        deployer.DeployOptions
+		wantErr     bool
+		wantSuccess bool
 	}{
 		{
-			name:     "Status returns success stub",
+			name:     "Status requires AggregatorBaseURL",
 			objectID: "test-object-123",
 			opts:     deployer.DeployOptions{},
-			wantErr:  false,
+			wantErr:  true, // Should fail without AggregatorBaseURL
 		},
 		{
 			name:     "Status with empty objectID",
 			objectID: "",
-			opts:     deployer.DeployOptions{},
-			wantErr:  false,
+			opts: deployer.DeployOptions{
+				AggregatorBaseURL: srv.URL,
+			},
+			wantErr:     false,
+			wantSuccess: false, // Empty objectID should return success=false
 		},
 		{
-			name:     "Status with verbose flag",
-			objectID: "test-object-123",
+			name:     "Status for existing blob",
+			objectID: "existing-blob",
 			opts: deployer.DeployOptions{
-				Verbose: true,
+				AggregatorBaseURL: srv.URL,
 			},
-			wantErr: false,
+			wantErr:     false,
+			wantSuccess: true,
+		},
+		{
+			name:     "Status for nonexistent blob",
+			objectID: "nonexistent-blob",
+			opts: deployer.DeployOptions{
+				AggregatorBaseURL: srv.URL,
+			},
+			wantErr:     false,
+			wantSuccess: false,
 		},
 	}
 
@@ -152,23 +181,26 @@ func TestStatus(t *testing.T) {
 			if tt.wantErr {
 				if err == nil {
 					t.Errorf("Status() error = nil, wantErr %v", tt.wantErr)
-					return
 				}
-			} else {
-				if err != nil {
-					t.Errorf("Status() unexpected error = %v", err)
-				}
-				if result == nil {
-					t.Errorf("Status() result = nil, expected non-nil result")
-				} else {
-					// Verify the result matches what Status() returns
-					if !result.Success {
-						t.Errorf("Status() result.Success = false, expected true")
-					}
-					if result.ObjectID != tt.objectID {
-						t.Errorf("Status() result.ObjectID = %v, expected %v", result.ObjectID, tt.objectID)
-					}
-				}
+				return
+			}
+
+			if err != nil {
+				t.Errorf("Status() unexpected error = %v", err)
+				return
+			}
+
+			if result == nil {
+				t.Errorf("Status() result = nil, expected non-nil result")
+				return
+			}
+
+			if result.Success != tt.wantSuccess {
+				t.Errorf("Status() result.Success = %v, expected %v", result.Success, tt.wantSuccess)
+			}
+
+			if result.ObjectID != tt.objectID {
+				t.Errorf("Status() result.ObjectID = %v, expected %v", result.ObjectID, tt.objectID)
 			}
 		})
 	}

@@ -844,7 +844,7 @@ Error: Transaction failed with error: ...
 **Symptoms:**
 
 ```bash
-$ walgo import-obsidian --vault ~/Documents/Vault
+$ walgo import --vault ~/Documents/Vault
 Error: Vault directory not found
 ```
 
@@ -856,7 +856,7 @@ Error: Vault directory not found
    ls -la ~/Documents/Vault
 
    # Use absolute path
-   walgo import-obsidian --vault /Users/yourname/Documents/Vault
+   walgo import --vault /Users/yourname/Documents/Vault
    ```
 
 2. **Check permissions:**
@@ -884,7 +884,7 @@ Imported files still contain `[[wikilinks]]` instead of markdown links.
 
 2. **Or use flag:**
    ```bash
-   walgo import-obsidian --vault ~/Vault --convert-wikilinks
+   walgo import --vault ~/Vault --convert-wikilinks
    ```
 
 ---

@@ -98,7 +98,7 @@ func TestSetupSiteBuilder(t *testing.T) {
 			name:    "Setup with invalid network",
 			network: "invalidnet",
 			force:   false,
-			wantErr: false, // The function might not validate network name
+			wantErr: true, // Should reject invalid network names
 		},
 		{
 			name:    "Setup with empty network",
@@ -110,11 +110,6 @@ func TestSetupSiteBuilder(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			// Skip the invalid network test as site-builder doesn't validate network parameter
-			if tt.name == "Setup with invalid network" {
-				t.Skip("Site-builder doesn't validate network parameter")
-			}
-
 			// Save original home to restore later
 			originalHome := os.Getenv("HOME")
 
@@ -131,17 +126,21 @@ func TestSetupSiteBuilder(t *testing.T) {
 
 			err := SetupSiteBuilder(tt.network, tt.force)
 
-			// The function might require site-builder binary
-			if err != nil {
-				// Check for expected error messages
-				if strings.Contains(err.Error(), "site-builder") || strings.Contains(err.Error(), "not found") {
-					// Expected error if site-builder is not installed
-					return
+			if tt.wantErr {
+				if err == nil {
+					t.Errorf("SetupSiteBuilder() expected error for network=%q, got nil", tt.network)
+				} else if tt.network == "invalidnet" && !strings.Contains(err.Error(), "unsupported network") {
+					t.Errorf("SetupSiteBuilder() expected 'unsupported network' error, got: %v", err)
 				}
+				return
 			}
 
-			if (err != nil) != tt.wantErr {
-				t.Errorf("SetupSiteBuilder() error = %v, wantErr %v", err, tt.wantErr)
+			// For non-error cases, allow site-builder/not-found errors (missing binary)
+			if err != nil {
+				if strings.Contains(err.Error(), "site-builder") || strings.Contains(err.Error(), "not found") {
+					return
+				}
+				t.Errorf("SetupSiteBuilder() unexpected error = %v", err)
 			}
 
 			// Check if config file was created

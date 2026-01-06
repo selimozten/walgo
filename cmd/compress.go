@@ -40,7 +40,7 @@ Example:
 				return fmt.Errorf("error getting current directory: %w", err)
 			}
 
-			cfg, err := config.LoadConfig()
+			cfg, err := config.LoadConfigFrom(sitePath)
 			if err != nil {
 				fmt.Fprintf(os.Stderr, "%s Error: %v\n", icons.Error, err)
 				fmt.Fprintf(os.Stderr, "\n%s Tip: Specify a directory explicitly: walgo compress ./public\n", icons.Lightbulb)
@@ -118,7 +118,7 @@ Example:
 		if generateWS {
 			fmt.Printf("\n%s Generating ws-resources.json...\n", icons.Pencil)
 
-			cfg, err := config.LoadConfig()
+			cfg, err := config.LoadConfigFrom(targetDir)
 			cacheConfig := compress.DefaultCacheControlConfig()
 			if err == nil {
 				cacheConfig.Enabled = cfg.CacheConfig.Enabled

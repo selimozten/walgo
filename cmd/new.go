@@ -90,7 +90,11 @@ Examples:
 			slug = args[0]
 		} else {
 			fmt.Print("Enter content slug (e.g., my-first-post): ")
-			slug, _ = reader.ReadString('\n')
+			var err error
+			slug, err = reader.ReadString('\n')
+			if err != nil {
+				return fmt.Errorf("failed to read input: %w", err)
+			}
 			slug = strings.TrimSpace(slug)
 		}
 
