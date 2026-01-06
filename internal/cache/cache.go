@@ -29,8 +29,8 @@ func NewManager(siteRoot string) (*Manager, error) {
 	cacheDir := filepath.Join(siteRoot, CacheDir)
 
 	// Create cache directory if it doesn't exist
-	// #nosec G301 - cache directory needs standard permissions
-	if err := os.MkdirAll(cacheDir, 0755); err != nil {
+	// Use 0700 to restrict access to owner only (contains deployment metadata)
+	if err := os.MkdirAll(cacheDir, 0700); err != nil {
 		return nil, fmt.Errorf("failed to create cache directory: %w", err)
 	}
 
@@ -40,6 +40,23 @@ func NewManager(siteRoot string) (*Manager, error) {
 	if err != nil {
 		return nil, fmt.Errorf("failed to open cache database: %w", err)
 	}
+
+	// Enable WAL mode for better concurrent access
+	// WAL allows readers and writers to operate concurrently without blocking
+	if _, err := db.Exec("PRAGMA journal_mode=WAL"); err != nil {
+		_ = db.Close()
+		return nil, fmt.Errorf("failed to enable WAL mode: %w", err)
+	}
+
+	// Set busy timeout to wait up to 5 seconds for locks to clear
+	// This prevents immediate SQLITE_BUSY errors under contention
+	if _, err := db.Exec("PRAGMA busy_timeout=5000"); err != nil {
+		_ = db.Close()
+		return nil, fmt.Errorf("failed to set busy timeout: %w", err)
+	}
+
+	// Limit connections to prevent excessive file handle usage
+	db.SetMaxOpenConns(1)
 
 	manager := &Manager{
 		db:       db,

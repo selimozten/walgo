@@ -2,19 +2,22 @@ package main
 
 import (
 	"os"
-	"walgo/cmd"
+
+	"github.com/selimozten/walgo/cmd"
 )
 
 func main() {
-	run(os.Args)
+	if err := run(os.Args); err != nil {
+		os.Exit(1)
+	}
 }
 
 // run is a testable version of main
-func run(args []string) {
+func run(args []string) error {
 	// Store original args and restore after
 	oldArgs := os.Args
 	os.Args = args
 	defer func() { os.Args = oldArgs }()
 
-	cmd.Execute()
+	return cmd.Execute()
 }

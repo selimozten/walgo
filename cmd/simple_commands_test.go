@@ -114,8 +114,8 @@ func TestSimpleCommands(t *testing.T) {
 				Args:        []string{"setup-deps", "--help"},
 				ExpectError: false,
 				Contains: []string{
-					"Detects OS/arch",
-					"installs selected tools",
+					"suiup",
+					"Install",
 				},
 			},
 		}
@@ -189,20 +189,6 @@ func TestSimpleCommands(t *testing.T) {
 		runTestCases(t, rootCmd, tests)
 	})
 
-	t.Run("Convert command", func(t *testing.T) {
-		tests := []TestCase{
-			{
-				Name:        "Convert command help",
-				Args:        []string{"convert", "--help"},
-				ExpectError: false,
-				Contains: []string{
-					"Convert",
-				},
-			},
-		}
-		runTestCases(t, rootCmd, tests)
-	})
-
 	t.Run("Domain command", func(t *testing.T) {
 		tests := []TestCase{
 			{
@@ -238,7 +224,7 @@ func TestCommandRegistration(t *testing.T) {
 	expectedCommands := []string{
 		"init", "build", "deploy", "deploy-http", "update", "status",
 		"setup", "setup-deps", "doctor", "serve", "new", "import",
-		"optimize", "convert", "domain", "version", "quickstart",
+		"optimize", "domain", "version", "quickstart",
 	}
 
 	registeredCommands := make(map[string]bool)
@@ -311,7 +297,12 @@ optimizer:
 		if optimizeCmd != nil {
 			stdout, stderr := captureOutput(func() {
 				defer func() { _ = func() any { return recover() }() }()
-				optimizeCmd.Run(optimizeCmd, []string{})
+				// Use RunE if available, otherwise Run
+				if optimizeCmd.RunE != nil {
+					_ = optimizeCmd.RunE(optimizeCmd, []string{})
+				} else if optimizeCmd.Run != nil {
+					optimizeCmd.Run(optimizeCmd, []string{})
+				}
 			})
 
 			_ = stdout
@@ -415,18 +406,6 @@ func TestCommandsWithArguments(t *testing.T) {
 		}
 
 		// This will fail without Walrus setup but tests argument handling
-		runTestCases(t, rootCmd, tests)
-	})
-
-	t.Run("Convert command with object ID", func(t *testing.T) {
-		tests := []TestCase{
-			{
-				Name:        "Convert with object ID",
-				Args:        []string{"convert", "0x123abc"},
-				ExpectError: false, // site-builder is available, should succeed
-			},
-		}
-
 		runTestCases(t, rootCmd, tests)
 	})
 }

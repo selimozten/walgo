@@ -6,6 +6,8 @@ import (
 	"os"
 	"path/filepath"
 	"time"
+
+	"github.com/selimozten/walgo/internal/ui"
 )
 
 // Event represents a single telemetry event
@@ -270,13 +272,14 @@ func GetStats(sinkPath string) (*Stats, error) {
 
 // PrintStats prints telemetry statistics in a human-readable format
 func PrintStats(sinkPath string) error {
+	icons := ui.GetIcons()
 	stats, err := GetStats(sinkPath)
 	if err != nil {
 		return err
 	}
 
-	fmt.Println("\n📊 Walgo Telemetry Statistics")
-	fmt.Println("==============================")
+	fmt.Printf("\n%s Walgo Telemetry Statistics\n", icons.Chart)
+	fmt.Println(ui.Separator())
 	fmt.Printf("Total Events: %d\n", stats.TotalEvents)
 
 	if !stats.FirstEvent.IsZero() {
@@ -284,7 +287,7 @@ func PrintStats(sinkPath string) error {
 		fmt.Printf("Last Event: %s\n", stats.LastEvent.Format("2006-01-02 15:04:05"))
 	}
 
-	fmt.Println("\n📋 Command Usage:")
+	fmt.Printf("\n%s Command Usage:\n", icons.Clipboard)
 	for cmd, count := range stats.CommandCounts {
 		avgDuration := stats.AvgDurations[cmd]
 		successRate := stats.SuccessRates[cmd]

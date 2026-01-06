@@ -5,13 +5,13 @@ import (
 	"os"
 	"path/filepath"
 
-	"walgo/internal/config"
-	"walgo/internal/optimizer"
+	"github.com/selimozten/walgo/internal/config"
+	"github.com/selimozten/walgo/internal/optimizer"
+	"github.com/selimozten/walgo/internal/ui"
 
 	"github.com/spf13/cobra"
 )
 
-// optimizeCmd represents the optimize command
 var optimizeCmd = &cobra.Command{
 	Use:   "optimize [directory]",
 	Short: "Optimize HTML, CSS, and JavaScript files for better performance.",
@@ -20,7 +20,7 @@ This command provides asset optimization including:
 
 HTML Optimization:
 • Minify HTML by removing unnecessary whitespace
-• Remove HTML comments (preserving conditional comments)  
+• Remove HTML comments (preserving conditional comments)
 • Compress inline CSS and JavaScript
 
 CSS Optimization:
@@ -35,22 +35,20 @@ JavaScript Optimization:
 • Preserve string contents and regular expressions
 
 The optimization settings can be configured in walgo.yaml under the 'optimizer' section.`,
-	Args: cobra.MaximumNArgs(1), // Optional directory argument
-	Run: func(cmd *cobra.Command, args []string) {
-		// Determine target directory
+	Args: cobra.MaximumNArgs(1),
+	RunE: func(cmd *cobra.Command, args []string) error {
+		icons := ui.GetIcons()
 		var targetDir string
 		if len(args) > 0 {
 			targetDir = args[0]
 		} else {
-			// Use current directory or Hugo publish directory if available
 			sitePath, err := os.Getwd()
 			if err != nil {
-				fmt.Fprintf(os.Stderr, "Error getting current directory: %v\n", err)
-				os.Exit(1)
+				fmt.Fprintf(os.Stderr, "%s Error: Cannot determine current directory: %v\n", icons.Error, err)
+				return fmt.Errorf("error getting current directory: %w", err)
 			}
 
-			// Try to load config to get publish directory
-			if cfg, err := config.LoadConfig(); err == nil {
+			if cfg, err := config.LoadConfigFrom(sitePath); err == nil {
 				publishDir := filepath.Join(sitePath, cfg.HugoConfig.PublishDir)
 				if _, err := os.Stat(publishDir); err == nil {
 					targetDir = publishDir
@@ -63,30 +61,26 @@ The optimization settings can be configured in walgo.yaml under the 'optimizer' 
 			}
 		}
 
-		// Verify target directory exists
 		if _, err := os.Stat(targetDir); os.IsNotExist(err) {
-			fmt.Fprintf(os.Stderr, "Error: Directory %s does not exist\n", targetDir)
-			os.Exit(1)
+			fmt.Fprintf(os.Stderr, "%s Error: Directory %s does not exist\n", icons.Error, targetDir)
+			return fmt.Errorf("directory %s does not exist", targetDir)
 		}
 
 		fmt.Printf("Optimizing files in: %s\n", targetDir)
 
-		// Load configuration
 		var optimizerConfig optimizer.OptimizerConfig
-		if cfg, err := config.LoadConfig(); err == nil {
+		if cfg, err := config.LoadConfigFrom(targetDir); err == nil {
 			optimizerConfig = cfg.OptimizerConfig
 		} else {
-			// Use default configuration if walgo.yaml is not available
 			optimizerConfig = optimizer.NewDefaultOptimizerConfig()
 			fmt.Println("Using default optimization settings (no walgo.yaml found)")
 		}
 
-		// Override config with command line flags
 		if cmd.Flags().Changed("verbose") {
 			verbose, err := cmd.Flags().GetBool("verbose")
 			if err != nil {
-				fmt.Fprintf(os.Stderr, "Error reading verbose flag: %v\n", err)
-				os.Exit(1)
+				fmt.Fprintf(os.Stderr, "%s Error: reading verbose flag: %v\n", icons.Error, err)
+				return fmt.Errorf("error reading verbose flag: %w", err)
 			}
 			optimizerConfig.Verbose = verbose
 		}
@@ -94,8 +88,8 @@ The optimization settings can be configured in walgo.yaml under the 'optimizer' 
 		if cmd.Flags().Changed("html") {
 			html, err := cmd.Flags().GetBool("html")
 			if err != nil {
-				fmt.Fprintf(os.Stderr, "Error reading html flag: %v\n", err)
-				os.Exit(1)
+				fmt.Fprintf(os.Stderr, "%s Error: reading html flag: %v\n", icons.Error, err)
+				return fmt.Errorf("error reading html flag: %w", err)
 			}
 			optimizerConfig.HTML.Enabled = html
 		}
@@ -103,8 +97,8 @@ The optimization settings can be configured in walgo.yaml under the 'optimizer' 
 		if cmd.Flags().Changed("css") {
 			css, err := cmd.Flags().GetBool("css")
 			if err != nil {
-				fmt.Fprintf(os.Stderr, "Error reading css flag: %v\n", err)
-				os.Exit(1)
+				fmt.Fprintf(os.Stderr, "%s Error: reading css flag: %v\n", icons.Error, err)
+				return fmt.Errorf("error reading css flag: %w", err)
 			}
 			optimizerConfig.CSS.Enabled = css
 		}
@@ -112,8 +106,8 @@ The optimization settings can be configured in walgo.yaml under the 'optimizer' 
 		if cmd.Flags().Changed("js") {
 			js, err := cmd.Flags().GetBool("js")
 			if err != nil {
-				fmt.Fprintf(os.Stderr, "Error reading js flag: %v\n", err)
-				os.Exit(1)
+				fmt.Fprintf(os.Stderr, "%s Error: reading js flag: %v\n", icons.Error, err)
+				return fmt.Errorf("error reading js flag: %w", err)
 			}
 			optimizerConfig.JS.Enabled = js
 		}
@@ -121,28 +115,28 @@ The optimization settings can be configured in walgo.yaml under the 'optimizer' 
 		if cmd.Flags().Changed("remove-unused-css") {
 			removeUnused, err := cmd.Flags().GetBool("remove-unused-css")
 			if err != nil {
-				fmt.Fprintf(os.Stderr, "Error reading remove-unused-css flag: %v\n", err)
-				os.Exit(1)
+				fmt.Fprintf(os.Stderr, "%s Error: reading remove-unused-css flag: %v\n", icons.Error, err)
+				return fmt.Errorf("error reading remove-unused-css flag: %w", err)
 			}
 			optimizerConfig.CSS.RemoveUnused = removeUnused
 		}
 
-		// Create and run optimizer
 		engine := optimizer.NewEngine(optimizerConfig)
 		stats, err := engine.OptimizeDirectory(targetDir)
 		if err != nil {
-			fmt.Fprintf(os.Stderr, "Error during optimization: %v\n", err)
-			os.Exit(1)
+			fmt.Fprintf(os.Stderr, "%s Error: Optimization failed: %v\n", icons.Error, err)
+			return fmt.Errorf("error during optimization: %w", err)
 		}
 
-		// Print results
 		engine.PrintStats(stats)
 
 		if stats.FilesOptimized > 0 {
-			fmt.Printf("\n✅ Optimization complete! %d files optimized.\n", stats.FilesOptimized)
+			fmt.Printf("\n%s Optimization complete! %d files optimized.\n", icons.Check, stats.FilesOptimized)
 		} else {
-			fmt.Println("\n✅ No files needed optimization.")
+			fmt.Printf("\n%s No files needed optimization.\n", icons.Check)
 		}
+
+		return nil
 	},
 }
 

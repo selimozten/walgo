@@ -55,9 +55,10 @@ func TestInitCommandExecution(t *testing.T) {
 		stdout, stderr := captureOutput(func() {
 			// Recover from potential panics
 			defer func() { _ = func() any { return recover() }() }()
-			// The command may call os.Exit, which we can't mock directly
-			// So we use recover to continue the test
-			initCmd.Run(initCmd, []string{siteName})
+			// The command uses RunE, so call it properly
+			if initCmd.RunE != nil {
+				_ = initCmd.RunE(initCmd, []string{siteName})
+			}
 		})
 
 		// Check if directory was created
@@ -96,7 +97,9 @@ func TestInitCommandExecution(t *testing.T) {
 		// Execute command
 		stdout, stderr := captureOutput(func() {
 			defer func() { _ = func() any { return recover() }() }() // Recover to continue test
-			initCmd.Run(initCmd, []string{siteName})
+			if initCmd.RunE != nil {
+				_ = initCmd.RunE(initCmd, []string{siteName})
+			}
 		})
 
 		// Directory creation should succeed even if it exists
@@ -121,7 +124,9 @@ func TestInitCommandExecution(t *testing.T) {
 		// Execute command
 		stdout, stderr := captureOutput(func() {
 			defer func() { _ = func() any { return recover() }() }()
-			initCmd.Run(initCmd, []string{siteName})
+			if initCmd.RunE != nil {
+				_ = initCmd.RunE(initCmd, []string{siteName})
+			}
 		})
 
 		// Command should fail with invalid directory name

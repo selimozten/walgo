@@ -1,3 +1,25 @@
+# Build outputs
 build/bin
-node_modules
+*.app
+*.exe
+*.dmg
+*.deb
+*.rpm
+
+# Frontend
+dist
 frontend/dist
+frontend/node_modules/.vite
+frontend/package.json.md5
+
+# Dependencies
+node_modules
+
+# Temporary files
+*.log
+.DS_Store
+
+# Icon generation artifacts
+build/darwin/appicon.iconset
+build/darwin/walgo.iconset
+build/darwin/appicon.icns

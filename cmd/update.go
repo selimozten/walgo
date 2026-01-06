@@ -7,16 +7,19 @@ import (
 	"path/filepath"
 	"time"
 
-	"walgo/internal/cache"
-	"walgo/internal/config"
-	"walgo/internal/deployer"
-	sb "walgo/internal/deployer/sitebuilder"
-	"walgo/internal/metrics"
+	"github.com/selimozten/walgo/internal/cache"
+	"github.com/selimozten/walgo/internal/compress"
+	"github.com/selimozten/walgo/internal/config"
+	"github.com/selimozten/walgo/internal/deployer"
+	sb "github.com/selimozten/walgo/internal/deployer/sitebuilder"
+	"github.com/selimozten/walgo/internal/hugo"
+	"github.com/selimozten/walgo/internal/metrics"
+	"github.com/selimozten/walgo/internal/projects"
+	"github.com/selimozten/walgo/internal/ui"
 
 	"github.com/spf13/cobra"
 )
 
-// updateCmd represents the update command
 var updateCmd = &cobra.Command{
 	Use:   "update [object-id]",
 	Short: "Update an existing Walrus Site with new content.",
@@ -25,9 +28,9 @@ This is more efficient than deploying a new site when you want to update existin
 
 You can provide the object ID as an argument, or the command will use the ProjectID from walgo.yaml.
 Assumes the site has been built using 'walgo build'.`,
-	Args: cobra.MaximumNArgs(1), // Optional object ID argument
-	Run: func(cmd *cobra.Command, args []string) {
-		// Initialize telemetry if enabled
+	Args: cobra.MaximumNArgs(1),
+	RunE: func(cmd *cobra.Command, args []string) error {
+		icons := ui.GetIcons()
 		telemetry, _ := cmd.Flags().GetBool("telemetry")
 		var collector *metrics.Collector
 		var startTime time.Time
@@ -43,84 +46,79 @@ Assumes the site has been built using 'walgo build'.`,
 			}()
 		}
 
-		fmt.Println("Executing update command...")
+		fmt.Printf("%s Executing update command...\n", icons.Rocket)
 
-		var objectID string
-
-		// Get object ID from argument or config
-		if len(args) > 0 {
-			objectID = args[0]
-			fmt.Printf("Updating site with object ID: %s\n", objectID)
-		} else {
-			cfg, err := config.LoadConfig()
-			if err != nil {
-				fmt.Fprintf(os.Stderr, "%v\n", err)
-				os.Exit(1)
-			}
-
-			if cfg.WalrusConfig.ProjectID == "" || cfg.WalrusConfig.ProjectID == "YOUR_WALRUS_PROJECT_ID" {
-				fmt.Fprintf(os.Stderr, "No object ID provided and no valid ProjectID in walgo.yaml.\n")
-				fmt.Fprintf(os.Stderr, "Usage: walgo update <object-id>\n")
-				fmt.Fprintf(os.Stderr, "Or configure the ProjectID in walgo.yaml with your site's object ID.\n")
-				os.Exit(1)
-			}
-
-			objectID = cfg.WalrusConfig.ProjectID
-			fmt.Printf("Using object ID from walgo.yaml: %s\n", objectID)
-		}
-
-		// Determine site path (current directory by default)
 		sitePath, err := os.Getwd()
 		if err != nil {
-			fmt.Fprintf(os.Stderr, "Error getting current directory: %v\n", err)
-			os.Exit(1)
+			fmt.Fprintf(os.Stderr, "%s Error: Cannot determine current directory: %v\n", icons.Error, err)
+			return fmt.Errorf("cannot determine current directory: %w", err)
 		}
 
-		// Load Walgo configuration for deploy directory
-		cfg, err := config.LoadConfig()
+		cfg, err := config.LoadConfigFrom(sitePath)
 		if err != nil {
-			fmt.Fprintf(os.Stderr, "%v\n", err)
-			os.Exit(1)
+			fmt.Fprintf(os.Stderr, "%s Error: %v\n", icons.Error, err)
+			return fmt.Errorf("error loading config: %w", err)
 		}
 
-		// Determine the directory to deploy (e.g., "public")
 		deployDir := filepath.Join(sitePath, cfg.HugoConfig.PublishDir)
 		if _, err := os.Stat(deployDir); os.IsNotExist(err) {
-			fmt.Fprintf(os.Stderr, "Publish directory '%s' not found. Please run 'walgo build' first.\n", deployDir)
-			os.Exit(1)
+			fmt.Fprintf(os.Stderr, "%s Error: Publish directory '%s' not found\n", icons.Error, deployDir)
+			fmt.Fprintf(os.Stderr, "%s Run 'walgo build' first\n", icons.Lightbulb)
+			return fmt.Errorf("publish directory not found: %w", err)
 		}
 
-		fmt.Printf("Preparing to update site with content from: %s\n", deployDir)
+		// Get object ID with priority: CLI arg > ws-resources.json > walgo.yaml
+		var objectID string
+		if len(args) > 0 {
+			objectID = args[0]
+			fmt.Printf("%s Using object ID from command argument: %s\n", icons.Info, objectID)
+		} else {
+			wsResourcesPath := filepath.Join(deployDir, "ws-resources.json")
+			wsConfig, err := compress.ReadWSResourcesConfig(wsResourcesPath)
+			if err == nil && wsConfig.ObjectID != "" {
+				objectID = wsConfig.ObjectID
+				fmt.Printf("%s Using object ID from ws-resources.json: %s\n", icons.Info, objectID)
+			} else if cfg.WalrusConfig.ProjectID != "" && cfg.WalrusConfig.ProjectID != "YOUR_WALRUS_PROJECT_ID" {
+				objectID = cfg.WalrusConfig.ProjectID
+				fmt.Printf("%s Using object ID from walgo.yaml: %s\n", icons.Info, objectID)
+			} else {
+				fmt.Fprintf(os.Stderr, "%s Error: No object ID found in:\n", icons.Error)
+				fmt.Fprintf(os.Stderr, "  %s Command arguments\n", icons.Cross)
+				fmt.Fprintf(os.Stderr, "  %s ws-resources.json (%s)\n", icons.Cross, wsResourcesPath)
+				fmt.Fprintf(os.Stderr, "  %s walgo.yaml (WalrusConfig.ProjectID)\n", icons.Cross)
+				fmt.Fprintf(os.Stderr, "\n%s Usage: walgo update <object-id>\n", icons.Lightbulb)
+				fmt.Fprintf(os.Stderr, "  Or run 'walgo launch' first to create a site.\n")
+				return fmt.Errorf("no object ID found")
+			}
+		}
 
-		// Get verbose flag
+		fmt.Printf("%s Preparing to update site with content from: %s\n", icons.Package, deployDir)
+
 		verbose, err := cmd.Flags().GetBool("verbose")
 		if err != nil {
-			fmt.Fprintf(os.Stderr, "Error reading verbose flag: %v\n", err)
-			os.Exit(1)
+			fmt.Fprintf(os.Stderr, "%s Error: reading verbose flag: %v\n", icons.Error, err)
+			return fmt.Errorf("error reading verbose flag: %w", err)
 		}
 
-		// Initialize cache helper
 		cacheHelper, err := cache.NewDeployHelper(sitePath)
 		if err != nil {
-			fmt.Fprintf(os.Stderr, "⚠️  Warning: Cache initialization failed: %v\n", err)
+			fmt.Fprintf(os.Stderr, "%s Warning: Cache initialization failed: %v\n", icons.Warning, err)
 			fmt.Fprintf(os.Stderr, "  Continuing without incremental build optimization...\n")
 		} else {
 			defer cacheHelper.Close()
 		}
 
-		// Check for dry-run mode
 		dryRun, err := cmd.Flags().GetBool("dry-run")
 		if err != nil {
-			fmt.Fprintf(os.Stderr, "Error reading dry-run flag: %v\n", err)
-			os.Exit(1)
+			fmt.Fprintf(os.Stderr, "%s Error: reading dry-run flag: %v\n", icons.Error, err)
+			return fmt.Errorf("error reading dry-run flag: %w", err)
 		}
 
-		// Prepare deployment plan
 		if cacheHelper != nil {
-			fmt.Println("\n📊 Analyzing changes...")
+			fmt.Printf("\n%s Analyzing changes...\n", icons.Info)
 			plan, err := cacheHelper.PrepareDeployment(deployDir)
 			if err != nil {
-				fmt.Fprintf(os.Stderr, "⚠️  Warning: Failed to analyze changes: %v\n", err)
+				fmt.Fprintf(os.Stderr, "%s Warning: Failed to analyze changes: %v\n", icons.Warning, err)
 			} else {
 				if telemetry {
 					deployMetrics.TotalFiles = plan.TotalFiles
@@ -135,33 +133,36 @@ Assumes the site has been built using 'walgo build'.`,
 					plan.PrintSummary()
 				}
 
-				// If dry-run, stop here
 				if dryRun {
-					fmt.Println("\n🔍 Dry-run mode: No files will be uploaded")
-					fmt.Printf("📋 Would update site: %s\n", objectID)
-					fmt.Println("✅ Update plan complete!")
-					fmt.Printf("\n💡 To actually update, run without --dry-run flag\n")
-					os.Exit(0)
+					fmt.Printf("\n%s Dry-run mode: No files will be uploaded\n", icons.Info)
+					fmt.Printf("%s Would update site: %s\n", icons.File, objectID)
+					fmt.Printf("%s Update plan complete!\n", icons.Success)
+					fmt.Printf("\n%s To actually update, run without --dry-run flag\n", icons.Lightbulb)
+					return nil
 				}
 			}
 		} else if dryRun {
-			fmt.Println("\n⚠️  Note: Dry-run without cache - cannot show file-level changes")
-			fmt.Printf("🔍 Would update site %s with all files in: %s\n", objectID, deployDir)
-			fmt.Println("\n💡 To see detailed changes, ensure cache is enabled")
-			os.Exit(0)
+			fmt.Printf("\n%s Note: Dry-run without cache - cannot show file-level changes\n", icons.Warning)
+			fmt.Printf("%s Would update site %s with all files in: %s\n", icons.Info, objectID, deployDir)
+			fmt.Printf("\n%s To see detailed changes, ensure cache is enabled\n", icons.Lightbulb)
+			return nil
 		}
 
-		// Get epochs flag
 		epochs, err := cmd.Flags().GetInt("epochs")
 		if err != nil {
-			fmt.Fprintf(os.Stderr, "Error reading epochs flag: %v\n", err)
-			os.Exit(1)
+			fmt.Fprintf(os.Stderr, "%s Error: reading epochs flag: %v\n", icons.Error, err)
+			return fmt.Errorf("error reading epochs flag: %w", err)
 		}
 		if epochs <= 0 {
 			epochs = 1 // Default to 1 epoch
 		}
 
-		fmt.Printf("\nStoring for %d epoch(s)\n", epochs)
+		fmt.Printf("\n%s Storing for %d epoch(s)\n", icons.Database, epochs)
+
+		err = hugo.BuildSite(sitePath)
+		if err != nil {
+			return fmt.Errorf("failed to build site: %w", err)
+		}
 
 		uploadStart := time.Now()
 		d := sb.New()
@@ -172,30 +173,83 @@ Assumes the site has been built using 'walgo build'.`,
 			deployMetrics.UploadDuration = time.Since(uploadStart).Milliseconds()
 		}
 		if err != nil {
-			fmt.Fprintf(os.Stderr, "Error updating Walrus Site: %v\n", err)
-			os.Exit(1)
+			fmt.Fprintf(os.Stderr, "%s Error: updating Walrus Site: %v\n", icons.Error, err)
+			return fmt.Errorf("error updating Walrus Site: %w", err)
 		}
 
 		if output.Success {
-			// Mark update as successful
 			success = true
 
-			// Update cache with deployment info
 			if cacheHelper != nil {
-				fmt.Println("\n📝 Updating cache...")
+				fmt.Printf("\n%s Updating cache...\n", icons.Pencil)
 				err := cacheHelper.FinalizeDeployment(deployDir, objectID, objectID, output.FileToBlobID)
 				if err != nil {
-					fmt.Fprintf(os.Stderr, "⚠️  Warning: Failed to update cache: %v\n", err)
+					fmt.Fprintf(os.Stderr, "%s Warning: Failed to update cache: %v\n", icons.Warning, err)
 				} else {
-					fmt.Println("  ✓ Cache updated")
+					fmt.Printf("  %s Cache updated\n", icons.Check)
+				}
+
+				fmt.Printf("\n%s Updating metadata...\n", icons.Package)
+				wsResourcesPath := filepath.Join(deployDir, "ws-resources.json")
+				if err := compress.UpdateObjectID(wsResourcesPath, objectID); err != nil {
+					fmt.Fprintf(os.Stderr, "%s Error: Failed to save objectID to ws-resources.json: %v\n", icons.Error, err)
+					return fmt.Errorf("failed to save objectID to ws-resources.json: %w", err)
+				}
+				fmt.Printf("  %s ObjectID saved to ws-resources.json\n", icons.Check)
+
+				// Update walgo.yaml with objectID
+				if err := config.UpdateWalgoYAMLProjectID(sitePath, objectID); err != nil {
+					fmt.Fprintf(os.Stderr, "%s Error: Failed to update walgo.yaml: %v\n", icons.Error, err)
+					return fmt.Errorf("failed to update walgo.yaml with Object ID: %w", err)
+				}
+				fmt.Printf("  %s Updated walgo.yaml\n", icons.Check)
+
+				pm, err := projects.NewManager()
+				if err == nil {
+					defer pm.Close()
+
+					existingProj, err := pm.GetProjectBySitePath(sitePath)
+					if err == nil && existingProj != nil {
+						var siteSize int64
+						filepath.Walk(deployDir, func(path string, info os.FileInfo, err error) error {
+							if err == nil && !info.IsDir() {
+								siteSize += info.Size()
+							}
+							return nil
+						})
+
+						existingProj.ObjectID = objectID
+						existingProj.Epochs = epochs
+						existingProj.LastDeployAt = time.Now()
+
+						if err := pm.UpdateProject(existingProj); err != nil {
+							fmt.Fprintf(os.Stderr, "%s Warning: Failed to update project in database: %v\n", icons.Warning, err)
+						} else {
+							// Use epoch-aware cost estimation
+							estimatedGas := projects.EstimateGasFeeWithEpochs(existingProj.Network, siteSize, epochs)
+							deployment := &projects.DeploymentRecord{
+								ProjectID: existingProj.ID,
+								ObjectID:  objectID,
+								Network:   existingProj.Network,
+								Epochs:    epochs,
+								GasFee:    estimatedGas,
+								Success:   true,
+							}
+							_ = pm.RecordDeployment(deployment)
+
+							fmt.Printf("  %s Project updated in database\n", icons.Check)
+						}
+					}
 				}
 			}
 
-			fmt.Println("\n🎉 Site update completed successfully!")
-			fmt.Printf("📋 Object ID: %s\n", objectID)
-			fmt.Println("🌐 Your updated site should be available at the same URLs as before")
+			fmt.Printf("\n%s Site update completed successfully!\n", icons.Celebrate)
+			fmt.Printf("%s Object ID: %s\n", icons.File, objectID)
+			fmt.Printf("%s Your updated site should be available at the same URLs as before\n", icons.Globe)
 			fmt.Println("Use 'walgo status' to check the updated resources.")
 		}
+
+		return nil
 	},
 }
 

@@ -5,13 +5,14 @@ import (
 	"os"
 	"path/filepath"
 
-	"walgo/internal/compress"
-	"walgo/internal/config"
+	"github.com/selimozten/walgo/internal/compress"
+	"github.com/selimozten/walgo/internal/config"
+	"github.com/selimozten/walgo/internal/projects"
 
+	"github.com/selimozten/walgo/internal/ui"
 	"github.com/spf13/cobra"
 )
 
-// compressCmd represents the compress command
 var compressCmd = &cobra.Command{
 	Use:   "compress [directory]",
 	Short: "Compress files in a directory using Brotli compression.",
@@ -27,61 +28,58 @@ Example:
   walgo compress ./dist       # Compress ./dist directory
   walgo compress --level 11   # Maximum compression`,
 	Args: cobra.MaximumNArgs(1),
-	Run: func(cmd *cobra.Command, args []string) {
-		// Determine directory to compress
+	RunE: func(cmd *cobra.Command, args []string) error {
+		icons := ui.GetIcons()
 		var targetDir string
 		if len(args) > 0 {
 			targetDir = args[0]
 		} else {
-			// Use publish directory from config
 			sitePath, err := os.Getwd()
 			if err != nil {
-				fmt.Fprintf(os.Stderr, "❌ Error: Cannot determine current directory: %v\n", err)
-				os.Exit(1)
+				fmt.Fprintf(os.Stderr, "%s Error: Cannot determine current directory: %v\n", icons.Error, err)
+				return fmt.Errorf("error getting current directory: %w", err)
 			}
 
-			cfg, err := config.LoadConfig()
+			cfg, err := config.LoadConfigFrom(sitePath)
 			if err != nil {
-				fmt.Fprintf(os.Stderr, "❌ Error: %v\n", err)
-				fmt.Fprintf(os.Stderr, "\n💡 Tip: Specify a directory explicitly: walgo compress ./public\n")
-				os.Exit(1)
+				fmt.Fprintf(os.Stderr, "%s Error: %v\n", icons.Error, err)
+				fmt.Fprintf(os.Stderr, "\n%s Tip: Specify a directory explicitly: walgo compress ./public\n", icons.Lightbulb)
+				return fmt.Errorf("error loading config: %w", err)
 			}
 
 			targetDir = filepath.Join(sitePath, cfg.HugoConfig.PublishDir)
 		}
 
-		// Verify directory exists
 		if _, err := os.Stat(targetDir); os.IsNotExist(err) {
-			fmt.Fprintf(os.Stderr, "❌ Error: Directory not found: %s\n", targetDir)
-			os.Exit(1)
+			fmt.Fprintf(os.Stderr, "%s Error: Directory not found: %s\n", icons.Error, targetDir)
+			return fmt.Errorf("directory not found: %s", targetDir)
 		}
 
-		// Get flags
 		level, err := cmd.Flags().GetInt("level")
 		if err != nil {
-			fmt.Fprintf(os.Stderr, "Error reading level flag: %v\n", err)
-			os.Exit(1)
+			fmt.Fprintf(os.Stderr, "%s Error: reading level flag: %v\n", icons.Error, err)
+			return fmt.Errorf("error reading level flag: %w", err)
 		}
 
 		verbose, err := cmd.Flags().GetBool("verbose")
 		if err != nil {
-			fmt.Fprintf(os.Stderr, "Error reading verbose flag: %v\n", err)
-			os.Exit(1)
+			fmt.Fprintf(os.Stderr, "%s Error: reading verbose flag: %v\n", icons.Error, err)
+			return fmt.Errorf("error reading verbose flag: %w", err)
 		}
 
 		inPlace, err := cmd.Flags().GetBool("in-place")
 		if err != nil {
-			fmt.Fprintf(os.Stderr, "Error reading in-place flag: %v\n", err)
-			os.Exit(1)
+			fmt.Fprintf(os.Stderr, "%s Error: reading in-place flag: %v\n", icons.Error, err)
+			return fmt.Errorf("error reading in-place flag: %w", err)
 		}
 
 		generateWS, err := cmd.Flags().GetBool("generate-ws-resources")
 		if err != nil {
-			fmt.Fprintf(os.Stderr, "Error reading generate-ws-resources flag: %v\n", err)
-			os.Exit(1)
+			fmt.Fprintf(os.Stderr, "%s Error: reading generate-ws-resources flag: %v\n", icons.Error, err)
+			return fmt.Errorf("error reading generate-ws-resources flag: %w", err)
 		}
 
-		fmt.Printf("📦 Compressing files in: %s\n", targetDir)
+		fmt.Printf("%s Compressing files in: %s\n", icons.Package, targetDir)
 		fmt.Printf("  Compression level: %d\n", level)
 		if inPlace {
 			fmt.Println("  Mode: In-place (replaces originals)")
@@ -90,7 +88,6 @@ Example:
 		}
 		fmt.Println()
 
-		// Configure compression
 		compressConfig := compress.Config{
 			Enabled:        true,
 			BrotliLevel:    level,
@@ -100,7 +97,6 @@ Example:
 
 		compressor := compress.New(compressConfig)
 
-		// Compress directory
 		var stats *compress.DirectoryCompressionStats
 		if inPlace {
 			stats, err = compressor.CompressInPlace(targetDir)
@@ -109,23 +105,20 @@ Example:
 		}
 
 		if err != nil {
-			fmt.Fprintf(os.Stderr, "❌ Error: Compression failed: %v\n", err)
-			os.Exit(1)
+			fmt.Fprintf(os.Stderr, "%s Error: Compression failed: %v\n", icons.Error, err)
+			return fmt.Errorf("compression failed: %w", err)
 		}
 
-		// Print stats
 		if verbose {
 			stats.PrintVerboseSummary()
 		} else {
 			stats.PrintSummary()
 		}
 
-		// Generate ws-resources.json if requested
 		if generateWS {
-			fmt.Println("\n📝 Generating ws-resources.json...")
+			fmt.Printf("\n%s Generating ws-resources.json...\n", icons.Pencil)
 
-			// Load config for cache settings
-			cfg, err := config.LoadConfig()
+			cfg, err := config.LoadConfigFrom(targetDir)
 			cacheConfig := compress.DefaultCacheControlConfig()
 			if err == nil {
 				cacheConfig.Enabled = cfg.CacheConfig.Enabled
@@ -140,23 +133,78 @@ Example:
 				}
 			}
 
-			wsConfig, err := compress.GenerateWSResourcesConfig(targetDir, stats, cacheConfig)
+			customRoutes := make(map[string]string)
+			var customIgnore []string
+			if cfg != nil {
+				customRoutes = cfg.CompressConfig.CustomRoutes
+				customIgnore = cfg.CompressConfig.IgnorePatterns
+			}
+
+			wsOptions := compress.WSResourcesOptions{
+				CompressionStats: stats,
+				CacheConfig:      cacheConfig,
+				CustomRoutes:     customRoutes,
+				CustomIgnore:     customIgnore,
+			}
+
+			pm, err := projects.NewManager()
 			if err != nil {
-				fmt.Fprintf(os.Stderr, "⚠️  Warning: Failed to generate ws-resources.json: %v\n", err)
+				fmt.Fprintf(os.Stderr, "%s Warning: Failed to get project manager: %v\n", icons.Warning, err)
+				return fmt.Errorf("failed to get project manager: %w", err)
+			}
+			defer pm.Close()
+			sitePath, err := os.Getwd()
+			if err != nil {
+				fmt.Fprintf(os.Stderr, "%s Error: Cannot determine current directory: %v\n", icons.Error, err)
+				return fmt.Errorf("error getting current directory: %w", err)
+			}
+			project, err := pm.GetProjectBySitePath(sitePath)
+			if err != nil || project == nil {
+				fmt.Fprintf(os.Stderr, "%s Warning: Project not found for path: %s (using defaults)\n", icons.Warning, targetDir)
+				// Use default values if project not found
+				wsOptions.SiteName = filepath.Base(sitePath)
+				wsOptions.Description = ""
+				wsOptions.ImageURL = ""
+				wsOptions.Link = compress.DefaultLink
+				wsOptions.ProjectURL = compress.DefaultProjectURL
+				wsOptions.Creator = compress.DefaultCreator
+				wsOptions.Category = ""
+			} else {
+				// Use project metadata if available
+				wsOptions.SiteName = project.Name
+				wsOptions.Description = project.Description
+				wsOptions.ImageURL = project.ImageURL
+				wsOptions.Link = compress.DefaultLink
+				wsOptions.ProjectURL = compress.DefaultProjectURL
+				wsOptions.Creator = compress.DefaultCreator
+				wsOptions.Category = project.Category
+			}
+
+			wsConfig, err := compress.GenerateWSResourcesConfig(targetDir, wsOptions)
+			if err != nil {
+				fmt.Fprintf(os.Stderr, "%s Warning: Failed to generate ws-resources.json: %v\n", icons.Warning, err)
 			} else {
 				outputPath := filepath.Join(targetDir, "ws-resources.json")
 				if err := compress.WriteWSResourcesConfig(wsConfig, outputPath); err != nil {
-					fmt.Fprintf(os.Stderr, "⚠️  Warning: Failed to write ws-resources.json: %v\n", err)
+					fmt.Fprintf(os.Stderr, "%s Warning: Failed to write ws-resources.json: %v\n", icons.Warning, err)
 				} else {
-					fmt.Printf("✅ Generated ws-resources.json (%d resources)\n", len(wsConfig.Headers))
+					fmt.Printf("%s Generated ws-resources.json (%d resources)\n", icons.Success, len(wsConfig.Headers))
 				}
 			}
 		}
-
-		fmt.Printf("\n✅ Compression complete!\n")
-		if !inPlace {
-			fmt.Printf("\n💡 Tip: Compressed files have .br extension\n")
+		routes, err := compress.GenerateRoutesFromPublic(targetDir)
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "%s Warning: Failed to generate routes: %v\n", icons.Warning, err)
+		} else {
+			compress.MergeRoutesIntoWSResources(filepath.Join(targetDir, "ws-resources.json"), routes)
 		}
+
+		fmt.Printf("\n%s Compression complete!\n", icons.Success)
+		if !inPlace {
+			fmt.Printf("\n%s Tip: Compressed files have .br extension\n", icons.Lightbulb)
+		}
+
+		return nil
 	},
 }
 

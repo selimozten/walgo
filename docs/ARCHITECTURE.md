@@ -14,13 +14,18 @@ This document provides a comprehensive overview of Walgo's architecture, design 
 
 ## High-Level Overview
 
-Walgo is a CLI tool that bridges Hugo static site generation with Walrus decentralized storage. It provides:
+Walgo is a CLI tool and desktop application that bridges Hugo static site generation with Walrus decentralized storage. It provides:
 
 1. **Hugo Integration** - Initialize, build, and serve Hugo sites
 2. **Asset Optimization** - Minify and optimize HTML, CSS, and JavaScript
 3. **Dual Deployment Modes** - HTTP (free) and on-chain (permanent) deployment
 4. **Content Import** - Import from Obsidian vaults
 5. **Site Management** - Update and monitor deployments
+6. **AI Content Generation** - Generate and update content with AI (OpenAI, OpenRouter)
+7. **Project Management** - Track and manage deployed sites
+8. **Desktop Application** - Full GUI for all features (Wails-based)
+9. **Wallet Integration** - Manage Sui wallets for on-chain deployments
+10. **System Health** - Diagnose and auto-install dependencies
 
 ## Architecture Diagram
 
@@ -84,17 +89,17 @@ graph LR
 
 **Key Commands:**
 
-| Command | Purpose | Dependencies |
-|---------|---------|--------------|
-| `init` | Create new Hugo site | Hugo package |
-| `build` | Build Hugo site + optimize | Hugo, Optimizer, Config |
-| `deploy` | On-chain deployment | Deployer (SiteBuilder), Config, Walrus |
-| `deploy-http` | HTTP deployment | Deployer (HTTP), Config |
-| `update` | Update existing site | Walrus package |
-| `status` | Check deployment status | Walrus package |
-| `doctor` | System diagnostics | Config, Hugo, Walrus |
-| `optimize` | Asset optimization | Optimizer package |
-| `import` | Obsidian import | Obsidian, Hugo |
+| Command       | Purpose                    | Dependencies                           |
+| ------------- | -------------------------- | -------------------------------------- |
+| `init`        | Create new Hugo site       | Hugo package                           |
+| `build`       | Build Hugo site + optimize | Hugo, Optimizer, Config                |
+| `deploy`      | On-chain deployment        | Deployer (SiteBuilder), Config, Walrus |
+| `deploy-http` | HTTP deployment            | Deployer (HTTP), Config                |
+| `update`      | Update existing site       | Walrus package                         |
+| `status`      | Check deployment status    | Walrus package                         |
+| `doctor`      | System diagnostics         | Config, Hugo, Walrus                   |
+| `optimize`    | Asset optimization         | Optimizer package                      |
+| `import`      | Obsidian import            | Obsidian, Hugo                         |
 
 ### 2. Hugo Integration (`internal/hugo/`)
 
@@ -121,6 +126,7 @@ sequenceDiagram
 ```
 
 **Functions:**
+
 - `InitializeSite(name string)` - Create new Hugo site
 - `BuildSite(config *HugoConfig)` - Build Hugo site
 - `ServeSite(config *HugoConfig)` - Run local development server
@@ -173,6 +179,7 @@ graph LR
 5. **Statistics** - Track bytes saved, files processed
 
 **Key Features:**
+
 - Preserves conditional comments in HTML
 - Handles inline styles and scripts
 - Safe string/regex handling in JavaScript
@@ -215,10 +222,10 @@ classDiagram
 
 **Deployment Modes:**
 
-| Mode | Adapter | Requirements | Permanence |
-|------|---------|--------------|------------|
-| HTTP | HTTPAdapter | None | Temporary (30 days) |
-| On-Chain | SiteBuilderAdapter | Sui wallet + SUI tokens | Permanent (epochs) |
+| Mode     | Adapter            | Requirements            | Permanence          |
+| -------- | ------------------ | ----------------------- | ------------------- |
+| HTTP     | HTTPAdapter        | None                    | Temporary (30 days) |
+| On-Chain | SiteBuilderAdapter | Sui wallet + SUI tokens | Permanent (epochs)  |
 
 ### 5. Walrus Integration (`internal/walrus/`)
 
@@ -243,6 +250,7 @@ sequenceDiagram
 ```
 
 **Functions:**
+
 - `PublishSite(dir, epochs)` - Deploy new site
 - `UpdateSite(objectID, dir)` - Update existing site
 - `GetSiteStatus(objectID)` - Check deployment status
@@ -276,12 +284,14 @@ graph TB
 ```
 
 **Configuration Priority (highest to lowest):**
+
 1. CLI flags (`--epochs 5`)
 2. Environment variables (`WALGO_EPOCHS=5`)
 3. Configuration file (`walgo.yaml`)
 4. Default values
 
 **Search Paths:**
+
 1. `--config` flag path
 2. Current directory (`./walgo.yaml`)
 3. Home directory (`~/.walgo.yaml`)
@@ -552,16 +562,16 @@ walgo/
 
 ## Technology Stack
 
-| Layer | Technology | Purpose |
-|-------|-----------|---------|
-| **CLI Framework** | Cobra | Command structure, flags, help |
-| **Configuration** | Viper | Multi-format config, env vars |
-| **Build Tool** | Hugo (external) | Static site generation |
-| **Deployment** | site-builder (external) | On-chain deployment to Walrus |
-| **Blockchain** | Sui (external) | Wallet management, transactions |
-| **Storage** | Walrus | Decentralized blob storage |
-| **Testing** | Go testing + race detector | Unit + integration tests |
-| **CI/CD** | GitHub Actions | Automated testing, builds, releases |
+| Layer             | Technology                 | Purpose                             |
+| ----------------- | -------------------------- | ----------------------------------- |
+| **CLI Framework** | Cobra                      | Command structure, flags, help      |
+| **Configuration** | Viper                      | Multi-format config, env vars       |
+| **Build Tool**    | Hugo (external)            | Static site generation              |
+| **Deployment**    | site-builder (external)    | On-chain deployment to Walrus       |
+| **Blockchain**    | Sui (external)             | Wallet management, transactions     |
+| **Storage**       | Walrus                     | Decentralized blob storage          |
+| **Testing**       | Go testing + race detector | Unit + integration tests            |
+| **CI/CD**         | GitHub Actions             | Automated testing, builds, releases |
 
 ## Key Design Decisions
 
@@ -570,6 +580,7 @@ walgo/
 **Decision:** Wrap external CLIs (Hugo, site-builder, sui) rather than importing libraries.
 
 **Rationale:**
+
 - Official tools are well-maintained and tested
 - Avoids version conflicts and dependency hell
 - Simpler error handling and debugging
@@ -580,6 +591,7 @@ walgo/
 **Decision:** Support both HTTP and on-chain deployment.
 
 **Rationale:**
+
 - HTTP mode lowers barrier to entry (no wallet needed)
 - On-chain provides permanence for production sites
 - Users can test HTTP, then upgrade to on-chain
@@ -590,6 +602,7 @@ walgo/
 **Decision:** Include asset optimizer rather than relying on Hugo's minification.
 
 **Rationale:**
+
 - More aggressive optimization (unused CSS removal)
 - Works with any Hugo theme
 - Consistent optimization across all sites
@@ -600,6 +613,7 @@ walgo/
 **Decision:** Use `walgo.yaml` instead of extending Hugo's config.
 
 **Rationale:**
+
 - Clear separation of concerns (Hugo vs Walgo settings)
 - Doesn't pollute Hugo configuration
 - Easier to version and share Walgo-specific settings
@@ -610,6 +624,7 @@ walgo/
 **Decision:** Use `internal/` for all implementation packages.
 
 **Rationale:**
+
 - Prevents external projects from importing internal APIs
 - Allows refactoring without breaking compatibility
 - Clear signal that no public API is provided
@@ -677,6 +692,7 @@ walgo/
 ---
 
 For more information, see:
+
 - [Development Guide](DEVELOPMENT.md)
 - [Contributing Guide](CONTRIBUTING.md)
 - [Optimizer Documentation](OPTIMIZER.md)

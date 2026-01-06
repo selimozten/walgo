@@ -1,125 +1,150 @@
 package cmd
 
 import (
-	"bytes"
 	"fmt"
-	"math/big"
 	"os"
 	"os/exec"
 	"path/filepath"
-	"regexp"
-	"strings"
 
+	"github.com/selimozten/walgo/internal/config"
+	"github.com/selimozten/walgo/internal/hugo"
+	"github.com/selimozten/walgo/internal/projects"
+	"github.com/selimozten/walgo/internal/ui"
+	"github.com/selimozten/walgo/internal/utils"
 	"github.com/spf13/cobra"
 )
 
-// quickstartCmd represents the quickstart command
 var quickstartCmd = &cobra.Command{
 	Use:   "quickstart <site-name>",
-	Short: "Quick start: init, build, and deploy in one command",
-	Long: `Creates a new Hugo site, adds sample content, builds it, and deploys to Walrus.
+	Short: "Quick start: init and build in one command",
+	Long: `Creates a new Hugo site, adds sample content, and builds it.
 
 This command will:
 1. Initialize a new Hugo site
 2. Add sample content
 3. Build the site
-4. Deploy to Walrus HTTP testnet
 
 Example:
   walgo quickstart my-blog
-  walgo quickstart my-portfolio --skip-deploy`,
+  walgo quickstart my-portfolio --skip-build`,
 	Args: cobra.ExactArgs(1),
-	Run: func(cmd *cobra.Command, args []string) {
+	RunE: func(cmd *cobra.Command, args []string) error {
+		icons := ui.GetIcons()
 		siteName := args[0]
-		skipDeploy, err := cmd.Flags().GetBool("skip-deploy")
-		if err != nil {
-			fmt.Fprintf(os.Stderr, "Error reading skip-deploy flag: %v\n", err)
-			os.Exit(1)
-		}
 		skipBuild, err := cmd.Flags().GetBool("skip-build")
 		if err != nil {
 			fmt.Fprintf(os.Stderr, "Error reading skip-build flag: %v\n", err)
-			os.Exit(1)
+			return fmt.Errorf("failed to read skip-build flag: %w", err)
 		}
 
-		// Validate site name to prevent command injection
-		if !isValidSiteName(siteName) {
-			fmt.Fprintf(os.Stderr, "❌ Invalid site name. Use only letters, numbers, hyphens and underscores\n")
-			os.Exit(1)
+		if !utils.IsValidSiteName(siteName) {
+			fmt.Fprintf(os.Stderr, "%s Error: Invalid site name\n", icons.Error)
+			fmt.Fprintf(os.Stderr, "\n%s Use only letters, numbers, hyphens and underscores\n", icons.Lightbulb)
+			return fmt.Errorf("invalid site name: %s", siteName)
 		}
 
-		fmt.Println("🚀 Walgo Quickstart")
-		fmt.Println("═══════════════════════════════════════════════════════════")
-		fmt.Printf("Creating site: %s\n\n", siteName)
+		fmt.Printf("%s Walgo Quick Start\n", icons.Rocket)
+		fmt.Println("━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
+		fmt.Printf("%s Creating site: %s\n\n", icons.Package, siteName)
 
-		// Check if Hugo is installed
-		fmt.Println("[1/5] Checking dependencies...")
+		// [1/4] Check dependencies
+		fmt.Println("  [1/4] Checking dependencies...")
 		if _, err := exec.LookPath("hugo"); err != nil {
-			fmt.Fprintf(os.Stderr, "❌ Hugo not found\n\n")
-			fmt.Fprintf(os.Stderr, "Install Hugo first:\n")
-			fmt.Fprintf(os.Stderr, "  macOS:  brew install hugo\n")
-			fmt.Fprintf(os.Stderr, "  Linux:  sudo apt install hugo\n")
-			fmt.Fprintf(os.Stderr, "  Or visit: https://gohugo.io/installation/\n")
-			os.Exit(1)
+			fmt.Fprintf(os.Stderr, "\n%s Error: Hugo not found\n", icons.Error)
+			fmt.Fprintf(os.Stderr, "\n%s Install from https://gohugo.io/installation/\n", icons.Lightbulb)
+			return fmt.Errorf("hugo not found: %w", err)
 		}
-		fmt.Println("  ✓ Hugo found")
+		fmt.Printf("        %s Hugo found\n", icons.Check)
 
-		// Step 2: Initialize site
-		fmt.Println("\n[2/5] Creating Hugo site...")
-		initCmd := exec.Command("walgo", "init", siteName, "--quiet") // #nosec G204 - siteName is validated by isValidSiteName() above
-		var initOut, initErr bytes.Buffer
-		initCmd.Stdout = &initOut
-		initCmd.Stderr = &initErr
-		if err := initCmd.Run(); err != nil {
-			fmt.Fprintf(os.Stderr, "\n❌ Failed to create site: %v\n", err)
-			if initErr.Len() > 0 {
-				fmt.Fprintf(os.Stderr, "%s\n", initErr.String())
-			}
-			os.Exit(1)
+		if _, err := exec.LookPath("git"); err != nil {
+			fmt.Fprintf(os.Stderr, "\n%s Error: Git not found\n", icons.Error)
+			fmt.Fprintf(os.Stderr, "\n%s Git is required for theme installation\n", icons.Lightbulb)
+			return fmt.Errorf("git not found: %w", err)
 		}
-		fmt.Println("  ✓ Site created")
+		fmt.Printf("        %s Git found\n", icons.Check)
 
-		// Change to site directory
-		if err := os.Chdir(siteName); err != nil {
-			fmt.Fprintf(os.Stderr, "\n❌ Failed to enter site directory: %v\n", err)
-			os.Exit(1)
+		// [2/4] Create site directory and initialize Hugo
+		fmt.Println("\n  [2/4] Creating Hugo site...")
+
+		sitePath, err := os.Getwd()
+		if err != nil {
+			return fmt.Errorf("getting current directory: %w", err)
 		}
 
-		// Step 3: Fetch and apply a theme
-		fmt.Println("\n[3/5] Setting up theme...")
-		const themeURL = "https://github.com/theNewDynamic/gohugo-theme-ananke.git"
-		const themeName = "ananke"
+		sitePath = filepath.Join(sitePath, siteName)
+		// Create site directory
+		if err := os.MkdirAll(sitePath, 0755); err != nil {
+			return fmt.Errorf("failed to create site directory: %w", err)
+		}
 
-		// Clone theme - hardcoded safe values
-		cloneCmd := exec.Command("git", "clone", "--depth", "1", themeURL, filepath.Join("themes", themeName)) // #nosec G204 - hardcoded constants
-		cloneCmd.Stdout = os.Stdout
-		cloneCmd.Stderr = os.Stderr
-		if err := cloneCmd.Run(); err != nil {
-			fmt.Fprintf(os.Stderr, "  ⚠ Warning: Failed to clone theme: %v\n", err)
-			fmt.Fprintf(os.Stderr, "    You can add a theme manually later\n")
+		// Initialize Hugo site
+		if err := hugo.InitializeSite(sitePath); err != nil {
+			return fmt.Errorf("failed to initialize Hugo site: %w", err)
+		}
+		fmt.Printf("        %s Hugo site initialized\n", icons.Check)
+
+		// Create walgo.yaml config
+		if err := config.CreateDefaultWalgoConfig(sitePath); err != nil {
+			fmt.Fprintf(os.Stderr, "        %s Warning: Could not create walgo.yaml: %v\n", icons.Warning, err)
 		} else {
-			// Update hugo config to use theme
-			fmt.Println("  ✓ Theme installed")
-			// Write theme config safely
-			configContent := fmt.Sprintf("\ntheme = \"%s\"\n", themeName)
-			configPath := "hugo.toml"
-			// #nosec G302 - config file needs to be writable
-			f, err := os.OpenFile(configPath, os.O_APPEND|os.O_WRONLY, 0644)
-			if err != nil {
-				fmt.Fprintf(os.Stderr, "  ⚠ Warning: Could not open config: %v\n", err)
+			fmt.Printf("        %s Walgo config created\n", icons.Check)
+		}
+
+		// [3/4] Set up site (config, archetypes, theme)
+		fmt.Println("\n  [3/4] Setting up site...")
+
+		// Blog is the default site type - use Ananke theme
+		siteType := hugo.SiteTypeBlog
+		themeInfo := hugo.GetThemeInfo(siteType)
+
+		// Setup hugo.toml with blog configuration and site name
+		if err := hugo.SetupSiteConfigWithName(sitePath, siteType, siteName); err != nil {
+			fmt.Fprintf(os.Stderr, "        %s Warning: Could not set up config: %v\n", icons.Warning, err)
+		} else {
+			fmt.Printf("        %s Config set up (blog)\n", icons.Check)
+		}
+
+		// Setup archetypes
+		if err := hugo.SetupArchetypes(sitePath); err != nil {
+			fmt.Fprintf(os.Stderr, "        %s Warning: Could not set up archetypes: %v\n", icons.Warning, err)
+		} else {
+			fmt.Printf("        %s Archetypes set up\n", icons.Check)
+		}
+
+		// Setup favicon
+		if err := hugo.SetupFavicon(sitePath); err != nil {
+			fmt.Fprintf(os.Stderr, "        %s Warning: Could not set up favicon: %v\n", icons.Warning, err)
+		} else {
+			fmt.Printf("        %s Favicon set up\n", icons.Check)
+		}
+
+		// Install theme (Ananke for blog)
+		fmt.Printf("        %s Installing theme %s...\n", icons.Spinner, themeInfo.Name)
+		if err := hugo.InstallTheme(sitePath, siteType); err != nil {
+			fmt.Fprintf(os.Stderr, "        %s Warning: Could not install theme: %v\n", icons.Warning, err)
+		} else {
+			fmt.Printf("        %s Theme %s installed\n", icons.Check, themeInfo.Name)
+		}
+
+		// Setup theme-specific overrides (e.g., favicon fix for business theme)
+		if siteType == hugo.SiteTypeBusiness {
+			if err := hugo.SetupBusinessThemeOverrides(sitePath); err != nil {
+				fmt.Fprintf(os.Stderr, "        %s Warning: Could not set up theme overrides: %v\n", icons.Warning, err)
 			} else {
-				defer f.Close()
-				if _, err := f.WriteString(configContent); err != nil {
-					fmt.Fprintf(os.Stderr, "  ⚠ Warning: Could not update config: %v\n", err)
-				}
+				fmt.Printf("        %s Theme overrides set up\n", icons.Check)
 			}
 		}
 
-		// Step 4: Create sample content
-		fmt.Println("\n[4/5] Creating sample content...")
-		contentDir := filepath.Join("content", "posts")
-		if err := os.MkdirAll(contentDir, 0750); err != nil { // #nosec G301
-			fmt.Fprintf(os.Stderr, "  ⚠ Warning: Could not create content directory: %v\n", err)
+		// [4/4] Create sample content
+		if !skipBuild {
+			fmt.Println("\n  [4/4] Creating sample content...")
+		} else {
+			fmt.Println("\n  Creating sample content...")
+		}
+
+		contentDir := filepath.Join(sitePath, "content", "posts")
+		if err := os.MkdirAll(contentDir, 0755); err != nil {
+			fmt.Fprintf(os.Stderr, "        %s Warning: Could not create content directory: %v\n", icons.Warning, err)
 		} else {
 			welcomePath := filepath.Join(contentDir, "welcome.md")
 			content := `---
@@ -137,131 +162,57 @@ This site is hosted on the Walrus decentralized storage network, making it censo
 1. Edit this content in ` + "`content/posts/welcome.md`" + `
 2. Add more posts to ` + "`content/posts/`" + `
 3. Customize your theme
-4. Deploy updates with ` + "`walgo deploy`" + `
+4. Deploy with ` + "`walgo launch`" + `
 
-Happy building! 🚀
+Happy building! ` + icons.Rocket + `
 `
-			// #nosec G306 - content files need to be readable
 			if err := os.WriteFile(welcomePath, []byte(content), 0644); err != nil {
-				fmt.Fprintf(os.Stderr, "  ⚠ Warning: Could not create welcome post: %v\n", err)
+				fmt.Fprintf(os.Stderr, "        %s Warning: Could not create welcome post: %v\n", icons.Warning, err)
 			} else {
-				fmt.Println("  ✓ Sample content created")
+				fmt.Printf("        %s Sample content created\n", icons.Check)
 			}
 		}
 
+		// Build site
 		if !skipBuild {
-			// Step 5: Build the site
-			fmt.Println("\n[5/5] Building site...")
-			buildCmd := exec.Command("walgo", "build", "--quiet")
-			var buildOut, buildErr bytes.Buffer
-			buildCmd.Stdout = &buildOut
-			buildCmd.Stderr = &buildErr
-			if err := buildCmd.Run(); err != nil {
-				fmt.Fprintf(os.Stderr, "\n❌ Build failed: %v\n", err)
-				if buildErr.Len() > 0 {
-					fmt.Fprintf(os.Stderr, "%s\n", buildErr.String())
-				}
-				os.Exit(1)
+			fmt.Println("\n  Building site...")
+			if err := hugo.BuildSite(sitePath); err != nil {
+				fmt.Fprintf(os.Stderr, "\n%s Error: Build failed: %v\n", icons.Error, err)
+				return fmt.Errorf("failed to build site: %w", err)
 			}
-			fmt.Println("  ✓ Site built")
+			fmt.Printf("        %s Site built\n", icons.Check)
 		}
 
-		if !skipDeploy {
-			// Step 6: Deploy
-			fmt.Println("\n[6/6] Deploying to Walrus Sites...")
-			deployCmd := exec.Command("walgo", "deploy", "--quiet")
-			var deployOut, deployErr bytes.Buffer
-			deployCmd.Stdout = &deployOut
-			deployCmd.Stderr = &deployErr
-			if err := deployCmd.Run(); err != nil {
-				fmt.Fprintf(os.Stderr, "\n❌ Deploy failed: %v\n", err)
-				if deployErr.Len() > 0 {
-					fmt.Fprintf(os.Stderr, "%s\n", deployErr.String())
-				}
-				fmt.Fprintf(os.Stderr, "\nYou can try deploying manually with:\n")
-				fmt.Fprintf(os.Stderr, "  cd %s && walgo deploy\n", siteName)
-				os.Exit(1)
-			}
-
-			// Extract and show only the object ID from deploy output
-			output := deployOut.String()
-			if objectID := extractObjectID(output); objectID != "" {
-				fmt.Println("  ✓ Site deployed")
-				fmt.Printf("\n📋 Site Object ID: %s\n", objectID)
-
-				// Convert to Base36 and show portal URLs
-				if base36ID := convertToBase36(objectID); base36ID != "" {
-					fmt.Println("\n🌐 Your site is live!")
-					fmt.Printf("   https://%s.portal.walgo.xyz\n", base36ID)
-					fmt.Println()
-					fmt.Println("💡 To use a custom domain:")
-					fmt.Println("   1. Get a SuiNS name: https://suins.io")
-					fmt.Println("   2. Link it to your Object ID")
-					fmt.Printf("   3. Browse at: https://yourname.wal.app\n")
-				}
-			} else {
-				fmt.Println("  ✓ Site deployed")
-			}
+		manager, err := projects.NewManager()
+		if err != nil {
+			return fmt.Errorf("failed to create project manager: %w", err)
 		}
+		defer manager.Close()
 
-		// Success message
-		fmt.Println("\n═══════════════════════════════════════════════════════════")
-		fmt.Println("✨ Success! Your site is ready.")
-		fmt.Printf("\n📁 Site location: %s/\n", siteName)
+		// Create draft project
+		if err := manager.CreateDraftProject(siteName, sitePath); err != nil {
+			return fmt.Errorf("failed to create draft project: %w", err)
+		}
+		fmt.Printf("   %s Created draft project\n", icons.Check)
+
+		fmt.Println("\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
+		fmt.Printf("%s Quick start complete!\n", icons.Success)
+		fmt.Println("━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
+		fmt.Printf("%s Site directory: %s/\n", icons.Folder, siteName)
 		if !skipBuild {
-			fmt.Println("📦 Built files: public/")
+			fmt.Printf("%s Built files: public/\n", icons.Package)
 		}
-		if !skipDeploy {
-			fmt.Println("🌐 Your site is now live on Walrus!")
-		}
-		fmt.Println("\n🎯 Next steps:")
-		fmt.Println("  1. Edit content in content/posts/")
-		fmt.Println("  2. Rebuild: walgo build")
-		if skipDeploy {
-			fmt.Println("  3. Deploy: walgo deploy")
-		} else {
-			fmt.Println("  3. Update: walgo update <object-id>")
-		}
-		fmt.Println("\n📖 Learn more: https://github.com/selimozten/walgo")
+		fmt.Printf("\n%s Next steps:\n", icons.Lightbulb)
+		fmt.Println("   - cd " + siteName)
+		fmt.Println("   - walgo serve      # Preview your site locally")
+		fmt.Println("   - walgo launch     # Deploy with interactive wizard")
+
+		return nil
 	},
-}
-
-// isValidSiteName validates that site name only contains safe characters
-func isValidSiteName(name string) bool {
-	// Only allow alphanumeric, hyphens, and underscores
-	validName := regexp.MustCompile(`^[a-zA-Z0-9_-]+$`)
-	return validName.MatchString(name) && len(name) > 0 && len(name) < 100
-}
-
-// extractObjectID extracts the object ID from deploy command output
-func extractObjectID(output string) string {
-	re := regexp.MustCompile(`(?:Site Object ID:|New site object ID:)\s*(0x[a-fA-F0-9]+)`)
-	matches := re.FindStringSubmatch(output)
-	if len(matches) > 1 {
-		return matches[1]
-	}
-	return ""
-}
-
-// convertToBase36 converts a hex object ID (0x...) to Base36
-func convertToBase36(hexID string) string {
-	// Remove 0x prefix
-	hexID = strings.TrimPrefix(hexID, "0x")
-
-	// Convert hex to big.Int
-	num := new(big.Int)
-	num, ok := num.SetString(hexID, 16)
-	if !ok {
-		return ""
-	}
-
-	// Convert to base36 (lowercase)
-	return strings.ToLower(num.Text(36))
 }
 
 func init() {
 	rootCmd.AddCommand(quickstartCmd)
 
-	quickstartCmd.Flags().Bool("skip-deploy", false, "Skip deployment step")
 	quickstartCmd.Flags().Bool("skip-build", false, "Skip build step")
 }

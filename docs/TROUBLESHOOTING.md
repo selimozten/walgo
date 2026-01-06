@@ -18,6 +18,7 @@ Solutions to common issues when using Walgo.
 ### "walgo: command not found"
 
 **Symptoms:**
+
 ```bash
 $ walgo version
 bash: walgo: command not found
@@ -26,6 +27,7 @@ bash: walgo: command not found
 **Solutions:**
 
 1. **Verify Installation:**
+
    ```bash
    # Check if walgo is installed
    which walgo
@@ -33,6 +35,7 @@ bash: walgo: command not found
    ```
 
 2. **Add to PATH:**
+
    ```bash
    # For user installation
    export PATH="$PATH:$HOME/.local/bin"
@@ -46,6 +49,7 @@ bash: walgo: command not found
    ```
 
 3. **Reinstall:**
+
    ```bash
    # Using install script
    curl -fsSL https://raw.githubusercontent.com/selimozten/walgo/main/install.sh | bash
@@ -59,6 +63,7 @@ bash: walgo: command not found
 ### "Permission denied" when installing
 
 **Symptoms:**
+
 ```bash
 $ sudo mv walgo /usr/local/bin/
 mv: cannot move 'walgo' to '/usr/local/bin/walgo': Permission denied
@@ -67,11 +72,13 @@ mv: cannot move 'walgo' to '/usr/local/bin/walgo': Permission denied
 **Solutions:**
 
 1. **Use sudo:**
+
    ```bash
    sudo mv walgo /usr/local/bin/
    ```
 
 2. **Install to user directory (no sudo needed):**
+
    ```bash
    mkdir -p ~/.local/bin
    mv walgo ~/.local/bin/
@@ -94,6 +101,7 @@ macOS security warning when running walgo.
 **Solutions:**
 
 1. **Remove quarantine attribute:**
+
    ```bash
    xattr -d com.apple.quarantine /usr/local/bin/walgo
    ```
@@ -125,6 +133,7 @@ Windows SmartScreen blocks walgo.exe.
 ### "Hugo not found" error
 
 **Symptoms:**
+
 ```bash
 $ walgo build
 Error: Hugo not found. Please install Hugo first.
@@ -133,6 +142,7 @@ Error: Hugo not found. Please install Hugo first.
 **Solutions:**
 
 1. **Install Hugo:**
+
    ```bash
    # macOS
    brew install hugo
@@ -146,6 +156,7 @@ Error: Hugo not found. Please install Hugo first.
    ```
 
 2. **Verify installation:**
+
    ```bash
    hugo version
    ```
@@ -161,6 +172,7 @@ Error: Hugo not found. Please install Hugo first.
 ### Build fails with theme errors
 
 **Symptoms:**
+
 ```bash
 $ walgo build
 Error: Unable to locate theme directory: themes/PaperMod
@@ -169,11 +181,13 @@ Error: Unable to locate theme directory: themes/PaperMod
 **Solutions:**
 
 1. **Initialize and update Git submodules:**
+
    ```bash
    git submodule update --init --recursive
    ```
 
 2. **Re-add theme:**
+
    ```bash
    git submodule add --force https://github.com/adityatelange/hugo-PaperMod.git themes/PaperMod
    ```
@@ -189,6 +203,7 @@ Error: Unable to locate theme directory: themes/PaperMod
 ### Build fails with "config file not found"
 
 **Symptoms:**
+
 ```bash
 $ walgo build
 Error: Unable to locate config file
@@ -197,11 +212,13 @@ Error: Unable to locate config file
 **Solutions:**
 
 1. **Check for config file:**
+
    ```bash
    ls -la | grep -E "hugo\.(toml|yaml|json)|config\.(toml|yaml|json)"
    ```
 
 2. **Create config if missing:**
+
    ```bash
    # Create hugo.toml
    echo 'baseURL = "http://localhost:1313/"
@@ -224,11 +241,13 @@ Build succeeds but `public/` is empty or has minimal files.
 **Solutions:**
 
 1. **Check for content:**
+
    ```bash
    ls -la content/
    ```
 
 2. **Create content:**
+
    ```bash
    hugo new posts/hello.md
    # Edit content/posts/hello.md and set draft: false
@@ -246,6 +265,7 @@ Build succeeds but `public/` is empty or has minimal files.
 ### "Insufficient funds" error (on-chain)
 
 **Symptoms:**
+
 ```bash
 $ walgo deploy
 Error: Insufficient funds. Required: 0.15 SUI, Available: 0.05 SUI
@@ -254,16 +274,19 @@ Error: Insufficient funds. Required: 0.15 SUI, Available: 0.05 SUI
 **Solutions:**
 
 1. **Check balance:**
+
    ```bash
    walgo doctor
    ```
 
 2. **Get testnet SUI:**
+
    - Visit [Sui Discord](https://discord.com/channels/916379725201563759/971488439931392130)
    - Request: `!faucet <your-address>`
    - Wait ~30 seconds
 
 3. **Reduce epochs:**
+
    ```bash
    walgo deploy --epochs 1  # Minimum cost
    ```
@@ -277,6 +300,7 @@ Error: Insufficient funds. Required: 0.15 SUI, Available: 0.05 SUI
 ### "site-builder not found" error
 
 **Symptoms:**
+
 ```bash
 $ walgo deploy
 Error: site-builder not found. Please install it first.
@@ -285,11 +309,13 @@ Error: site-builder not found. Please install it first.
 **Solutions:**
 
 1. **Install site-builder:**
+
    ```bash
    walgo setup-deps --site-builder
    ```
 
 2. **Verify installation:**
+
    ```bash
    which site-builder
    site-builder --version
@@ -305,6 +331,7 @@ Error: site-builder not found. Please install it first.
 ### HTTP deployment fails with network error
 
 **Symptoms:**
+
 ```bash
 $ walgo deploy-http
 Error: Failed to connect to publisher
@@ -313,17 +340,20 @@ Error: Failed to connect to publisher
 **Solutions:**
 
 1. **Check internet connection:**
+
    ```bash
    ping 8.8.8.8
    curl -I https://walrus.site
    ```
 
 2. **Run diagnostics:**
+
    ```bash
    walgo doctor
    ```
 
 3. **Try again with verbose output:**
+
    ```bash
    walgo deploy-http --verbose
    ```
@@ -343,21 +373,25 @@ Site deployed successfully but URL shows error or blank page.
 **Solutions:**
 
 1. **Wait a moment:**
+
    - Propagation takes 10-30 seconds
    - Try refreshing after waiting
 
 2. **Check deployment status:**
+
    ```bash
    walgo status <object-id>
    ```
 
 3. **Test index.html:**
+
    ```bash
    ls -la public/index.html
    cat public/index.html | head -20
    ```
 
 4. **Clear browser cache:**
+
    - Hard reload: `Ctrl+F5` (Windows) or `Cmd+Shift+R` (Mac)
 
 5. **Check browser console:**
@@ -369,6 +403,7 @@ Site deployed successfully but URL shows error or blank page.
 ### "Object not found" when updating
 
 **Symptoms:**
+
 ```bash
 $ walgo update 0x7b5a...
 Error: Site object not found
@@ -377,12 +412,14 @@ Error: Site object not found
 **Solutions:**
 
 1. **Verify object ID:**
+
    ```bash
    # Check saved object ID
    cat walgo.yaml | grep projectID
    ```
 
 2. **Check correct network:**
+
    ```bash
    # If deployed on testnet
    walgo update 0x7b5a... --network testnet
@@ -408,19 +445,22 @@ Site works before optimization but JavaScript errors after.
 **Solutions:**
 
 1. **Disable JS obfuscation:**
+
    ```yaml
    # walgo.yaml
    optimizer:
      js:
-       obfuscate: false  # Set to false
+       obfuscate: false # Set to false
    ```
 
 2. **Build without optimization:**
+
    ```bash
    walgo build --no-optimize
    ```
 
 3. **Skip specific files:**
+
    ```yaml
    optimizer:
      skipPatterns:
@@ -429,6 +469,7 @@ Site works before optimization but JavaScript errors after.
    ```
 
 4. **Test optimization separately:**
+
    ```bash
    # Build without optimization
    walgo build --no-optimize
@@ -447,19 +488,22 @@ Site looks different after optimization, styles missing.
 **Solutions:**
 
 1. **Disable unused CSS removal:**
+
    ```yaml
    # walgo.yaml
    optimizer:
      css:
-       removeUnused: false  # Very important!
+       removeUnused: false # Very important!
    ```
 
 2. **Check for dynamic classes:**
+
    - If site uses JavaScript to add classes
    - If using frameworks (React, Vue)
    - Don't use `removeUnused: true`
 
 3. **Compare before/after:**
+
    ```bash
    # Build without optimization
    walgo build --no-optimize
@@ -482,17 +526,19 @@ Site broken after optimization, but unsure which setting caused it.
 **Solutions:**
 
 1. **Disable optimization entirely:**
+
    ```yaml
    optimizer:
      enabled: false
    ```
 
 2. **Enable selectively:**
+
    ```yaml
    optimizer:
      enabled: true
      html:
-       enabled: true  # Start with HTML only
+       enabled: true # Start with HTML only
      css:
        enabled: false
      js:
@@ -500,6 +546,7 @@ Site broken after optimization, but unsure which setting caused it.
    ```
 
 3. **Test each optimizer:**
+
    ```bash
    # Test HTML optimization
    walgo optimize --css=false --js=false
@@ -518,6 +565,7 @@ Site broken after optimization, but unsure which setting caused it.
 ### "Cannot connect to Walrus" error
 
 **Symptoms:**
+
 ```bash
 Error: Failed to connect to Walrus publisher/aggregator
 ```
@@ -525,18 +573,21 @@ Error: Failed to connect to Walrus publisher/aggregator
 **Solutions:**
 
 1. **Check internet connection:**
+
    ```bash
    ping 8.8.8.8
    curl -I https://walrus.site
    ```
 
 2. **Test Walrus endpoints:**
+
    ```bash
    curl -I https://publisher.walrus.site
    curl -I https://aggregator.walrus.site
    ```
 
 3. **Run diagnostics:**
+
    ```bash
    walgo doctor -v
    ```
@@ -550,6 +601,7 @@ Error: Failed to connect to Walrus publisher/aggregator
 ### "RPC error" when deploying
 
 **Symptoms:**
+
 ```bash
 Error: Failed to connect to Sui RPC node
 ```
@@ -557,9 +609,11 @@ Error: Failed to connect to Sui RPC node
 **Solutions:**
 
 1. **Check Sui network status:**
+
    - Visit [Sui status page](https://status.sui.io)
 
 2. **Try different RPC:**
+
    ```bash
    # Configure custom RPC (if supported)
    export SUI_RPC_URL="https://fullnode.testnet.sui.io:443"
@@ -576,6 +630,7 @@ Error: Failed to connect to Sui RPC node
 ### "Invalid configuration file" error
 
 **Symptoms:**
+
 ```bash
 $ walgo build
 Error: Failed to parse walgo.yaml: yaml: line 5: mapping values are not allowed
@@ -584,6 +639,7 @@ Error: Failed to parse walgo.yaml: yaml: line 5: mapping values are not allowed
 **Solutions:**
 
 1. **Validate YAML syntax:**
+
    ```bash
    # Use online validator: https://www.yamllint.com/
    # Or install yamllint
@@ -591,6 +647,7 @@ Error: Failed to parse walgo.yaml: yaml: line 5: mapping values are not allowed
    ```
 
 2. **Check indentation:**
+
    ```yaml
    # BAD - mixed spaces/tabs
    optimizer:
@@ -605,6 +662,7 @@ Error: Failed to parse walgo.yaml: yaml: line 5: mapping values are not allowed
    ```
 
 3. **Check for special characters:**
+
    ```yaml
    # BAD - unquoted special chars
    title: My Site: The Best One
@@ -623,6 +681,7 @@ Changes to `walgo.yaml` don't seem to take effect.
 **Solutions:**
 
 1. **Check file location:**
+
    ```bash
    # Walgo searches in this order:
    # 1. --config flag path
@@ -634,18 +693,20 @@ Changes to `walgo.yaml` don't seem to take effect.
    ```
 
 2. **Specify config explicitly:**
+
    ```bash
    walgo build --config ./walgo.yaml
    ```
 
 3. **Check for typos:**
+
    ```yaml
    # BAD - typo
-   optimiser:  # British spelling
+   optimiser: # British spelling
      enabled: true
 
    # GOOD
-   optimizer:  # American spelling
+   optimizer: # American spelling
      enabled: true
    ```
 
@@ -659,6 +720,7 @@ Environment variables don't override config file.
 **Solutions:**
 
 1. **Check variable format:**
+
    ```bash
    # WRONG
    export WALGO_EPOCHS=5
@@ -669,6 +731,7 @@ Environment variables don't override config file.
    ```
 
 2. **Verify variable is set:**
+
    ```bash
    echo $WALGO_WALRUS_EPOCHS
    env | grep WALGO
@@ -688,6 +751,7 @@ Environment variables don't override config file.
 ### "Wallet not configured" error
 
 **Symptoms:**
+
 ```bash
 $ walgo deploy
 Error: Wallet not configured. Run 'walgo setup' first.
@@ -696,11 +760,13 @@ Error: Wallet not configured. Run 'walgo setup' first.
 **Solutions:**
 
 1. **Run setup:**
+
    ```bash
    walgo setup --network testnet
    ```
 
 2. **Verify wallet:**
+
    ```bash
    walgo doctor
    ```
@@ -720,10 +786,12 @@ Recovery phrase rejected during wallet import.
 **Solutions:**
 
 1. **Check word count:**
+
    - Must be 12 or 24 words
    - Verify no typos
 
 2. **Check word list:**
+
    - Words must be from BIP39 word list
    - Use correct spelling
 
@@ -738,6 +806,7 @@ Recovery phrase rejected during wallet import.
 ### "Transaction failed" error
 
 **Symptoms:**
+
 ```bash
 Error: Transaction failed with error: ...
 ```
@@ -745,16 +814,19 @@ Error: Transaction failed with error: ...
 **Solutions:**
 
 1. **Check balance:**
+
    ```bash
    walgo doctor
    ```
 
 2. **Increase gas budget:**
+
    ```bash
    walgo deploy --gas-budget 200000000
    ```
 
 3. **Wait and retry:**
+
    - Network congestion
    - Try again in a few minutes
 
@@ -770,19 +842,21 @@ Error: Transaction failed with error: ...
 ### "Vault not found" error
 
 **Symptoms:**
+
 ```bash
-$ walgo import-obsidian --vault ~/Documents/Vault
+$ walgo import --vault ~/Documents/Vault
 Error: Vault directory not found
 ```
 
 **Solutions:**
 
 1. **Check path:**
+
    ```bash
    ls -la ~/Documents/Vault
 
    # Use absolute path
-   walgo import-obsidian --vault /Users/yourname/Documents/Vault
+   walgo import --vault /Users/yourname/Documents/Vault
    ```
 
 2. **Check permissions:**
@@ -801,6 +875,7 @@ Imported files still contain `[[wikilinks]]` instead of markdown links.
 **Solutions:**
 
 1. **Enable conversion:**
+
    ```yaml
    # walgo.yaml
    obsidian:
@@ -809,7 +884,7 @@ Imported files still contain `[[wikilinks]]` instead of markdown links.
 
 2. **Or use flag:**
    ```bash
-   walgo import-obsidian --vault ~/Vault --convert-wikilinks
+   walgo import --vault ~/Vault --convert-wikilinks
    ```
 
 ---
@@ -822,13 +897,15 @@ Images/PDFs missing after import.
 **Solutions:**
 
 1. **Check attachment directory:**
+
    ```yaml
    # walgo.yaml
    obsidian:
-     attachmentDir: "static/images"  # Must exist in Hugo
+     attachmentDir: "static/images" # Must exist in Hugo
    ```
 
 2. **Create directory:**
+
    ```bash
    mkdir -p static/images
    ```
@@ -882,7 +959,7 @@ walgo doctor -v
 
 # Check wallet
 sui client active-address
-sui client gas
+sui client balance
 
 # Check network
 ping walrus.site
@@ -894,11 +971,13 @@ curl -I https://walrus.site
 When reporting issues on GitHub, include:
 
 1. **Walgo version:**
+
    ```bash
    walgo version
    ```
 
 2. **System info:**
+
    ```bash
    uname -a  # macOS/Linux
    # or
@@ -906,6 +985,7 @@ When reporting issues on GitHub, include:
    ```
 
 3. **Command and error:**
+
    ```bash
    # Exact command you ran
    walgo deploy --epochs 5
@@ -915,6 +995,7 @@ When reporting issues on GitHub, include:
    ```
 
 4. **Verbose output:**
+
    ```bash
    walgo <command> --verbose
    ```
@@ -935,19 +1016,23 @@ When reporting issues on GitHub, include:
 ### Before Asking for Help
 
 1. **Search existing issues:**
+
    - Someone may have had the same problem
    - Solution might already exist
 
 2. **Read documentation:**
+
    - Check relevant guides
    - Review configuration reference
 
 3. **Run diagnostics:**
+
    ```bash
    walgo doctor -v
    ```
 
 4. **Try verbose mode:**
+
    ```bash
    walgo <command> --verbose
    ```

@@ -126,10 +126,10 @@ echo ""
 
 # Step 5: Deploy to Walrus
 echo "6️⃣ Deploying to Walrus Sites..."
-echo "   This will deploy your site for 5 epochs (adjust as needed)"
+echo "   Using the interactive launch wizard..."
 
-# Check if site-builder is configured
-if ! walgo deploy --epochs 5; then
+# Use the launch wizard for deployment
+if ! walgo launch; then
     echo ""
     echo "❌ Deployment failed. This might be because:"
     echo "   1. site-builder is not installed"
@@ -137,10 +137,10 @@ if ! walgo deploy --epochs 5; then
     echo "   3. You don't have sufficient funds for deployment"
     echo ""
     echo "📝 To fix this:"
-    echo "   1. Install site-builder: curl -L https://storage.googleapis.com/mysten-walrus-binaries/site-builder-mainnet-latest-$(uname -s | tr '[:upper:]' '[:lower:]')-$(uname -m) -o site-builder && chmod +x site-builder && sudo mv site-builder /usr/local/bin/"
-    echo "   2. Set up configuration: walgo setup"
+    echo "   1. Install dependencies: walgo setup-deps"
+    echo "   2. Set up configuration: walgo setup --network testnet"
     echo "   3. Ensure you have SUI tokens for gas fees"
-    echo "   4. Try deployment again: walgo deploy --epochs 5"
+    echo "   4. Try deployment again: walgo launch"
     exit 1
 fi
 
@@ -157,7 +157,6 @@ echo "   4. Update your site when you add new content:"
 echo "      walgo build && walgo update"
 echo ""
 echo "🌐 Your site will be available at:"
-echo "   - Base36 URL (from conversion output)"
-echo "   - https://$DOMAIN_NAME.wal.app (after domain configuration)"
+echo "   - https://$DOMAIN_NAME.wal.app (after SuiNS domain configuration)"
 echo ""
 echo "✅ Blog setup complete! Happy blogging on the decentralized web! 🚀" 

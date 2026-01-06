@@ -9,7 +9,9 @@ permissions:
   contents: write
 
 jobs:
-  release:
+  # Job 1: Build CLI binaries using GoReleaser
+  build-cli:
+    name: Build CLI Binaries
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
@@ -20,7 +22,7 @@ jobs:
       - name: Set up Go
         uses: actions/setup-go@v5
         with:
-          go-version: '1.23'
+          go-version: '1.24'
 
       - name: Run tests
         run: go test -v ./...
@@ -33,3 +35,184 @@ jobs:
           args: release --clean
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  # Job 2: Build Desktop for macOS (AMD64)
+  build-desktop-macos-amd64:
+    name: Build Desktop (macOS AMD64)
+    runs-on: macos-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.24'
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Install Wails
+        run: go install github.com/wailsapp/wails/v2/cmd/wails@latest
+
+      - name: Build Desktop App
+        working-directory: ./desktop
+        run: |
+          wails build -platform darwin/amd64 -clean
+
+      - name: Package App
+        working-directory: ./desktop/build/bin
+        run: |
+          # Get version from tag (remove 'v' prefix)
+          VERSION=${GITHUB_REF#refs/tags/v}
+          
+          # Rename output to Walgo.app for consistency with install.sh
+          if [ -d "desktop.app" ]; then
+            mv "desktop.app" "Walgo.app"
+          fi
+          
+          TAR_NAME="walgo-desktop_${VERSION}_darwin_amd64.tar.gz"
+          
+          echo "Packaging $TAR_NAME..."
+          tar -czf "$TAR_NAME" "Walgo.app"
+
+      - name: Upload Release Asset
+        uses: softprops/action-gh-release@v1
+        if: startsWith(github.ref, 'refs/tags/')
+        with:
+          files: desktop/build/bin/*.tar.gz
+
+  # Job 3: Build Desktop for macOS (ARM64)
+  build-desktop-macos-arm64:
+    name: Build Desktop (macOS ARM64)
+    runs-on: macos-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.24'
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Install Wails
+        run: go install github.com/wailsapp/wails/v2/cmd/wails@latest
+
+      - name: Build Desktop App
+        working-directory: ./desktop
+        run: |
+          wails build -platform darwin/arm64 -clean
+
+      - name: Package App
+        working-directory: ./desktop/build/bin
+        run: |
+          # Get version from tag (remove 'v' prefix)
+          VERSION=${GITHUB_REF#refs/tags/v}
+          
+          # Rename output to Walgo.app for consistency with install.sh
+          if [ -d "desktop.app" ]; then
+            mv "desktop.app" "Walgo.app"
+          fi
+          
+          TAR_NAME="walgo-desktop_${VERSION}_darwin_arm64.tar.gz"
+          
+          echo "Packaging $TAR_NAME..."
+          tar -czf "$TAR_NAME" "Walgo.app"
+
+      - name: Upload Release Asset
+        uses: softprops/action-gh-release@v1
+        if: startsWith(github.ref, 'refs/tags/')
+        with:
+          files: desktop/build/bin/*.tar.gz
+
+  # Job 4: Build Desktop for Windows (AMD64)
+  build-desktop-windows-amd64:
+    name: Build Desktop (Windows AMD64)
+    runs-on: windows-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.24'
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Install Wails
+        run: go install github.com/wailsapp/wails/v2/cmd/wails@latest
+
+      - name: Build Desktop App
+        working-directory: ./desktop
+        run: |
+          wails build -platform windows/amd64 -clean
+
+      - name: Package App
+        working-directory: ./desktop/build/bin
+        shell: powershell
+        run: |
+          # Get version from tag (remove 'v' prefix)
+          $VERSION = "${env:GITHUB_REF}" -replace "refs/tags/v", ""
+          
+          # Create zip package using PowerShell
+          Compress-Archive -Path walgo-desktop.exe -DestinationPath "walgo-desktop_${VERSION}_windows_amd64.zip" -CompressionLevel Optimal
+
+      - name: Upload Release Asset
+        uses: softprops/action-gh-release@v1
+        if: startsWith(github.ref, 'refs/tags/')
+        with:
+          files: desktop/build/bin/*.zip
+
+  # Job 5: Build Desktop for Linux (AMD64)
+  build-desktop-linux-amd64:
+    name: Build Desktop (Linux AMD64)
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.24'
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Install Wails
+        run: go install github.com/wailsapp/wails/v2/cmd/wails@latest
+
+      - name: Build Desktop App
+        working-directory: ./desktop
+        run: |
+          wails build -platform linux/amd64 -clean
+
+      - name: Package App
+        working-directory: ./desktop/build/bin
+        run: |
+          # Get version from tag (remove 'v' prefix)
+          VERSION=${GITHUB_REF#refs/tags/v}
+
+          TAR_NAME="walgo-desktop_${VERSION}_linux_amd64.tar.gz"
+          
+          echo "Packaging $TAR_NAME..."
+          tar -czf "$TAR_NAME" walgo-desktop
+
+      - name: Upload Release Asset
+        uses: softprops/action-gh-release@v1
+        if: startsWith(github.ref, 'refs/tags/')
+        with:
+          files: desktop/build/bin/*.tar.gz

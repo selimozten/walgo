@@ -1,8 +1,8 @@
 package config
 
 import (
+	"github.com/selimozten/walgo/internal/optimizer"
 	"testing"
-	"walgo/internal/optimizer"
 )
 
 func TestWalgoConfigStructure(t *testing.T) {

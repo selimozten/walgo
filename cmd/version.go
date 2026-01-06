@@ -9,12 +9,13 @@ import (
 	"strings"
 	"time"
 
+	"github.com/selimozten/walgo/internal/ui"
 	"github.com/spf13/cobra"
 )
 
 var (
 	// Version will be set during build time via ldflags
-	Version = "0.2.1"
+	Version = "0.3.0"
 	// GitCommit will be set during build time via ldflags
 	GitCommit = "dev"
 	// BuildDate will be set during build time via ldflags
@@ -35,21 +36,21 @@ var versionCmd = &cobra.Command{
 	Use:   "version",
 	Short: "Show version information",
 	Long:  `Display the version number, git commit, and build date of Walgo.`,
-	Run: func(cmd *cobra.Command, args []string) {
+	RunE: func(cmd *cobra.Command, args []string) error {
 		checkUpdates, err := cmd.Flags().GetBool("check-updates")
 		if err != nil {
 			fmt.Fprintf(os.Stderr, "Error reading check-updates flag: %v\n", err)
-			os.Exit(1)
+			return fmt.Errorf("error reading check-updates flag: %w", err)
 		}
 		short, err := cmd.Flags().GetBool("short")
 		if err != nil {
 			fmt.Fprintf(os.Stderr, "Error reading short flag: %v\n", err)
-			os.Exit(1)
+			return fmt.Errorf("error reading short flag: %w", err)
 		}
 
 		if short {
 			fmt.Printf("v%s\n", Version)
-			return
+			return nil
 		}
 
 		fmt.Printf("Walgo v%s\n", Version)
@@ -60,10 +61,13 @@ var versionCmd = &cobra.Command{
 			fmt.Println()
 			checkForUpdates()
 		}
+
+		return nil
 	},
 }
 
 func checkForUpdates() {
+	icons := ui.GetIcons()
 	fmt.Print("Checking for updates... ")
 
 	client := &http.Client{Timeout: 5 * time.Second}
@@ -95,17 +99,17 @@ func checkForUpdates() {
 	currentVersion := strings.TrimPrefix(Version, "v")
 
 	if latestVersion == currentVersion {
-		fmt.Println("✓")
-		fmt.Println("\n✓ You are using the latest version!")
+		fmt.Println(icons.Check)
+		fmt.Printf("\n%s You are using the latest version!\n", icons.Check)
 	} else if latestVersion > currentVersion {
-		fmt.Println("✓")
-		fmt.Printf("\n⚠ New version available: v%s (you have v%s)\n", latestVersion, currentVersion)
+		fmt.Println(icons.Check)
+		fmt.Printf("\n%s New version available: v%s (you have v%s)\n", icons.Warning, latestVersion, currentVersion)
 		fmt.Printf("\nUpdate with:\n")
 		fmt.Printf("  curl -fsSL https://raw.githubusercontent.com/selimozten/walgo/main/install.sh | bash\n")
 		fmt.Printf("\nRelease notes: %s\n", release.HTMLURL)
 	} else {
-		fmt.Println("✓")
-		fmt.Println("\n✓ You are using the latest version (or a development build)")
+		fmt.Println(icons.Check)
+		fmt.Printf("\n%s You are using the latest version (or a development build)\n", icons.Check)
 	}
 }
 

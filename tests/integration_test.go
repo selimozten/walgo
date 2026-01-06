@@ -199,7 +199,6 @@ func TestWalgoCommandsExist(t *testing.T) {
 		"deploy",
 		"update",
 		"status",
-		"convert",
 		"domain",
 		"import",
 	}

@@ -1,0 +1,63 @@
+baseURL = "/"
+title = "{{SITE_NAME}}"
+languageCode = "en-us"
+
+theme = "hugo-book"
+
+canonifyURLs = false
+relativeURLs = false
+removePathAccents = true
+
+enableRobotsTXT = true
+summaryLength = 30
+
+# Docs: keep minimal
+disableKinds = ["taxonomy", "term", "RSS"]
+
+[pagination]
+  pagerSize = 1000
+
+[outputs]
+  home = ["HTML"]
+  section = ["HTML"]
+  page = ["HTML"]
+
+[minify]
+  disableXML = true
+  minifyOutput = true
+
+[markup]
+  [markup.goldmark.renderer]
+    unsafe = false
+  [markup.highlight]
+    noClasses = false
+    lineNos = true
+    guessSyntax = true
+  [markup.tableOfContents]
+    startLevel = 2
+    endLevel = 4
+
+[build]
+  useResourceCacheWhen = "fallback"
+
+[imaging]
+  quality = 82
+  resampleFilter = "Lanczos"
+  anchor = "Smart"
+
+# Hugo Book theme params
+[params]
+  # Color theme: light, dark, or auto
+  BookTheme = "auto"
+  # Favicon path (relative to static/)
+  BookFavicon = "favicon.svg"
+  # Root section for documentation menu
+  BookSection = "docs"
+  # Date format for posts and git info
+  BookDateFormat = "January 2, 2006"
+  # Enable search functionality
+  BookSearch = true
+  # Show table of contents on pages
+  BookToC = true
+  # Disable comments (Disqus)
+  BookComments = false

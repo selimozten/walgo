@@ -384,9 +384,10 @@ Now that you have your first site deployed, explore more features:
 
 ### 1. Learn Advanced Features
 
-- **Obsidian Integration:** Import your knowledge base
+- **Obsidian Integration:** Create a site from your Obsidian vault
   ```bash
-  walgo import-obsidian --vault ~/Documents/MyVault
+  walgo import ~/Documents/MyVault --site-name my-blog
+  cd my-blog
   ```
 
 - **Asset Optimization:** Fine-tune optimization settings

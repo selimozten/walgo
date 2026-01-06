@@ -4,25 +4,37 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 
+	"github.com/selimozten/walgo/internal/sui"
 	"github.com/spf13/viper"
 	"gopkg.in/yaml.v3"
 )
 
-const ( // TODO: make walgo.yaml configurable
+const (
 	DefaultConfigFileName = "walgo.yaml"
 )
 
-// CreateDefaultWalgoConfig creates a default walgo.yaml file in the specified site path.
+// CreateDefaultWalgoConfig creates a default walgo.yaml configuration file in the specified site directory.
 func CreateDefaultWalgoConfig(sitePath string) error {
 	cfg := NewDefaultWalgoConfig()
 	configFilePath := filepath.Join(sitePath, DefaultConfigFileName)
 
-	// Check if file already exists
 	if _, err := os.Stat(configFilePath); err == nil {
 		return fmt.Errorf("configuration file %s already exists", configFilePath)
 	} else if !os.IsNotExist(err) {
 		return fmt.Errorf("error checking for config file %s: %w", configFilePath, err)
+	}
+
+	// Automatically set network from Sui CLI active environment
+	activeEnv, err := sui.GetActiveEnv()
+	if err == nil {
+		// Normalize the environment name (remove any warnings)
+		network := strings.ToLower(strings.TrimSpace(activeEnv))
+		if network == "mainnet" || network == "testnet" {
+			cfg.WalrusConfig.Network = network
+			fmt.Printf("Detected Sui network: %s\n", network)
+		}
 	}
 
 	data, err := yaml.Marshal(&cfg)
@@ -39,17 +51,9 @@ func CreateDefaultWalgoConfig(sitePath string) error {
 	return nil
 }
 
-// LoadConfig loads the Walgo configuration.
-// It relies on Viper being pre-configured (e.g., by initConfig in cmd/root.go)
-// and initConfig having attempted to read the configuration.
+// LoadConfig reads and parses the Walgo configuration from walgo.yaml file.
 func LoadConfig() (*WalgoConfig, error) {
-	// Viper is expected to be initialized by the caller (e.g., cmd.initConfig)
-	// which handles the --config flag and default search paths, and calls viper.ReadInConfig().
-
-	// Check if a configuration file was successfully read and is being used.
 	if viper.ConfigFileUsed() == "" {
-		// This indicates that initConfig did not successfully load/read a config file.
-		// This could be because the file wasn't found, or because cfgFile was specified and couldn't be read (error already printed by initConfig).
 		return nil, fmt.Errorf("walgo.yaml configuration file not found or failed to load. Ensure you are in a Walgo project directory (where walgo.yaml or .walgo.yaml exists in CWD/home), or use the --config flag to specify the path. You can create a default config with 'walgo init'")
 	}
 
@@ -58,7 +62,6 @@ func LoadConfig() (*WalgoConfig, error) {
 		return nil, fmt.Errorf("error unmarshaling configuration from %s: %w. Please check the file format and structure", viper.ConfigFileUsed(), err)
 	}
 
-	// Apply defaults for fields that might be empty in the config file but have defaults
 	if cfg.HugoConfig.PublishDir == "" {
 		cfg.HugoConfig.PublishDir = "public"
 	}
@@ -75,10 +78,45 @@ func LoadConfig() (*WalgoConfig, error) {
 	return &cfg, nil
 }
 
-// SaveConfig saves the given WalgoConfig to walgo.yaml in the specified directory.
-// Note: configDir here implies that SaveConfig needs to know where to save,
-// which might be different from where LoadConfig loaded from if --config was used.
-// For Phase 1, SaveConfig is not actively used by commands.
+// LoadConfigFrom reads and parses the Walgo configuration from a specific directory.
+// Useful when configuration needs to be loaded from a path different from the current working directory.
+func LoadConfigFrom(sitePath string) (*WalgoConfig, error) {
+	configPath := filepath.Join(sitePath, DefaultConfigFileName)
+
+	// Check if config file exists
+	if _, err := os.Stat(configPath); os.IsNotExist(err) {
+		return nil, fmt.Errorf("walgo.yaml not found in %s", sitePath)
+	}
+
+	// Read and parse the config file directly
+	data, err := os.ReadFile(configPath)
+	if err != nil {
+		return nil, fmt.Errorf("failed to read config file %s: %w", configPath, err)
+	}
+
+	var cfg WalgoConfig
+	if err := yaml.Unmarshal(data, &cfg); err != nil {
+		return nil, fmt.Errorf("failed to parse config file %s: %w", configPath, err)
+	}
+
+	// Apply defaults
+	if cfg.HugoConfig.PublishDir == "" {
+		cfg.HugoConfig.PublishDir = "public"
+	}
+	if cfg.HugoConfig.ContentDir == "" {
+		cfg.HugoConfig.ContentDir = "content"
+	}
+	if cfg.HugoConfig.ResourceDir == "" {
+		cfg.HugoConfig.ResourceDir = "resources"
+	}
+	if cfg.WalrusConfig.Entrypoint == "" {
+		cfg.WalrusConfig.Entrypoint = "index.html"
+	}
+
+	return &cfg, nil
+}
+
+// SaveConfig persists the provided WalgoConfig to walgo.yaml in the specified directory.
 func SaveConfig(configDir string, cfg *WalgoConfig) error {
 	configFilePath := filepath.Join(configDir, DefaultConfigFileName)
 

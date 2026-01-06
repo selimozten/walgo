@@ -2,9 +2,9 @@ package sitebuilder
 
 import (
 	"context"
+	"github.com/selimozten/walgo/internal/config"
+	"github.com/selimozten/walgo/internal/deployer"
 	"testing"
-	"walgo/internal/config"
-	"walgo/internal/deployer"
 )
 
 func TestNew(t *testing.T) {

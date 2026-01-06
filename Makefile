@@ -142,3 +142,57 @@ version: ## Show version information
 	@echo "Version: $(VERSION)"
 	@echo "Commit:  $(COMMIT)"
 	@echo "Date:    $(BUILD_DATE)"
+
+# Desktop App targets
+desktop-dev: ## Run desktop app in development mode
+	@echo "Starting desktop app in development mode..."
+	@cd desktop && wails dev
+
+desktop-build: ## Build desktop app for current platform
+	@echo "Building desktop app for current platform..."
+	@cd desktop && wails build
+	@echo "✓ Desktop app built in desktop/build/bin/"
+
+desktop-build-darwin: ## Build desktop app for macOS (both architectures)
+	@echo "Building desktop app for macOS..."
+	@cd desktop && wails build -platform darwin/universal
+	@echo "✓ macOS universal binary built in desktop/build/bin/"
+
+desktop-build-windows: ## Build desktop app for Windows
+	@echo "Building desktop app for Windows..."
+	@cd desktop && wails build -platform windows/amd64
+	@echo "✓ Windows build completed in desktop/build/bin/"
+
+desktop-build-linux: ## Build desktop app for Linux
+	@echo "Building desktop app for Linux..."
+	@cd desktop && wails build -platform linux/amd64
+	@echo "✓ Linux build completed in desktop/build/bin/"
+
+desktop-build-all: ## Build desktop app for all platforms
+	@echo "Building desktop app for all platforms..."
+	@echo ""
+	@echo "=== Building for macOS (Universal) ==="
+	@cd desktop && wails build -platform darwin/universal -clean
+	@echo ""
+	@echo "=== Building for Windows (amd64) ==="
+	@cd desktop && wails build -platform windows/amd64 -clean
+	@echo ""
+	@echo "=== Building for Linux (amd64) ==="
+	@cd desktop && wails build -platform linux/amd64 -clean
+	@echo ""
+	@echo "✓ All desktop builds completed!"
+	@echo ""
+	@echo "Build artifacts:"
+	@ls -lh desktop/build/bin/
+
+desktop-clean: ## Clean desktop build artifacts
+	@echo "Cleaning desktop build artifacts..."
+	@rm -rf desktop/build/bin/
+	@rm -rf desktop/frontend/dist/
+	@rm -rf desktop/frontend/node_modules/.vite/
+	@echo "✓ Desktop build artifacts cleaned"
+
+desktop-install-deps: ## Install desktop frontend dependencies
+	@echo "Installing desktop frontend dependencies..."
+	@cd desktop/frontend && npm install
+	@echo "✓ Frontend dependencies installed"

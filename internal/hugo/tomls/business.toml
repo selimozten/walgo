@@ -1,0 +1,67 @@
+baseURL = "/"
+title = "{{SITE_NAME}}"
+languageCode = "en-us"
+theme = "ananke"
+
+canonifyURLs = false
+relativeURLs = false
+removePathAccents = true
+enableEmoji = true
+
+enableRobotsTXT = true
+summaryLength = 30
+
+# Business default: no blog, no RSS
+disableKinds = ["taxonomy", "term", "RSS"]
+
+[pagination]
+  pagerSize = 1000
+
+[outputs]
+  home = ["HTML"]
+  section = ["HTML"]
+  page = ["HTML"]
+
+[minify]
+  disableXML = true
+  minifyOutput = true
+
+[markup]
+  [markup.goldmark.renderer]
+    unsafe = false
+  [markup.highlight]
+    noClasses = false
+    lineNos = true
+    guessSyntax = true
+
+[build]
+  useResourceCacheWhen = "fallback"
+
+[imaging]
+  quality = 82
+  resampleFilter = "Lanczos"
+  anchor = "Smart"
+
+# Ananke theme params
+[params]
+  description = "Business website"
+  author = "{{SITE_NAME}}"
+  favicon = "/images/favicon.png"
+  site_logo = ""
+  # Post settings
+  recent_posts_number = 3
+  sections_cover_height = "20vh"
+  # Background color
+  background_color_class = "bg-black"
+  featured_image_class = "cover-400"
+  # Social media (optional)
+  facebook = ""
+  twitter = ""
+  instagram = ""
+  youtube = ""
+  github = ""
+  gitlab = ""
+  linkedin = ""
+  # Choose a style
+  # Ananke supports: "blue", "black", "red", "green", "yellow", etc.
+  theme_color = "blue"

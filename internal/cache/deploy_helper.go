@@ -5,6 +5,8 @@ import (
 	"os"
 	"path/filepath"
 	"time"
+
+	"github.com/selimozten/walgo/internal/ui"
 )
 
 // DeployHelper assists with incremental deployments
@@ -184,24 +186,25 @@ type DeploymentPlan struct {
 
 // PrintSummary prints a human-readable deployment plan
 func (p *DeploymentPlan) PrintSummary() {
-	fmt.Println("\n📊 Deployment Plan:")
+	icons := ui.GetIcons()
+	fmt.Printf("\n%s Deployment Plan:\n", icons.Chart)
 	fmt.Printf("  Total files: %d (%.2f MB)\n", p.TotalFiles, float64(p.TotalSize)/(1024*1024))
 
 	if p.IsIncremental {
-		fmt.Println("\n  ✨ Incremental deployment:")
-		fmt.Printf("    📝 Added: %d files\n", len(p.ChangeSet.Added))
-		fmt.Printf("    ♻️  Modified: %d files\n", len(p.ChangeSet.Modified))
-		fmt.Printf("    🗑️  Deleted: %d files\n", len(p.ChangeSet.Deleted))
-		fmt.Printf("    ✅ Unchanged: %d files (%.2f MB)\n",
+		fmt.Printf("\n  %s Incremental deployment:\n", icons.Sparkles)
+		fmt.Printf("    %s Added: %d files\n", icons.Pencil, len(p.ChangeSet.Added))
+		fmt.Printf("    %s Modified: %d files\n", icons.Spinner, len(p.ChangeSet.Modified))
+		fmt.Printf("    %s Deleted: %d files\n", icons.Garbage, len(p.ChangeSet.Deleted))
+		fmt.Printf("    %s Unchanged: %d files (%.2f MB)\n", icons.Success,
 			len(p.ChangeSet.Unchanged),
 			float64(p.TotalSize-p.ChangedSize)/(1024*1024))
 
 		if p.TotalSize > 0 {
 			percentSaved := float64(p.TotalSize-p.ChangedSize) / float64(p.TotalSize) * 100
-			fmt.Printf("\n  💾 Space saved: %.1f%%\n", percentSaved)
+			fmt.Printf("\n  %s Space saved: %.1f%%\n", icons.Database, percentSaved)
 		}
 	} else {
-		fmt.Println("  🆕 First deployment - all files are new")
+		fmt.Printf("  %s First deployment - all files are new\n", icons.Rocket)
 	}
 }
 
@@ -209,8 +212,9 @@ func (p *DeploymentPlan) PrintSummary() {
 func (p *DeploymentPlan) PrintVerboseSummary() {
 	p.PrintSummary()
 
+	icons := ui.GetIcons()
 	if len(p.ChangeSet.Added) > 0 {
-		fmt.Println("\n  📝 Added files:")
+		fmt.Printf("\n  %s Added files:\n", icons.Pencil)
 		for i, file := range p.ChangeSet.Added {
 			if i < 10 { // Limit to first 10
 				fmt.Printf("    + %s\n", file)
@@ -222,10 +226,10 @@ func (p *DeploymentPlan) PrintVerboseSummary() {
 	}
 
 	if len(p.ChangeSet.Modified) > 0 {
-		fmt.Println("\n  ♻️  Modified files:")
+		fmt.Printf("\n  %s Modified files:\n", icons.Spinner)
 		for i, file := range p.ChangeSet.Modified {
 			if i < 10 {
-				fmt.Printf("    • %s\n", file)
+				fmt.Printf("    %s %s\n", icons.Arrow, file)
 			}
 		}
 		if len(p.ChangeSet.Modified) > 10 {
@@ -234,7 +238,7 @@ func (p *DeploymentPlan) PrintVerboseSummary() {
 	}
 
 	if len(p.ChangeSet.Deleted) > 0 {
-		fmt.Println("\n  🗑️  Deleted files:")
+		fmt.Printf("\n  %s Deleted files:\n", icons.Garbage)
 		for i, file := range p.ChangeSet.Deleted {
 			if i < 10 {
 				fmt.Printf("    - %s\n", file)
