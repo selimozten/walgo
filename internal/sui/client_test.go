@@ -652,9 +652,9 @@ func TestAddressesResponseEmpty(t *testing.T) {
 
 func TestBalanceInfo(t *testing.T) {
 	tests := []struct {
-		name     string
-		sui      float64
-		wal      float64
+		name string
+		sui  float64
+		wal  float64
 	}{
 		{"zero balances", 0, 0},
 		{"positive SUI only", 10.5, 0},
@@ -1144,10 +1144,10 @@ func TestNewAddressResponseJSONUnmarshal(t *testing.T) {
 // TestParseAddressFromTextOutput tests the fallback text parsing logic
 func TestParseAddressFromTextOutput(t *testing.T) {
 	tests := []struct {
-		name         string
-		output       string
-		wantAddress  string
-		wantFound    bool
+		name        string
+		output      string
+		wantAddress string
+		wantFound   bool
 	}{
 		{
 			name:        "address on own line",
@@ -1279,9 +1279,9 @@ func hasPrefix(s, prefix string) bool {
 // TestExtractJSONComplexCases tests more complex JSON extraction scenarios
 func TestExtractJSONComplexCases(t *testing.T) {
 	tests := []struct {
-		name     string
-		input    string
-		valid    bool // Whether the extracted JSON is valid
+		name  string
+		input string
+		valid bool // Whether the extracted JSON is valid
 	}{
 		{
 			name:  "real-world balance response",
@@ -1331,20 +1331,20 @@ func TestBalanceInfoEdgeCases(t *testing.T) {
 		expectedWAL float64
 	}{
 		{
-			name: "fractional balance",
-			input: `[[[{"symbol": "SUI", "decimals": 9}, [{"balance": "500000000"}]]], true]`,
+			name:        "fractional balance",
+			input:       `[[[{"symbol": "SUI", "decimals": 9}, [{"balance": "500000000"}]]], true]`,
 			expectedSUI: 0.5,
 			expectedWAL: 0.0,
 		},
 		{
-			name: "very small balance",
-			input: `[[[{"symbol": "SUI", "decimals": 9}, [{"balance": "1"}]]], true]`,
+			name:        "very small balance",
+			input:       `[[[{"symbol": "SUI", "decimals": 9}, [{"balance": "1"}]]], true]`,
 			expectedSUI: 0.000000001,
 			expectedWAL: 0.0,
 		},
 		{
-			name: "multiple balances summed",
-			input: `[[[{"symbol": "SUI", "decimals": 9}, [{"balance": "100000000"},{"balance": "200000000"},{"balance": "300000000"}]]], true]`,
+			name:        "multiple balances summed",
+			input:       `[[[{"symbol": "SUI", "decimals": 9}, [{"balance": "100000000"},{"balance": "200000000"},{"balance": "300000000"}]]], true]`,
 			expectedSUI: 0.6,
 			expectedWAL: 0.0,
 		},

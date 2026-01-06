@@ -228,7 +228,10 @@ func parseBalanceJSON(jsonOutput string) (*BalanceInfo, error) {
 
 			balanceStr, _ := coinMap["balance"].(string)
 			var balance float64
-			fmt.Sscanf(balanceStr, "%f", &balance)
+			if _, err := fmt.Sscanf(balanceStr, "%f", &balance); err != nil {
+				// Skip this balance if parsing fails
+				continue
+			}
 			totalBalance += balance
 		}
 

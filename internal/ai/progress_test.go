@@ -87,7 +87,9 @@ func TestConsoleProgressHandler(t *testing.T) {
 	w.Close()
 	os.Stdout = oldStdout
 	var buf bytes.Buffer
-	io.Copy(&buf, r)
+	if _, err := io.Copy(&buf, r); err != nil {
+		t.Errorf("Failed to copy output: %v", err)
+	}
 	output := buf.String()
 
 	// Verify some output was generated
@@ -133,7 +135,9 @@ func TestConsoleProgressHandler_NonVerbose(t *testing.T) {
 	w.Close()
 	os.Stdout = oldStdout
 	var buf bytes.Buffer
-	io.Copy(&buf, r)
+	if _, err := io.Copy(&buf, r); err != nil {
+		t.Errorf("Failed to copy output: %v", err)
+	}
 	output := buf.String()
 
 	// Should only have page done output
@@ -166,7 +170,9 @@ func TestJSONProgressHandler(t *testing.T) {
 	w.Close()
 	os.Stdout = oldStdout
 	var buf bytes.Buffer
-	io.Copy(&buf, r)
+	if _, err := io.Copy(&buf, r); err != nil {
+		t.Errorf("Failed to copy output: %v", err)
+	}
 	output := buf.String()
 
 	// Verify it's valid JSON

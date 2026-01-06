@@ -116,11 +116,11 @@ func CalculateStorageDuration(epochs int, network string) string {
 
 // CostEstimate represents a detailed cost estimate for operations
 type CostEstimate struct {
-	WAL        float64 // WAL tokens for storage
-	SUI        float64 // SUI tokens for transaction gas
-	WALRange   string  // WAL cost range (e.g., "0.01 - 0.02")
-	SUICostRange string // SUI cost range
-	Summary    string  // Human-readable summary
+	WAL          float64 // WAL tokens for storage
+	SUI          float64 // SUI tokens for transaction gas
+	WALRange     string  // WAL cost range (e.g., "0.01 - 0.02")
+	SUICostRange string  // SUI cost range
+	Summary      string  // Human-readable summary
 }
 
 // EstimateGasFee provides a professional estimate of gas fees for deployment
@@ -184,9 +184,9 @@ func EstimateGasFeeDetailed(network string, siteSize int64, epochs int, fileCoun
 	}
 
 	return &CostEstimate{
-		WAL:         breakdown.TotalWAL,
-		SUI:         breakdown.GasCostSUI,
-		WALRange:    formatSmallRange(breakdown.MinTotalWAL, breakdown.MaxTotalWAL, "WAL"),
+		WAL:          breakdown.TotalWAL,
+		SUI:          breakdown.GasCostSUI,
+		WALRange:     formatSmallRange(breakdown.MinTotalWAL, breakdown.MaxTotalWAL, "WAL"),
 		SUICostRange: formatSmallRange(breakdown.MinTotalSUI, breakdown.MaxTotalSUI, "SUI"),
 		Summary: fmt.Sprintf("~%s WAL + ~%.4f SUI for %d files (%d epochs)",
 			formatSmallValue(breakdown.TotalWAL), breakdown.GasCostSUI, breakdown.FileCount, epochs),

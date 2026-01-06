@@ -54,6 +54,8 @@ func TestPipeline_PlanOnly_Success(t *testing.T) {
 			{ID: "contact", Path: "content/contact.md", PageType: "page"},
 			{ID: "post1", Path: "content/posts/welcome/index.md", PageType: "post"},
 			{ID: "post2", Path: "content/posts/start/index.md", PageType: "post"},
+			{ID: "post3", Path: "content/posts/another/index.md", PageType: "post"},
+			{ID: "post4", Path: "content/posts/last/index.md", PageType: "post"},
 		},
 	}
 
@@ -75,7 +77,9 @@ func TestPipeline_PlanOnly_Success(t *testing.T) {
 			},
 		}
 		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(resp)
+		if err := json.NewEncoder(w).Encode(resp); err != nil {
+			t.Errorf("Failed to encode response: %v", err)
+		}
 	}))
 	defer server.Close()
 
@@ -102,8 +106,8 @@ func TestPipeline_PlanOnly_Success(t *testing.T) {
 	if plan == nil {
 		t.Fatal("expected plan to be returned")
 	}
-	if len(plan.Pages) != 5 {
-		t.Errorf("expected 5 pages, got %d", len(plan.Pages))
+	if len(plan.Pages) != 7 {
+		t.Errorf("expected 7 pages, got %d", len(plan.Pages))
 	}
 
 	// Verify plan was saved
@@ -122,6 +126,8 @@ func TestPipeline_Run_Success(t *testing.T) {
 			{ID: "contact", Path: "content/contact.md", PageType: "page"},
 			{ID: "post1", Path: "content/posts/welcome/index.md", PageType: "post"},
 			{ID: "post2", Path: "content/posts/start/index.md", PageType: "post"},
+			{ID: "post3", Path: "content/posts/another/index.md", PageType: "post"},
+			{ID: "post4", Path: "content/posts/last/index.md", PageType: "post"},
 		},
 	}
 
@@ -168,7 +174,9 @@ func TestPipeline_Run_Success(t *testing.T) {
 			},
 		}
 		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(resp)
+		if err := json.NewEncoder(w).Encode(resp); err != nil {
+			t.Errorf("Failed to encode response: %v", err)
+		}
 	}))
 	defer server.Close()
 
@@ -202,12 +210,12 @@ func TestPipeline_Run_Success(t *testing.T) {
 	if result.Plan.Status != PlanStatusCompleted {
 		t.Errorf("expected completed status, got %s", result.Plan.Status)
 	}
-	if len(result.Pages) != 5 {
-		t.Errorf("expected 5 page results, got %d", len(result.Pages))
+	if len(result.Pages) != 7 {
+		t.Errorf("expected 7 page results, got %d", len(result.Pages))
 	}
-	// 1 planning call + 5 generation calls
-	if callCount != 6 {
-		t.Errorf("expected 6 API calls, got %d", callCount)
+	// 1 planning call + 7 generation calls
+	if callCount != 8 {
+		t.Errorf("expected 8 API calls, got %d", callCount)
 	}
 }
 
@@ -229,7 +237,9 @@ func TestPipeline_GenerateFromPlan(t *testing.T) {
 			},
 		}
 		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(resp)
+		if err := json.NewEncoder(w).Encode(resp); err != nil {
+			t.Errorf("Failed to encode response: %v", err)
+		}
 	}))
 	defer server.Close()
 
@@ -438,7 +448,9 @@ func TestPipeline_Resume(t *testing.T) {
 			},
 		}
 		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(resp)
+		if err := json.NewEncoder(w).Encode(resp); err != nil {
+			t.Errorf("Failed to encode response: %v", err)
+		}
 	}))
 	defer server.Close()
 
@@ -465,7 +477,9 @@ func TestPipeline_Resume(t *testing.T) {
 		},
 		Stats: PlanStats{TotalPages: 2, CompletedPages: 1},
 	}
-	pipeline.SavePlan(plan)
+	if err := pipeline.SavePlan(plan); err != nil {
+		t.Fatalf("Failed to save plan: %v", err)
+	}
 
 	ctx := context.Background()
 	result, err := pipeline.Resume(ctx)
@@ -514,7 +528,9 @@ func TestPipeline_Resume_AlreadyCompleted(t *testing.T) {
 		Pages:       []PageSpec{},
 		Stats:       PlanStats{},
 	}
-	pipeline.SavePlan(plan)
+	if err := pipeline.SavePlan(plan); err != nil {
+		t.Fatalf("Failed to save plan: %v", err)
+	}
 
 	ctx := context.Background()
 	_, err := pipeline.Resume(ctx)
@@ -545,7 +561,9 @@ func TestPipeline_Run_ResumesExistingPlan(t *testing.T) {
 			},
 		}
 		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(resp)
+		if err := json.NewEncoder(w).Encode(resp); err != nil {
+			t.Errorf("Failed to encode response: %v", err)
+		}
 	}))
 	defer server.Close()
 
@@ -572,7 +590,9 @@ func TestPipeline_Run_ResumesExistingPlan(t *testing.T) {
 		},
 		Stats: PlanStats{TotalPages: 2, CompletedPages: 1},
 	}
-	pipeline.SavePlan(existingPlan)
+	if err := pipeline.SavePlan(existingPlan); err != nil {
+		t.Fatalf("Failed to save plan: %v", err)
+	}
 
 	input := &PlannerInput{
 		SiteName:    "My Blog",
@@ -653,6 +673,8 @@ func TestPipeline_ProgressEmission(t *testing.T) {
 			{ID: "contact", Path: "content/contact.md", PageType: "page"},
 			{ID: "post1", Path: "content/posts/welcome/index.md", PageType: "post"},
 			{ID: "post2", Path: "content/posts/start/index.md", PageType: "post"},
+			{ID: "post3", Path: "content/posts/another/index.md", PageType: "post"},
+			{ID: "post4", Path: "content/posts/last/index.md", PageType: "post"},
 		},
 	}
 
@@ -674,7 +696,9 @@ func TestPipeline_ProgressEmission(t *testing.T) {
 			},
 		}
 		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(resp)
+		if err := json.NewEncoder(w).Encode(resp); err != nil {
+			t.Errorf("Failed to encode response: %v", err)
+		}
 	}))
 	defer server.Close()
 
@@ -737,6 +761,8 @@ func TestPipeline_Run_PartialStatus(t *testing.T) {
 					{ID: "contact", Path: "content/contact.md", PageType: "page"},
 					{ID: "post1", Path: "content/posts/welcome/index.md", PageType: "post"},
 					{ID: "post2", Path: "content/posts/start/index.md", PageType: "post"},
+					{ID: "post3", Path: "content/posts/another/index.md", PageType: "post"},
+					{ID: "post4", Path: "content/posts/last/index.md", PageType: "post"},
 				},
 			}
 			respJSON, _ := json.Marshal(planResponse)
@@ -783,7 +809,9 @@ func TestPipeline_Run_PartialStatus(t *testing.T) {
 			},
 		}
 		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(resp)
+		if err := json.NewEncoder(w).Encode(resp); err != nil {
+			t.Errorf("Failed to encode response: %v", err)
+		}
 	}))
 	defer server.Close()
 
@@ -804,9 +832,16 @@ func TestPipeline_Run_PartialStatus(t *testing.T) {
 	}
 
 	ctx := context.Background()
-	result, _ := pipeline.Run(ctx, input)
+	result, err := pipeline.Run(ctx, input)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
 
-	// Should be partial because one page failed
+	// With ContinueOnError=true, should have result even with partial status
+	// May or may not have error depending on implementation
+	if result.Plan == nil {
+		t.Fatal("expected result.Plan to not be nil")
+	}
 	if result.Plan.Status != PlanStatusPartial {
 		t.Errorf("expected partial status, got %s", result.Plan.Status)
 	}
@@ -865,6 +900,8 @@ func TestPipeline_Timestamps(t *testing.T) {
 			{ID: "contact", Path: "content/contact.md", PageType: "page"},
 			{ID: "post1", Path: "content/posts/welcome/index.md", PageType: "post"},
 			{ID: "post2", Path: "content/posts/start/index.md", PageType: "post"},
+			{ID: "post3", Path: "content/posts/another/index.md", PageType: "post"},
+			{ID: "post4", Path: "content/posts/last/index.md", PageType: "post"},
 		},
 	}
 
@@ -886,7 +923,9 @@ func TestPipeline_Timestamps(t *testing.T) {
 			},
 		}
 		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(resp)
+		if err := json.NewEncoder(w).Encode(resp); err != nil {
+			t.Errorf("Failed to encode response: %v", err)
+		}
 	}))
 	defer server.Close()
 

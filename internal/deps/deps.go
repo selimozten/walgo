@@ -309,7 +309,7 @@ func InstallTool(tool, network string) error {
 		// Retry default set
 		retryCmd := exec.Command(suiupPath, "default", "set", fmt.Sprintf("%s@%s", tool, version))
 		retryCmd.Env = envVars
-		retryCmd.CombinedOutput() // Ignore error
+		_, _ = retryCmd.CombinedOutput() // Ignore error
 
 		// Check again
 		if _, err := os.Stat(toolPath); os.IsNotExist(err) {

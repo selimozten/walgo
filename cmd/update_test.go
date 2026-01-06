@@ -98,7 +98,7 @@ func TestUpdateCommandFlags(t *testing.T) {
 		if updateCommand.Args(updateCommand, []string{"0x123"}) != nil {
 			t.Error("Should accept one argument")
 		}
-		if updateCommand.Args(updateCommand, []string{"arg1", "arg2"}) == nil {
+		if err := updateCommand.Args(updateCommand, []string{"arg1", "arg2"}); err == nil {
 			t.Error("Should reject multiple arguments")
 		}
 	})

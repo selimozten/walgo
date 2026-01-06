@@ -196,7 +196,9 @@ Example:
 		if err != nil {
 			fmt.Fprintf(os.Stderr, "%s Warning: Failed to generate routes: %v\n", icons.Warning, err)
 		} else {
-			compress.MergeRoutesIntoWSResources(filepath.Join(targetDir, "ws-resources.json"), routes)
+			if err := compress.MergeRoutesIntoWSResources(filepath.Join(targetDir, "ws-resources.json"), routes); err != nil {
+				fmt.Fprintf(os.Stderr, "%s Warning: Failed to merge routes: %v\n", icons.Warning, err)
+			}
 		}
 
 		fmt.Printf("\n%s Compression complete!\n", icons.Success)

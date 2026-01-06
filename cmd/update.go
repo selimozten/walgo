@@ -211,12 +211,15 @@ Assumes the site has been built using 'walgo build'.`,
 					existingProj, err := pm.GetProjectBySitePath(sitePath)
 					if err == nil && existingProj != nil {
 						var siteSize int64
-						filepath.Walk(deployDir, func(path string, info os.FileInfo, err error) error {
+						if err := filepath.Walk(deployDir, func(path string, info os.FileInfo, err error) error {
 							if err == nil && !info.IsDir() {
 								siteSize += info.Size()
 							}
 							return nil
-						})
+						}); err != nil {
+							// Log warning but continue
+							fmt.Fprintf(os.Stderr, "%s Warning: Failed to calculate site size: %v\n", icons.Warning, err)
+						}
 
 						existingProj.ObjectID = objectID
 						existingProj.Epochs = epochs

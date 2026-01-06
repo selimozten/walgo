@@ -284,14 +284,11 @@ func TestDeployCommandDescription(t *testing.T) {
 	t.Run("Command has example", func(t *testing.T) {
 		// Check that the long description contains an example
 		if deployCommand.Long != "" {
-			t.Logf("Deploy description: %s", deployCommand.Long[:min(100, len(deployCommand.Long))])
+			maxLen := 100
+			if len(deployCommand.Long) < maxLen {
+				maxLen = len(deployCommand.Long)
+			}
+			t.Logf("Deploy description: %s", deployCommand.Long[:maxLen])
 		}
 	})
-}
-
-func min(a, b int) int {
-	if a < b {
-		return a
-	}
-	return b
 }

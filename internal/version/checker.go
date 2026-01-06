@@ -344,7 +344,10 @@ func CheckAndUpdateVersions(quiet bool) error {
 
 		// Read user response
 		var response string
-		fmt.Scanln(&response)
+		if _, err := fmt.Scanln(&response); err != nil {
+			// Default to "yes" if there's an error reading input
+			response = ""
+		}
 		response = strings.TrimSpace(strings.ToLower(response))
 
 		if response == "" || response == "y" || response == "yes" {

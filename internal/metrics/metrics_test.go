@@ -527,12 +527,22 @@ func TestGetStats(t *testing.T) {
 
 		// Record various events
 		startTime := time.Now()
-		c.RecordCommand("build", startTime, true, nil)
+		if err := c.RecordCommand("build", startTime, true, nil); err != nil {
+			t.Fatalf("Failed to record build command: %v", err)
+		}
 		time.Sleep(10 * time.Millisecond)
-		c.RecordCommand("build", startTime, true, nil)
-		c.RecordCommand("build", startTime, false, nil)
-		c.RecordCommand("deploy", startTime, true, nil)
-		c.RecordCommand("deploy", startTime, true, nil)
+		if err := c.RecordCommand("build", startTime, true, nil); err != nil {
+			t.Fatalf("Failed to record build command: %v", err)
+		}
+		if err := c.RecordCommand("build", startTime, false, nil); err != nil {
+			t.Fatalf("Failed to record build command: %v", err)
+		}
+		if err := c.RecordCommand("deploy", startTime, true, nil); err != nil {
+			t.Fatalf("Failed to record deploy command: %v", err)
+		}
+		if err := c.RecordCommand("deploy", startTime, true, nil); err != nil {
+			t.Fatalf("Failed to record deploy command: %v", err)
+		}
 
 		stats, err := GetStats(sinkPath)
 		if err != nil {

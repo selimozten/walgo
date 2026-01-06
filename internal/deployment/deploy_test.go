@@ -203,10 +203,10 @@ func createTestSiteDir(t *testing.T) (string, func()) {
 
 	// Create test files
 	files := map[string]string{
-		"index.html":           "<html><body>Hello World</body></html>",
-		"style.css":            "body { color: black; }",
-		"script.js":            "console.log('hello');",
-		"images/logo.png":      "fake png data",
+		"index.html":              "<html><body>Hello World</body></html>",
+		"style.css":               "body { color: black; }",
+		"script.js":               "console.log('hello');",
+		"images/logo.png":         "fake png data",
 		"assets/fonts/test.woff2": "fake font data",
 	}
 
@@ -475,11 +475,11 @@ func TestForceNewDeployment(t *testing.T) {
 // TestMetadataOptions tests metadata preparation for ws-resources.json
 func TestMetadataOptions(t *testing.T) {
 	tests := []struct {
-		name        string
-		opts        DeploymentOptions
+		name         string
+		opts         DeploymentOptions
 		wantSiteName string
-		wantDesc    string
-		wantImage   string
+		wantDesc     string
+		wantImage    string
 	}{
 		{
 			name: "all metadata provided",
@@ -490,8 +490,8 @@ func TestMetadataOptions(t *testing.T) {
 				Category:    "blog",
 			},
 			wantSiteName: "my-site",
-			wantDesc:    "My awesome site",
-			wantImage:   "https://example.com/logo.png",
+			wantDesc:     "My awesome site",
+			wantImage:    "https://example.com/logo.png",
 		},
 		{
 			name: "only project name",
@@ -499,15 +499,15 @@ func TestMetadataOptions(t *testing.T) {
 				ProjectName: "my-site",
 			},
 			wantSiteName: "my-site",
-			wantDesc:    "",
-			wantImage:   "",
+			wantDesc:     "",
+			wantImage:    "",
 		},
 		{
-			name: "empty metadata",
-			opts: DeploymentOptions{},
+			name:         "empty metadata",
+			opts:         DeploymentOptions{},
 			wantSiteName: "",
-			wantDesc:    "",
-			wantImage:   "",
+			wantDesc:     "",
+			wantImage:    "",
 		},
 	}
 
@@ -886,10 +886,10 @@ func TestContextTimeout(t *testing.T) {
 // TestProjectNameFallback tests project name fallback behavior
 func TestProjectNameFallback(t *testing.T) {
 	tests := []struct {
-		name           string
-		projectName    string
-		sitePath       string
-		expectedName   string
+		name         string
+		projectName  string
+		sitePath     string
+		expectedName string
 	}{
 		{
 			name:         "explicit project name",
@@ -2249,9 +2249,9 @@ func TestDeployerResultWithFileToBlobID(t *testing.T) {
 		Success:  true,
 		ObjectID: "0xresult-object-id",
 		FileToBlobID: map[string]string{
-			"index.html":     "blob-1",
-			"css/style.css":  "blob-2",
-			"js/app.js":      "blob-3",
+			"index.html":      "blob-1",
+			"css/style.css":   "blob-2",
+			"js/app.js":       "blob-3",
 			"images/logo.png": "blob-4",
 		},
 	}
@@ -2360,13 +2360,13 @@ func TestDeploymentFlowWithMockData(t *testing.T) {
 // TestDeploymentUpdateVsNew tests the logic for determining update vs new deployment
 func TestDeploymentUpdateVsNew(t *testing.T) {
 	tests := []struct {
-		name             string
-		walgoCfgID       string
-		wsResourcesID    string
-		databaseID       string
-		forceNew         bool
-		expectUpdate     bool
-		expectObjectID   string
+		name           string
+		walgoCfgID     string
+		wsResourcesID  string
+		databaseID     string
+		forceNew       bool
+		expectUpdate   bool
+		expectObjectID string
 	}{
 		{
 			name:           "new deployment - no existing IDs",

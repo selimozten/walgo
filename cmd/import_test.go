@@ -77,7 +77,6 @@ func TestImportCommandFlags(t *testing.T) {
 		defValue  string
 	}{
 		{"output-dir flag", "output-dir", "o", ""},
-		{"overwrite flag", "overwrite", "f", "false"},
 		{"convert-wikilinks flag", "convert-wikilinks", "", "true"},
 		{"attachment-dir flag", "attachment-dir", "", ""},
 		{"frontmatter-format flag", "frontmatter-format", "", ""},
@@ -105,10 +104,10 @@ func TestImportCommandFlags(t *testing.T) {
 		if importCommand.Args(importCommand, []string{"vault"}) != nil {
 			t.Error("Should accept one argument")
 		}
-		if importCommand.Args(importCommand, []string{}) == nil {
+		if err := importCommand.Args(importCommand, []string{}); err == nil {
 			t.Error("Should reject no arguments")
 		}
-		if importCommand.Args(importCommand, []string{"vault1", "vault2"}) == nil {
+		if err := importCommand.Args(importCommand, []string{"vault1", "vault2"}); err == nil {
 			t.Error("Should reject multiple arguments")
 		}
 	})
@@ -227,94 +226,6 @@ hugo:
 
 		// Execute import with dry-run
 		output, err := executeCommand(rootCmd, "import", vaultDir, "--dry-run")
-		if err != nil {
-			t.Logf("Import returned error: %v", err)
-		}
-		_ = output
-	})
-
-	t.Run("Import to non-empty directory without overwrite", func(t *testing.T) {
-		tempDir := t.TempDir()
-		originalWd, _ := os.Getwd()
-		if err := os.Chdir(tempDir); err != nil {
-			t.Fatal(err)
-		}
-		defer func() { _ = os.Chdir(originalWd) }()
-
-		// Create walgo.yaml
-		configContent := `
-hugo:
-  publishDir: public
-  contentDir: content
-`
-		if err := os.WriteFile("walgo.yaml", []byte(configContent), 0644); err != nil {
-			t.Fatal(err)
-		}
-
-		// Create vault directory
-		vaultDir := filepath.Join(tempDir, "vault")
-		if err := os.MkdirAll(vaultDir, 0755); err != nil {
-			t.Fatal(err)
-		}
-		if err := os.WriteFile(filepath.Join(vaultDir, "note.md"), []byte("# Note"), 0644); err != nil {
-			t.Fatal(err)
-		}
-
-		// Create content directory with existing file
-		contentDir := filepath.Join(tempDir, "content")
-		if err := os.MkdirAll(contentDir, 0755); err != nil {
-			t.Fatal(err)
-		}
-		if err := os.WriteFile(filepath.Join(contentDir, "existing.md"), []byte("# Existing"), 0644); err != nil {
-			t.Fatal(err)
-		}
-
-		// Execute import without overwrite
-		output, err := executeCommand(rootCmd, "import", vaultDir)
-		if err == nil {
-			t.Log("Expected error when content directory is not empty")
-		}
-		_ = output
-	})
-
-	t.Run("Import with overwrite flag", func(t *testing.T) {
-		tempDir := t.TempDir()
-		originalWd, _ := os.Getwd()
-		if err := os.Chdir(tempDir); err != nil {
-			t.Fatal(err)
-		}
-		defer func() { _ = os.Chdir(originalWd) }()
-
-		// Create walgo.yaml
-		configContent := `
-hugo:
-  publishDir: public
-  contentDir: content
-`
-		if err := os.WriteFile("walgo.yaml", []byte(configContent), 0644); err != nil {
-			t.Fatal(err)
-		}
-
-		// Create vault directory
-		vaultDir := filepath.Join(tempDir, "vault")
-		if err := os.MkdirAll(vaultDir, 0755); err != nil {
-			t.Fatal(err)
-		}
-		if err := os.WriteFile(filepath.Join(vaultDir, "note.md"), []byte("# Note"), 0644); err != nil {
-			t.Fatal(err)
-		}
-
-		// Create content directory with existing file
-		contentDir := filepath.Join(tempDir, "content")
-		if err := os.MkdirAll(contentDir, 0755); err != nil {
-			t.Fatal(err)
-		}
-		if err := os.WriteFile(filepath.Join(contentDir, "existing.md"), []byte("# Existing"), 0644); err != nil {
-			t.Fatal(err)
-		}
-
-		// Execute import with overwrite
-		output, err := executeCommand(rootCmd, "import", vaultDir, "--overwrite")
 		if err != nil {
 			t.Logf("Import returned error: %v", err)
 		}

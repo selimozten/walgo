@@ -19,8 +19,8 @@ type Engine struct {
 	htmlOptimizer *HTMLOptimizer
 	cssOptimizer  *CSSOptimizer
 	jsOptimizer   *JSOptimizer
-	mu            sync.RWMutex       // Protects htmlContent
-	htmlContent   map[string][]byte  // Store HTML content for CSS unused rule detection
+	mu            sync.RWMutex      // Protects htmlContent
+	htmlContent   map[string][]byte // Store HTML content for CSS unused rule detection
 }
 
 // NewEngine initializes and returns a new optimization engine with provided configuration.

@@ -24,7 +24,9 @@ func TestDeployBlobs_FailsWhenAllUploadsFail(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		// Always return 500 Internal Server Error
 		w.WriteHeader(http.StatusInternalServerError)
-		_, _ = w.Write([]byte("server error"))
+		if _, err := w.Write([]byte("server error")); err != nil {
+			t.Errorf("Failed to write response: %v", err)
+		}
 	}))
 	defer srv.Close()
 
@@ -75,17 +77,23 @@ func TestDeployBlobs_FailsWhenSomeUploadsFail(t *testing.T) {
 
 		// Succeed others
 		w.Header().Set("Content-Type", "application/json")
-		_ = json.NewEncoder(w).Encode(map[string]any{
+		if err := json.NewEncoder(w).Encode(map[string]any{
 			"newlyCreated": map[string]any{
 				"blobObject": map[string]any{"blobId": "blob-123"},
 			},
-		})
+		}); err != nil {
+			t.Errorf("Failed to encode response: %v", err)
+		}
 	}))
 	defer srv.Close()
 
 	dir := t.TempDir()
-	os.WriteFile(filepath.Join(dir, "success.html"), []byte("works"), 0644)
-	os.WriteFile(filepath.Join(dir, "fail-me.html"), []byte("fail-me.html"), 0644)
+	if err := os.WriteFile(filepath.Join(dir, "success.html"), []byte("works"), 0644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, "fail-me.html"), []byte("fail-me.html"), 0644); err != nil {
+		t.Fatal(err)
+	}
 
 	a := New()
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
@@ -256,8 +264,13 @@ func TestDeployBlobs_ConcurrencyAndRetry(t *testing.T) {
 			}
 		}
 
-		body, _ := io.ReadAll(r.Body)
-		_ = r.Body.Close()
+		body, err := io.ReadAll(r.Body)
+		if err != nil {
+			t.Errorf("Failed to read request body: %v", err)
+		}
+		if err := r.Body.Close(); err != nil {
+			t.Errorf("Failed to close request body: %v", err)
+		}
 		sig := string(body)
 		v, _ := attempts.LoadOrStore(sig, new(int32))
 		ctr := v.(*int32)
@@ -266,18 +279,23 @@ func TestDeployBlobs_ConcurrencyAndRetry(t *testing.T) {
 		// First attempt -> 429, second -> 200
 		if n == 1 {
 			w.WriteHeader(http.StatusTooManyRequests)
-			_, _ = w.Write([]byte("rate limited"))
+			if _, err := w.Write([]byte("rate limited")); err != nil {
+				t.Errorf("Failed to write response: %v", err)
+			}
 			return
 		}
 
 		w.Header().Set("Content-Type", "application/json")
-		_ = json.NewEncoder(w).Encode(map[string]any{
+		resp := map[string]any{
 			"newlyCreated": map[string]any{
 				"blobObject": map[string]any{
 					"blobId": "blob-" + sig,
 				},
 			},
-		})
+		}
+		if err := json.NewEncoder(w).Encode(resp); err != nil {
+			t.Errorf("Failed to encode response: %v", err)
+		}
 	}))
 	defer srv.Close()
 
@@ -341,7 +359,9 @@ func TestDeployBlobs_Cancel(t *testing.T) {
 		atomic.AddInt32(&received, 1)
 		<-blocker // block to simulate slow server; cancellation should stop client
 		w.WriteHeader(200)
-		_, _ = w.Write([]byte(`{"alreadyCertified":{"blobId":"x"}}`))
+		if _, err := w.Write([]byte(`{"alreadyCertified":{"blobId":"x"}}`)); err != nil {
+			t.Errorf("Failed to write response: %v", err)
+		}
 	}))
 	defer srv.Close()
 

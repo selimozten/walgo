@@ -89,7 +89,7 @@ func GetDefaultContentType(sitePath string) string {
 // countMarkdownFiles counts .md files recursively in a directory
 func countMarkdownFiles(dir string) int {
 	count := 0
-	filepath.Walk(dir, func(path string, info os.FileInfo, err error) error {
+	if err := filepath.Walk(dir, func(path string, info os.FileInfo, err error) error {
 		if err != nil {
 			return nil
 		}
@@ -97,7 +97,10 @@ func countMarkdownFiles(dir string) int {
 			count++
 		}
 		return nil
-	})
+	}); err != nil {
+		// If walk fails, return 0 (conservative estimate)
+		return 0
+	}
 	return count
 }
 

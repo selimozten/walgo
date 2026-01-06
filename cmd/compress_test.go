@@ -84,7 +84,7 @@ func TestCompressCommandFlags(t *testing.T) {
 		if compressCommand.Args(compressCommand, []string{"/path/to/dir"}) != nil {
 			t.Error("Should accept one argument")
 		}
-		if compressCommand.Args(compressCommand, []string{"dir1", "dir2"}) == nil {
+		if err := compressCommand.Args(compressCommand, []string{"dir1", "dir2"}); err == nil {
 			t.Error("Should reject multiple arguments")
 		}
 	})

@@ -74,7 +74,7 @@ func TestStatusCommandFlags(t *testing.T) {
 			t.Error("Args validation should pass for no arguments")
 		}
 
-		if statusCommand.Args(statusCommand, []string{"arg1", "arg2"}) == nil {
+		if err := statusCommand.Args(statusCommand, []string{"arg1", "arg2"}); err == nil {
 			t.Error("Args validation should fail for multiple arguments")
 		}
 	})

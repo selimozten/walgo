@@ -50,7 +50,10 @@ func deleteProject(nameOrID string) error {
 	fmt.Print("Are you sure? [y/N]: ")
 
 	var confirm string
-	fmt.Scanln(&confirm)
+	if _, err := fmt.Scanln(&confirm); err != nil {
+		fmt.Printf("%s Error reading input: %v\n", icons.Error, err)
+		return fmt.Errorf("failed to read confirmation: %w", err)
+	}
 	confirm = strings.TrimSpace(strings.ToLower(confirm))
 
 	if confirm != "y" && confirm != "yes" {
@@ -63,7 +66,10 @@ func deleteProject(nameOrID string) error {
 			fmt.Printf("%s Warning: Object ID '%s' appears invalid\n", icons.Warning, proj.ObjectID)
 			fmt.Print("Continue anyway? [y/N]: ")
 			var confirmInvalid string
-			fmt.Scanln(&confirmInvalid)
+			if _, err := fmt.Scanln(&confirmInvalid); err != nil {
+				fmt.Printf("%s Error reading input: %v\n", icons.Error, err)
+				return fmt.Errorf("failed to read confirmation: %w", err)
+			}
 			if strings.ToLower(strings.TrimSpace(confirmInvalid)) != "y" {
 				fmt.Printf("%s Cancelled\n", icons.Cross)
 				return nil
@@ -83,7 +89,10 @@ func deleteProject(nameOrID string) error {
 			fmt.Print("Continue with local deletion anyway? [y/N]: ")
 
 			var continueConfirm string
-			fmt.Scanln(&continueConfirm)
+			if _, err := fmt.Scanln(&continueConfirm); err != nil {
+				fmt.Printf("%s Error reading input: %v\n", icons.Error, err)
+				return fmt.Errorf("failed to read confirmation: %w", err)
+			}
 			continueConfirm = strings.TrimSpace(strings.ToLower(continueConfirm))
 
 			if continueConfirm != "y" && continueConfirm != "yes" {

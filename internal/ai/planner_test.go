@@ -612,7 +612,7 @@ func TestPlanner_DetermineContentType(t *testing.T) {
 		{"content/posts/welcome.md", "posts"},
 		{"content/docs/intro.md", "docs"},
 		{"content/services/service-1.md", "services"},
-		{"content/about.md", ""}, // Root level file
+		{"content/about.md", ""},  // Root level file
 		{"content/_index.md", ""}, // Root level index
 	}
 

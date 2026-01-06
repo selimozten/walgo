@@ -604,10 +604,10 @@ func TestInstallToolVersionSelection(t *testing.T) {
 		{"walrus", "testnet", "testnet"},
 		{"walrus", "mainnet", "mainnet"},
 		{"walrus", "", "testnet"},
-		{"site-builder", "testnet", "mainnet"},  // site-builder is always mainnet
-		{"site-builder", "mainnet", "mainnet"},  // site-builder is always mainnet
-		{"site-builder", "devnet", "mainnet"},   // site-builder is always mainnet
-		{"site-builder", "", "mainnet"},         // site-builder is always mainnet
+		{"site-builder", "testnet", "mainnet"}, // site-builder is always mainnet
+		{"site-builder", "mainnet", "mainnet"}, // site-builder is always mainnet
+		{"site-builder", "devnet", "mainnet"},  // site-builder is always mainnet
+		{"site-builder", "", "mainnet"},        // site-builder is always mainnet
 	}
 
 	for _, tt := range tests {

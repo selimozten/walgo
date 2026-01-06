@@ -17,12 +17,12 @@ func TestGetIcon(t *testing.T) {
 	}()
 
 	testCases := []struct {
-		name       string
-		iconName   string
-		useEmoji   bool
-		wantEmpty  bool
-		wantEmoji  string // expected value in emoji mode
-		wantASCII  string // expected value in ASCII mode
+		name      string
+		iconName  string
+		useEmoji  bool
+		wantEmpty bool
+		wantEmoji string // expected value in emoji mode
+		wantASCII string // expected value in ASCII mode
 	}{
 		// Status icons
 		{name: "success", iconName: "success", wantEmoji: EmojiIcons.Success, wantASCII: ASCIIIcons.Success},
@@ -521,7 +521,7 @@ func TestPrintCommandsEdgeCases(t *testing.T) {
 		{"empty map", "Title", map[string]string{}},
 		{"single command", "Title", map[string]string{"cmd": "description"}},
 		{"commands with varying lengths", "Title", map[string]string{
-			"a":                "short",
+			"a":                 "short",
 			"very-long-command": "description",
 		}},
 		{"empty title", "", map[string]string{"cmd": "desc"}},

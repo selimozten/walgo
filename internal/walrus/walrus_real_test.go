@@ -147,9 +147,9 @@ func TestDeployCreatesValidOutput(t *testing.T) {
 // TestPreflightCheckDetectsRealProblems tests that preflight actually catches issues
 func TestPreflightCheckDetectsRealProblems(t *testing.T) {
 	tests := []struct {
-		name        string
-		setup       func(t *testing.T) string
-		expectError bool
+		name          string
+		setup         func(t *testing.T) string
+		expectError   bool
 		errorContains string
 	}{
 		{
@@ -157,7 +157,7 @@ func TestPreflightCheckDetectsRealProblems(t *testing.T) {
 			setup: func(t *testing.T) string {
 				return t.TempDir() // Empty dir
 			},
-			expectError: true,
+			expectError:   true,
 			errorContains: "no files",
 		},
 		{
@@ -168,7 +168,7 @@ func TestPreflightCheckDetectsRealProblems(t *testing.T) {
 				os.WriteFile(filepath.Join(dir, "style.css"), []byte("body{}"), 0644)
 				return dir
 			},
-			expectError: true,
+			expectError:   true,
 			errorContains: "index",
 		},
 		{

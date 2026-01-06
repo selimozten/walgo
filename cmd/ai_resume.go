@@ -74,27 +74,27 @@ Example:
 		}
 
 		if result.Plan != nil {
-		if err := applyMenuToConfig(result.Plan); err != nil {
-			fmt.Fprintf(os.Stderr, "%s Warning: %v\n", icons.Warning, err)
-		}
-
-		if result.Plan.SiteType == ai.SiteTypeBusiness {
-			fmt.Printf("\n%s Validating and fixing content for Ananke theme...\n", icons.Gear)
-			fixer := ai.NewContentFixer(sitePath, ai.SiteTypeBusiness)
-			if err := fixer.FixAll(); err != nil {
-				fmt.Fprintf(os.Stderr, "%s Warning: Content fix failed: %v\n", icons.Warning, err)
-			} else {
-				fmt.Printf("   %s Content validated and fixed\n", icons.Check)
+			if err := applyMenuToConfig(result.Plan); err != nil {
+				fmt.Fprintf(os.Stderr, "%s Warning: %v\n", icons.Warning, err)
 			}
-		}
-		manager, err := projects.NewManager()
-		if err != nil {
-			return fmt.Errorf("failed to create project manager: %w", err)
-		}
-		defer manager.Close()
 
-		if err := manager.CreateDraftProject(result.Plan.SiteName, sitePath); err != nil {
-			return fmt.Errorf("failed to create draft project: %w", err)
+			if result.Plan.SiteType == ai.SiteTypeBusiness {
+				fmt.Printf("\n%s Validating and fixing content for Ananke theme...\n", icons.Gear)
+				fixer := ai.NewContentFixer(sitePath, ai.SiteTypeBusiness)
+				if err := fixer.FixAll(); err != nil {
+					fmt.Fprintf(os.Stderr, "%s Warning: Content fix failed: %v\n", icons.Warning, err)
+				} else {
+					fmt.Printf("   %s Content validated and fixed\n", icons.Check)
+				}
+			}
+			manager, err := projects.NewManager()
+			if err != nil {
+				return fmt.Errorf("failed to create project manager: %w", err)
+			}
+			defer manager.Close()
+
+			if err := manager.CreateDraftProject(result.Plan.SiteName, sitePath); err != nil {
+				return fmt.Errorf("failed to create draft project: %w", err)
 			}
 		}
 		fmt.Printf("   %s Created draft project\n", icons.Check)

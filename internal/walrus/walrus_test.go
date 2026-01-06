@@ -621,8 +621,8 @@ Browse your site at http://example.localhost:3000`,
 			shouldFindID: true,
 		},
 		{
-			name: "Generic site keyword without explicit pattern - should NOT match",
-			output: `The site has been deployed to 0xaaaabbbbccccdddd1111222233334444aaaabbbbccccdddd1111222233334444`,
+			name:         "Generic site keyword without explicit pattern - should NOT match",
+			output:       `The site has been deployed to 0xaaaabbbbccccdddd1111222233334444aaaabbbbccccdddd1111222233334444`,
 			expectedID:   "",
 			expectedURLs: 0,
 			shouldFindID: false, // Only strict patterns should match

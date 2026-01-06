@@ -71,9 +71,10 @@ func ValidateSiteName(name string) error {
 	}
 
 	// Check for invalid characters that could cause issues
-	validName := regexp.MustCompile(`^[a-zA-Z0-9._-]+$`)
+	// NOTE: Dots are NOT allowed for site names to avoid path confusion
+	validName := regexp.MustCompile(`^[a-zA-Z0-9_-]+$`)
 	if !validName.MatchString(name) {
-		return fmt.Errorf("site name contains invalid characters (use only letters, numbers, dots, hyphens, and underscores)")
+		return fmt.Errorf("site name contains invalid characters (use only letters, numbers, hyphens, and underscores)")
 	}
 
 	// Check for reserved names

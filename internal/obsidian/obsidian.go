@@ -45,7 +45,7 @@ func ImportVault(vaultPath, hugoContentDir string, cfg config.ObsidianConfig) (*
 	}
 
 	// Determine site root from Hugo content directory
-	siteRoot := filepath.Dir(hugoContentDir)
+	var siteRoot string
 	if filepath.Base(hugoContentDir) == "content" {
 		// hugoContentDir is directly the content directory
 		siteRoot = filepath.Dir(hugoContentDir)

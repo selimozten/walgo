@@ -230,7 +230,7 @@ func TestRemoveProviderCredentials(t *testing.T) {
 	// Set up credentials
 	creds := &CredentialsFile{
 		Providers: map[string]Credentials{
-			"openai": {Provider: "openai", APIKey: "key1"},
+			"openai":     {Provider: "openai", APIKey: "key1"},
 			"openrouter": {Provider: "openrouter", APIKey: "key2"},
 		},
 	}

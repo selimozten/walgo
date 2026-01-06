@@ -63,7 +63,7 @@ type SuiRPCError struct {
 // WalrusInfoJSON represents the JSON response from 'walrus info --json'
 type WalrusInfoJSON struct {
 	EpochInfo struct {
-		CurrentEpoch       int `json:"currentEpoch"`
+		CurrentEpoch        int `json:"currentEpoch"`
 		StartOfCurrentEpoch struct {
 			DateTime string `json:"DateTime"`
 		} `json:"startOfCurrentEpoch"`
@@ -82,8 +82,8 @@ type WalrusInfoJSON struct {
 		MaxBlobSize     int64 `json:"maxBlobSize"`
 	} `json:"sizeInfo"`
 	PriceInfo struct {
-		StoragePricePerUnitSize uint64 `json:"storagePricePerUnitSize"` // FROST per storage unit per epoch
-		WritePricePerUnitSize   uint64 `json:"writePricePerUnitSize"`   // FROST per storage unit (one-time)
+		StoragePricePerUnitSize    uint64 `json:"storagePricePerUnitSize"` // FROST per storage unit per epoch
+		WritePricePerUnitSize      uint64 `json:"writePricePerUnitSize"`   // FROST per storage unit (one-time)
 		EncodingDependentPriceInfo []struct {
 			MarginalSize  int64  `json:"marginalSize"`  // 1 MiB
 			MetadataPrice uint64 `json:"metadataPrice"` // Fixed metadata cost in FROST
@@ -453,24 +453,24 @@ func CalculateCost(options CostOptions) (*CostBreakdown, error) {
 		if strings.ToLower(network) == "mainnet" {
 			// Mainnet pricing (Dec 2025)
 			storageInfo = &StorageInfo{
-				StoragePrice:       11000,  // 11,000 FROST per MiB per epoch
-				WritePrice:         20000,  // 20,000 FROST per MiB (one-time)
-				MetadataPrice:      682000, // Fixed metadata cost in FROST
-				MarginalPrice:      66000,  // Per unencoded MiB cost in FROST
+				StoragePrice:       11000,   // 11,000 FROST per MiB per epoch
+				WritePrice:         20000,   // 20,000 FROST per MiB (one-time)
+				MetadataPrice:      682000,  // Fixed metadata cost in FROST
+				MarginalPrice:      66000,   // Per unencoded MiB cost in FROST
 				StorageUnitSize:    1048576, // 1 MiB
 				EpochDuration:      1209600, // 14 days
-				EncodingMultiplier: 8.0,    // Reed-Solomon ~8x expansion for small sites
+				EncodingMultiplier: 8.0,     // Reed-Solomon ~8x expansion for small sites
 			}
 		} else {
 			// Testnet pricing (Dec 2025)
 			storageInfo = &StorageInfo{
-				StoragePrice:       1000,  // 1,000 FROST per MiB per epoch
-				WritePrice:         2000,  // 2,000 FROST per MiB (one-time)
-				MetadataPrice:      62000, // Fixed metadata cost in FROST
-				MarginalPrice:      6000,  // Per unencoded MiB cost in FROST
+				StoragePrice:       1000,    // 1,000 FROST per MiB per epoch
+				WritePrice:         2000,    // 2,000 FROST per MiB (one-time)
+				MetadataPrice:      62000,   // Fixed metadata cost in FROST
+				MarginalPrice:      6000,    // Per unencoded MiB cost in FROST
 				StorageUnitSize:    1048576, // 1 MiB
-				EpochDuration:      86400,  // 1 day
-				EncodingMultiplier: 8.0,   // Reed-Solomon ~8x expansion for small sites
+				EpochDuration:      86400,   // 1 day
+				EncodingMultiplier: 8.0,     // Reed-Solomon ~8x expansion for small sites
 			}
 		}
 	}
@@ -521,8 +521,8 @@ func CalculateCost(options CostOptions) (*CostBreakdown, error) {
 	// 1. Reserve space (if needed)
 	// 2. Register blob and assign blob ID
 	// 3. Certify blob availability
-	baseComputationUnits := uint64(500000)            // Base computation for site creation (mid-range bucket)
-	perFileComputationUnits := uint64(10000)          // Per-file computation
+	baseComputationUnits := uint64(500000)   // Base computation for site creation (mid-range bucket)
+	perFileComputationUnits := uint64(10000) // Per-file computation
 	totalComputationUnits := baseComputationUnits + uint64(fileCount)*perFileComputationUnits
 
 	// On-chain storage for site metadata (estimated ~1KB per file for object storage)

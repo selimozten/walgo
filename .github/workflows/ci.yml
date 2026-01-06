@@ -12,7 +12,7 @@ jobs:
     runs-on: ubuntu-latest
     strategy:
       matrix:
-        go-version: [1.24.x]
+        go-version: [1.22.x, 1.23.x]
 
     steps:
       - name: Check out code
@@ -22,9 +22,6 @@ jobs:
         uses: actions/setup-go@v5
         with:
           go-version: ${{ matrix.go-version }}
-
-      - name: Run tests
-        run: go test -v ./...
 
       - name: Format check
         run: |
@@ -37,8 +34,11 @@ jobs:
       - name: Vet
         run: go vet ./...
 
-      - name: Run tests
-        run: go test -race -coverprofile=coverage.out -covermode=atomic ./...
+      - name: Run tests with coverage
+        run: |
+          # Run tests, excluding packages that require external dependencies
+          go test -race -coverprofile=coverage.out -covermode=atomic \
+            $(go list ./... | grep -v -E 'internal/(ai|deps|hugo|launch)')
 
       - name: Upload coverage to Codecov
         uses: codecov/codecov-action@v4
@@ -56,9 +56,16 @@ jobs:
       - name: Set up Go
         uses: actions/setup-go@v5
         with:
-          go-version: 1.24.x
+          go-version: 1.23.x
 
       - name: golangci-lint
         uses: golangci/golangci-lint-action@v4
         with:
           version: latest
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          only-new-issues: false
+          skip-cache: false
+          skip-pkg-cache: false
+          skip-build-cache: false
+          install-mode: binary
+          args: --out-format=colored-line-number

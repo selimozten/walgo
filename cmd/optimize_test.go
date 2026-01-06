@@ -88,7 +88,7 @@ func TestOptimizeCommandFlags(t *testing.T) {
 		if optimizeCommand.Args(optimizeCommand, []string{"/path/to/dir"}) != nil {
 			t.Error("Should accept one argument")
 		}
-		if optimizeCommand.Args(optimizeCommand, []string{"dir1", "dir2"}) == nil {
+		if err := optimizeCommand.Args(optimizeCommand, []string{"dir1", "dir2"}); err == nil {
 			t.Error("Should reject multiple arguments")
 		}
 	})

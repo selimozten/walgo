@@ -89,7 +89,7 @@ func TestQuickstartCommandFlags(t *testing.T) {
 			t.Error("Args validation failed for single site name")
 		}
 
-		if quickstartCommand.Args(quickstartCommand, []string{}) == nil {
+		if err := quickstartCommand.Args(quickstartCommand, []string{}); err == nil {
 			t.Error("Args validation should fail for no arguments")
 		}
 	})
@@ -167,11 +167,6 @@ func TestQuickstartCommandExecution(t *testing.T) {
 		_ = output
 	})
 
-	t.Run("Quickstart with skip-build flag", func(t *testing.T) {
-		// This test would require hugo to be installed
-		// Skip if hugo is not available
-		t.Skip("Quickstart execution requires Hugo to be installed")
-	})
 }
 
 func TestQuickstartValidation(t *testing.T) {

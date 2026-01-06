@@ -44,7 +44,7 @@ func ReadlineInput(prompt string) string {
 
 // readlineInputWithDefault reads input with a default value shown
 func readlineInputWithDefault(prompt, defaultVal string) string {
-	fullPrompt := prompt
+	var fullPrompt string
 	if defaultVal != "" {
 		fullPrompt = fmt.Sprintf("%s [%s]: ", prompt, defaultVal)
 	} else {

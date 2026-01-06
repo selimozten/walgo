@@ -1589,7 +1589,7 @@ func EstimateGasFee(params GasEstimateParams) GasEstimateResult {
 	var siteSize int64
 	var fileCount int
 
-	err = filepath.Walk(publishDir, func(path string, info os.FileInfo, err error) error {
+	if err := filepath.Walk(publishDir, func(path string, info os.FileInfo, err error) error {
 		if err != nil {
 			return err
 		}
@@ -1598,9 +1598,7 @@ func EstimateGasFee(params GasEstimateParams) GasEstimateResult {
 			fileCount++
 		}
 		return nil
-	})
-
-	if err != nil {
+	}); err != nil {
 		result.Error = fmt.Sprintf("failed to calculate site size: %v", err)
 		return result
 	}

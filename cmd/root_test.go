@@ -95,13 +95,6 @@ deploy:
 		_ = stdout // Avoid unused variable warning
 	})
 
-	t.Run("Config from home directory", func(t *testing.T) {
-		// Skip this test as it's platform-dependent
-		// os.UserHomeDir() doesn't always respect HOME env var
-		// and viper's config search order is complex
-		t.Skip("Home directory config test is unreliable across platforms")
-	})
-
 	t.Run("Config from current directory", func(t *testing.T) {
 		viper.Reset()
 		cfgFile = ""
@@ -211,39 +204,6 @@ this is not: valid yaml
 		// Should print error about failed parsing
 		if stderr == "" {
 			t.Error("Expected error message for malformed config")
-		}
-	})
-}
-
-func TestExecute(t *testing.T) {
-	t.Run("Execute with valid command", func(t *testing.T) {
-		// Skip this test as Execute() uses os.Exit which interferes with testing
-		// and output capture is unreliable with Cobra's output handling
-		t.Skip("Execute() test skipped - os.Exit and output capture issues with Cobra")
-	})
-
-	t.Run("Execute with invalid command", func(t *testing.T) {
-		// Save original args
-		originalArgs := os.Args
-		defer func() {
-			os.Args = originalArgs
-		}()
-
-		// Set args for invalid command
-		os.Args = []string{"walgo", "nonexistent"}
-
-		// Capture stderr
-		_, stderr := captureOutput(func() {
-			// Execute will call os.Exit(1) for invalid command
-			// We can't mock os.Exit directly, so we expect this to fail
-			defer func() { _ = func() any { return recover() }() }()
-			Execute()
-		})
-
-		// Should have error message
-		if stderr == "" {
-			// Error might have been printed before we could capture it
-			t.Log("Error message might not be captured due to os.Exit")
 		}
 	})
 }

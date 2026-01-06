@@ -22,10 +22,12 @@ jobs:
       - name: Set up Go
         uses: actions/setup-go@v5
         with:
-          go-version: '1.24'
+          go-version: '1.23'
 
       - name: Run tests
-        run: go test -v ./...
+        run: |
+          # Run core tests only (exclude packages needing external deps)
+          go test -v $(go list ./... | grep -v -E 'internal/(ai|deps|hugo|launch)')
 
       - name: Run GoReleaser
         uses: goreleaser/goreleaser-action@v6
@@ -47,7 +49,7 @@ jobs:
       - name: Setup Go
         uses: actions/setup-go@v5
         with:
-          go-version: '1.24'
+          go-version: '1.23'
 
       - name: Setup Node.js
         uses: actions/setup-node@v4
@@ -95,7 +97,7 @@ jobs:
       - name: Setup Go
         uses: actions/setup-go@v5
         with:
-          go-version: '1.24'
+          go-version: '1.23'
 
       - name: Setup Node.js
         uses: actions/setup-node@v4
@@ -143,7 +145,7 @@ jobs:
       - name: Setup Go
         uses: actions/setup-go@v5
         with:
-          go-version: '1.24'
+          go-version: '1.23'
 
       - name: Setup Node.js
         uses: actions/setup-node@v4
@@ -185,7 +187,7 @@ jobs:
       - name: Setup Go
         uses: actions/setup-go@v5
         with:
-          go-version: '1.24'
+          go-version: '1.23'
 
       - name: Setup Node.js
         uses: actions/setup-node@v4

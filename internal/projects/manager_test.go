@@ -238,7 +238,9 @@ func TestListProjectsFiltering(t *testing.T) {
 	}
 
 	// Archive one
-	manager.ArchiveProject(projects[2].ID)
+	if err := manager.ArchiveProject(projects[2].ID); err != nil {
+		t.Fatalf("Failed to archive project: %v", err)
+	}
 
 	// Test network filter
 	testnetProjects, err := manager.ListProjects("testnet", "")
