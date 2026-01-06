@@ -69,14 +69,9 @@ jobs:
         run: |
           # Get version from tag (remove 'v' prefix)
           VERSION=${GITHUB_REF#refs/tags/v}
-          
-          # Rename output to Walgo.app for consistency with install.sh
-          if [ -d "desktop.app" ]; then
-            mv "desktop.app" "Walgo.app"
-          fi
-          
+
           TAR_NAME="walgo-desktop_${VERSION}_darwin_amd64.tar.gz"
-          
+
           echo "Packaging $TAR_NAME..."
           tar -czf "$TAR_NAME" "Walgo.app"
 
@@ -117,14 +112,9 @@ jobs:
         run: |
           # Get version from tag (remove 'v' prefix)
           VERSION=${GITHUB_REF#refs/tags/v}
-          
-          # Rename output to Walgo.app for consistency with install.sh
-          if [ -d "desktop.app" ]; then
-            mv "desktop.app" "Walgo.app"
-          fi
-          
+
           TAR_NAME="walgo-desktop_${VERSION}_darwin_arm64.tar.gz"
-          
+
           echo "Packaging $TAR_NAME..."
           tar -czf "$TAR_NAME" "Walgo.app"
 
@@ -166,9 +156,9 @@ jobs:
         run: |
           # Get version from tag (remove 'v' prefix)
           $VERSION = "${env:GITHUB_REF}" -replace "refs/tags/v", ""
-          
+
           # Create zip package using PowerShell
-          Compress-Archive -Path walgo-desktop.exe -DestinationPath "walgo-desktop_${VERSION}_windows_amd64.zip" -CompressionLevel Optimal
+          Compress-Archive -Path Walgo.exe -DestinationPath "walgo-desktop_${VERSION}_windows_amd64.zip" -CompressionLevel Optimal
 
       - name: Upload Release Asset
         uses: softprops/action-gh-release@v1
@@ -194,6 +184,11 @@ jobs:
         with:
           node-version: '20'
 
+      - name: Install Linux dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libgtk-3-dev libwebkit2gtk-4.0-dev
+
       - name: Install Wails
         run: go install github.com/wailsapp/wails/v2/cmd/wails@latest
 
@@ -209,9 +204,9 @@ jobs:
           VERSION=${GITHUB_REF#refs/tags/v}
 
           TAR_NAME="walgo-desktop_${VERSION}_linux_amd64.tar.gz"
-          
+
           echo "Packaging $TAR_NAME..."
-          tar -czf "$TAR_NAME" walgo-desktop
+          tar -czf "$TAR_NAME" Walgo
 
       - name: Upload Release Asset
         uses: softprops/action-gh-release@v1
