@@ -1,0 +1,53 @@
+linters-settings:
+  errcheck:
+    # Ignore unchecked errors in test files
+    exclude-functions:
+      - (io.Closer).Close
+      - (*os.File).Close
+      - (*encoding/json.Encoder).Encode
+      - (*encoding/json.Decoder).Decode
+      - (io.Writer).Write
+
+  staticcheck:
+    checks: ["all", "-SA9003"] # Ignore empty branch warnings
+
+linters:
+  enable:
+    - errcheck
+    - ineffassign
+    - staticcheck
+    - unused
+    - gosimple
+    - govet
+  disable:
+    - deadcode # deprecated
+    - structcheck # deprecated
+    - varcheck # deprecated
+
+issues:
+  # Exclude test files from errcheck
+  exclude-rules:
+    - path: _test\.go
+      linters:
+        - errcheck
+    - path: test/
+      linters:
+        - errcheck
+    # Ignore certain error checks in test files
+    - linters:
+        - errcheck
+      text: "Error return value.*is not checked"
+      path: _test\.go
+
+run:
+  timeout: 5m
+  tests: true
+  skip-dirs:
+    - vendor
+    - node_modules
+    - desktop/frontend
+
+output:
+  format: colored-line-number
+  print-issued-lines: true
+  print-linter-name: true
