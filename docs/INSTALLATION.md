@@ -24,11 +24,11 @@ Complete installation guide for Walgo on all supported platforms.
 
 ### Required Dependencies
 
-| Dependency | Required For | Installation |
-|------------|-------------|--------------|
-| **Hugo** | Building sites | All modes |
+| Dependency       | Required For        | Installation       |
+| ---------------- | ------------------- | ------------------ |
+| **Hugo**         | Building sites      | All modes          |
 | **site-builder** | On-chain deployment | On-chain mode only |
-| **Sui CLI** | Wallet management | On-chain mode only |
+| **Sui CLI**      | Wallet management   | On-chain mode only |
 
 ## Quick Install
 
@@ -38,7 +38,10 @@ Complete installation guide for Walgo on all supported platforms.
 curl -fsSL https://raw.githubusercontent.com/selimozten/walgo/main/install.sh | bash
 ```
 
+**⚠️ Windows Users:** The one-line install above will NOT work on Windows PowerShell or CMD. See [Windows Installation](#windows) below for proper installation instructions.
+
 This script will:
+
 1. Detect your operating system and architecture
 2. Download the appropriate binary
 3. Install to `/usr/local/bin/walgo` (or `~/.local/bin/walgo`)
@@ -136,48 +139,171 @@ sudo mv walgo /usr/local/bin/
 
 ### Windows
 
-#### Option 1: Download Binary
+#### Option 1: PowerShell One-Line Install (Recommended)
 
-1. Download the latest release:
-   - For 64-bit: [walgo-windows-amd64.exe](https://github.com/selimozten/walgo/releases/latest/download/walgo-windows-amd64.exe)
-   - For ARM64: [walgo-windows-arm64.exe](https://github.com/selimozten/walgo/releases/latest/download/walgo-windows-arm64.exe)
+Open PowerShell and run:
 
-2. Rename to `walgo.exe`
+```powershell
+irm https://raw.githubusercontent.com/selimozten/walgo/main/install.ps1 | iex
+```
+
+This script will:
+
+- Detect your Windows architecture (x64 or ARM64)
+- Download the latest Walgo binary
+- Install to a location in your PATH
+- Verify installation
+
+**Note:** Run PowerShell as Administrator for system-wide installation, or as regular user for user-only installation.
+
+#### Option 2: Download Binary (Manual)
+
+1. Download the latest release from the [GitHub Releases page](https://github.com/selimozten/walgo/releases/latest):
+
+   - For 64-bit Windows: `walgo-windows-amd64.exe`
+   - For ARM64 Windows: `walgo-windows-arm64.exe`
+
+2. Download directly via PowerShell:
+
+```powershell
+# For 64-bit
+Invoke-WebRequest -Uri "https://github.com/selimozten/walgo/releases/latest/download/walgo-windows-amd64.exe" -OutFile "walgo.exe"
+
+# Or for ARM64
+Invoke-WebRequest -Uri "https://github.com/selimozten/walgo/releases/latest/download/walgo-windows-arm64.exe" -OutFile "walgo.exe"
+```
 
 3. Add to PATH:
-   ```powershell
-   # Move to a permanent location
-   Move-Item walgo.exe C:\Program Files\walgo\
 
-   # Add to PATH (PowerShell as Administrator)
-   $env:Path += ";C:\Program Files\walgo"
-   [Environment]::SetEnvironmentVariable("Path", $env:Path, [System.EnvironmentVariableTarget]::Machine)
-   ```
-
-#### Option 2: Using Scoop
+**Method A: Temporary PATH (Current Session Only)**
 
 ```powershell
-# Coming soon
-# scoop install walgo
+$env:Path += ";$PWD"
 ```
 
-#### Option 3: Using Chocolatey
+**Method B: Permanent PATH (System-wide, requires Admin)**
 
 ```powershell
-# Coming soon
-# choco install walgo
+# Create installation directory
+New-Item -ItemType Directory -Force -Path "C:\Program Files\walgo"
+
+# Move binary
+Move-Item walgo.exe "C:\Program Files\walgo\"
+
+# Add to PATH (requires Administrator PowerShell)
+[Environment]::SetEnvironmentVariable("Path", $env:Path + ";C:\Program Files\walgo", [System.EnvironmentVariableTarget]::Machine)
 ```
 
-#### Option 4: Build from Source
+**Method C: Permanent PATH (User-level)**
 
 ```powershell
-# Install Go 1.22+
-# Download from https://go.dev/dl/
+# Create user directory
+$walgoDir = "$env:USERPROFILE\walgo"
+New-Item -ItemType Directory -Force -Path $walgoDir
+
+# Move binary
+Move-Item walgo.exe "$walgoDir\"
+
+# Add to user PATH
+[Environment]::SetEnvironmentVariable("Path", $env:Path + ";$walgoDir", [System.EnvironmentVariableTarget]::User)
+```
+
+4. **Important:** Close and reopen your terminal (or restart your computer) for PATH changes to take effect.
+
+#### Option 3: Windows Subsystem for Linux (WSL)
+
+If you have WSL installed, you can use the Linux installation:
+
+```bash
+# In WSL terminal
+curl -fsSL https://raw.githubusercontent.com/selimozten/walgo/main/install.sh | bash
+```
+
+Note: WSL must have a Linux distribution installed. Install WSL if needed:
+
+```powershell
+wsl --install
+```
+
+#### Option 4: Using Scoop (Package Manager)
+
+```powershell
+# Install Scoop if not already installed
+# Coming Soom
+Set-ExecutionPolicy -ExecutionPolicy RemoteSigned -Scope CurrentUser
+Invoke-RestMethod -Uri https://get.scoop.sh | Invoke-Expression
+
+# Install Walgo via Scoop
+scoop install walgo
+```
+
+#### Option 5: Using Chocolatey (Package Manager)
+
+```powershell
+# Coming Soom
+# Install Chocolatey if not already installed
+Set-ExecutionPolicy Bypass -Scope Process -Force; [System.Net.ServicePointManager]::SecurityProtocol = [System.Net.ServicePointManager]::SecurityProtocol -bor 3072; iex ((New-Object System.Net.WebClient).DownloadString('https://community.chocolatey.org/install.ps1'))
+
+# Install Walgo via Chocolatey
+choco install walgo
+```
+
+#### Option 6: Build from Source
+
+```powershell
+# Prerequisites: Install Go 1.22+ from https://go.dev/dl/
 
 # Build Walgo
 git clone https://github.com/selimozten/walgo.git
 cd walgo
 go build -o walgo.exe main.go
+
+# Add to PATH (see Option 2 for PATH methods)
+```
+
+#### Windows Installation Troubleshooting
+
+**"execution of scripts is disabled" Error**
+
+If you see a PowerShell execution policy error:
+
+```powershell
+# Check current policy
+Get-ExecutionPolicy
+
+# Allow script execution for current user
+Set-ExecutionPolicy -ExecutionPolicy RemoteSigned -Scope CurrentUser
+
+# Or run the script bypassing policy (not recommended for security)
+powershell -ExecutionPolicy Bypass -File install.ps1
+```
+
+**Windows Defender SmartScreen Warning**
+
+If Windows Defender blocks the executable:
+
+1. Click "More info"
+2. Click "Run anyway"
+3. This occurs because the binary isn't signed. It's safe to run - you can verify the source code on GitHub.
+
+**PATH Changes Not Working**
+
+After adding to PATH:
+
+1. Close ALL terminal windows
+2. Open a new terminal
+3. Test: `walgo --version`
+4. If still not found, restart your computer
+
+**Check Your Windows Architecture**
+
+```powershell
+# Check if 64-bit or ARM64
+$env:PROCESSOR_ARCHITECTURE
+
+# Output will be:
+# AMD64 → use amd64 binary
+# ARM64 → use arm64 binary
 ```
 
 ## Installing Dependencies
@@ -342,6 +468,7 @@ walgo version
 ```
 
 Expected output:
+
 ```
 Walgo version 1.0.0
 Built with Go 1.24.0
@@ -354,6 +481,7 @@ walgo doctor
 ```
 
 This will check:
+
 - Hugo installation and version
 - site-builder availability (for on-chain)
 - Sui CLI availability (for on-chain)
@@ -361,6 +489,7 @@ This will check:
 - Network connectivity
 
 Expected output:
+
 ```
 Checking Walgo Installation
 ==========================

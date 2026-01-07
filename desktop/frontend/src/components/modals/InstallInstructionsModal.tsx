@@ -34,11 +34,19 @@ export const InstallInstructionsModal: React.FC<InstallInstructionsModalProps> =
     onClose();
   };
 
+  const openRelease = async (url: string) => {
+    if (!url) {
+      return;
+    }
+    const { BrowserOpenURL } = await import('../../../wailsjs/runtime/runtime');
+    BrowserOpenURL(url);
+  };
+
   const toolsInfo: Record<string, ToolInstallInfo> = {
     'All Tools': {
       name: 'All Tools (Recommended)',
       description: 'Install all required tools with one command',
-      releaseUrl: 'https://github.com/selimozten/walgo',
+      releaseUrl: 'https://github.com/selimozten/walgo/releases',
       commands: [
         '# One-command installation (Recommended)',
         'curl -fsSL https://raw.githubusercontent.com/selimozten/walgo/main/install.sh | bash',
@@ -77,7 +85,7 @@ export const InstallInstructionsModal: React.FC<InstallInstructionsModalProps> =
     'walrus': {
       name: 'Walrus CLI',
       description: 'Walrus decentralized storage command-line interface',
-      releaseUrl: 'https://github.com/MystenLabs/walrus-docs/releases',
+      releaseUrl: 'https://github.com/MystenLabs/walrus/releases',
       commands: [
         '# Step 1: Ensure suiup is installed (see Sui CLI instructions)',
         '',
@@ -101,14 +109,26 @@ export const InstallInstructionsModal: React.FC<InstallInstructionsModalProps> =
       commands: [
         '# Step 1: Ensure suiup is installed (see Sui CLI instructions)',
         '',
-        '# Step 2: Install site-builder',
+        '# Step 2: Install Walrus CLI (required by site-builder)',
+        'suiup install walrus@testnet',
+        'suiup install walrus@mainnet',
+        'suiup default set walrus@testnet',
+        'suiup default set walrus@mainnet',
+        '',
+        '# Step 3: Install site-builder',
         'suiup install site-builder@mainnet',
         'suiup default set site-builder@mainnet',
+        '',
+        '# Step 4: Download Walrus configuration (matches install.sh)',
+        'mkdir -p $HOME/.config/walrus',
+        'curl --create-dirs -fsSL https://docs.wal.app/setup/client_config.yaml -o $HOME/.config/walrus/client_config.yaml',
+        'curl -fsSL https://raw.githubusercontent.com/MystenLabs/walrus-sites/refs/heads/mainnet/sites-config.yaml -o $HOME/.config/walrus/sites-config.yaml',
       ],
       notes: [
         'Requires suiup to be installed first',
-        'Only mainnet version available (works for all networks)',
-        'Verify with: site-builder --version',
+        'Walrus CLI must be installed so site-builder can deploy to Walrus',
+        'Only mainnet site-builder binary is required for all networks',
+        'Verify with: site-builder --version && walrus --version',
       ],
     },
     'hugo': {
@@ -149,10 +169,6 @@ export const InstallInstructionsModal: React.FC<InstallInstructionsModalProps> =
     } catch (err) {
       console.error('Failed to copy:', err);
     }
-  };
-
-  const handleOpenUrl = (url: string) => {
-    window.open(url, '_blank');
   };
 
   if (!isOpen) return null;
@@ -228,8 +244,9 @@ export const InstallInstructionsModal: React.FC<InstallInstructionsModalProps> =
                     <p className="text-sm text-zinc-400">{tool.description}</p>
                   </div>
                   <button
-                    onClick={() => handleOpenUrl(tool.releaseUrl)}
-                    className="flex items-center gap-2 px-3 py-1.5 bg-accent/10 hover:bg-accent/20 text-accent border border-accent/30 rounded-sm text-xs font-mono transition-all"
+                    type="button"
+                    onClick={() => openRelease(tool.releaseUrl)}
+                    className="flex items-center gap-2 px-3 py-1.5 bg-accent/10 hover:bg-accent/20 active:bg-accent/30 text-accent border border-accent/30 rounded-sm text-xs font-mono transition-all cursor-pointer focus:outline-none focus:ring-2 focus:ring-accent/50"
                   >
                     <ExternalLink size={14} />
                     GitHub Releases
@@ -326,4 +343,3 @@ export const InstallInstructionsModal: React.FC<InstallInstructionsModalProps> =
     </AnimatePresence>
   );
 };
-

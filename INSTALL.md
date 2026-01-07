@@ -10,7 +10,18 @@ Complete installation instructions for all platforms.
 curl -fsSL https://raw.githubusercontent.com/selimozten/walgo/main/install.sh | bash
 ```
 
+**⚠️ Windows Users:** The command above will NOT work on Windows PowerShell or CMD.
+
+### Windows PowerShell Install
+
+```powershell
+irm https://raw.githubusercontent.com/selimozten/walgo/main/install.ps1 | iex
+```
+
+Or visit the [Installation Guide](docs/INSTALLATION.md) for manual installation methods.
+
 This script will:
+
 - Detect your OS and architecture
 - Download the latest release
 - Install to `/usr/local/bin` (or `~/.local/bin` if not root)
@@ -96,6 +107,7 @@ snap install walgo
 ## Build from Source
 
 Requirements:
+
 - Go 1.22 or later
 - Git
 
@@ -125,6 +137,7 @@ walgo setup-deps --with-site-builder --with-walrus --network testnet
 ```
 
 This installs:
+
 - `site-builder` - For on-chain deployments
 - `walrus` - Walrus CLI tool
 - Places binaries in `~/.config/walgo/bin`
@@ -137,16 +150,19 @@ This installs:
 Hugo is required for static site generation.
 
 **macOS:**
+
 ```bash
 brew install hugo
 ```
 
 **Ubuntu/Debian:**
+
 ```bash
 sudo apt install hugo
 ```
 
 **Windows:**
+
 ```bash
 choco install hugo-extended
 ```
@@ -157,6 +173,7 @@ Visit [Hugo Installation Guide](https://gohugo.io/installation/)
 #### site-builder (For On-chain Deployment)
 
 **macOS Apple Silicon:**
+
 ```bash
 curl -L https://storage.googleapis.com/mysten-walrus-binaries/site-builder-testnet-latest-macos-arm64 -o site-builder
 chmod +x site-builder
@@ -164,6 +181,7 @@ sudo mv site-builder /usr/local/bin/
 ```
 
 **macOS Intel:**
+
 ```bash
 curl -L https://storage.googleapis.com/mysten-walrus-binaries/site-builder-testnet-latest-macos-x86_64 -o site-builder
 chmod +x site-builder
@@ -171,6 +189,7 @@ sudo mv site-builder /usr/local/bin/
 ```
 
 **Linux:**
+
 ```bash
 curl -L https://storage.googleapis.com/mysten-walrus-binaries/site-builder-testnet-latest-ubuntu-x86_64 -o site-builder
 chmod +x site-builder
@@ -198,6 +217,7 @@ walgo doctor
 ```
 
 This will check:
+
 - ✓ Required binaries (hugo, site-builder, walrus, sui)
 - ✓ Sui wallet configuration
 - ✓ Gas balance
@@ -229,29 +249,34 @@ walgo deploy-http \
 ### For On-chain Deployment (Requires Wallet)
 
 1. **Setup Walrus configuration:**
+
 ```bash
 walgo setup --network testnet --force
 ```
 
 2. **Fix configuration paths:**
+
 ```bash
 walgo doctor --fix-paths
 ```
 
 3. **Configure Sui wallet:**
+
 ```bash
 sui client
 ```
 
 4. **Get testnet SUI tokens:**
-Visit: https://faucet.sui.io/ or join Discord
+   Visit: https://faucet.sui.io/ or join Discord
 
 5. **Verify setup:**
+
 ```bash
 walgo doctor
 ```
 
 6. **Deploy:**
+
 ```bash
 walgo deploy --epochs 5
 ```
@@ -276,6 +301,7 @@ source ~/.bashrc  # or source ~/.zshrc
 ### Permission denied during installation
 
 Either:
+
 1. Use sudo: `sudo mv walgo /usr/local/bin/`
 2. Install to user directory: `mv walgo ~/.local/bin/`
 3. Run the install script without sudo: `USE_SUDO=false ./install.sh`
@@ -288,6 +314,7 @@ https://gohugo.io/installation/
 ### site-builder not found
 
 Run the automated installer:
+
 ```bash
 walgo setup-deps --with-site-builder
 ```

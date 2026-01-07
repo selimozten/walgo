@@ -6,6 +6,7 @@ import (
 	"io"
 	"net/http"
 	"os"
+	"strconv"
 	"strings"
 	"time"
 
@@ -98,19 +99,45 @@ func checkForUpdates() {
 	latestVersion := strings.TrimPrefix(release.TagName, "v")
 	currentVersion := strings.TrimPrefix(Version, "v")
 
-	if latestVersion == currentVersion {
+	switch compareSemver(latestVersion, currentVersion) {
+	case 0:
 		fmt.Println(icons.Check)
 		fmt.Printf("\n%s You are using the latest version!\n", icons.Check)
-	} else if latestVersion > currentVersion {
+	case 1:
 		fmt.Println(icons.Check)
 		fmt.Printf("\n%s New version available: v%s (you have v%s)\n", icons.Warning, latestVersion, currentVersion)
 		fmt.Printf("\nUpdate with:\n")
 		fmt.Printf("  curl -fsSL https://raw.githubusercontent.com/selimozten/walgo/main/install.sh | bash\n")
 		fmt.Printf("\nRelease notes: %s\n", release.HTMLURL)
-	} else {
+	default:
 		fmt.Println(icons.Check)
 		fmt.Printf("\n%s You are using the latest version (or a development build)\n", icons.Check)
 	}
+}
+
+func compareSemver(a, b string) int {
+	parse := func(input string) [3]int {
+		var result [3]int
+		clean := strings.SplitN(input, "-", 2)[0]
+		parts := strings.Split(clean, ".")
+		for i := 0; i < len(result) && i < len(parts); i++ {
+			if n, err := strconv.Atoi(parts[i]); err == nil {
+				result[i] = n
+			}
+		}
+		return result
+	}
+	av := parse(a)
+	bv := parse(b)
+	for i := 0; i < len(av); i++ {
+		if av[i] > bv[i] {
+			return 1
+		}
+		if av[i] < bv[i] {
+			return -1
+		}
+	}
+	return 0
 }
 
 func init() {

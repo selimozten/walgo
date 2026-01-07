@@ -51,9 +51,65 @@ Deploy your Hugo sites to the decentralized web with an interactive wizard. No b
 
 ### Quick Install (Recommended)
 
+**macOS/Linux:**
+
 ```bash
 curl -fsSL https://raw.githubusercontent.com/selimozten/walgo/main/install.sh | bash
 ```
+
+**Windows:**
+
+```powershell
+irm https://raw.githubusercontent.com/selimozten/walgo/main/install.ps1 | iex
+```
+
+Or download the binary manually from the [releases page](https://github.com/selimozten/walgo/releases/latest).
+
+<details>
+<summary><strong>🪟 Windows Installation Details (Click to Expand)</strong></summary>
+
+#### Method 1: PowerShell One-Line Install (Recommended)
+
+```powershell
+irm https://raw.githubusercontent.com/selimozten/walgo/main/install.ps1 | iex
+```
+
+This automatically detects your architecture, downloads binary, and installs it.
+
+#### Method 2: Download and Install Manually
+
+1. Download from [releases page](https://github.com/selimozten/walgo/releases/latest):
+
+   - `walgo-windows-amd64.exe` (64-bit)
+   - `walgo-windows-arm64.exe` (ARM64)
+
+2. Add to PATH (PowerShell as Administrator):
+
+   ```powershell
+   New-Item -ItemType Directory -Force -Path "C:\Program Files\walgo"
+   Move-Item walgo.exe "C:\Program Files\walgo\"
+   [Environment]::SetEnvironmentVariable("Path", $env:Path + ";C:\Program Files\walgo", "Machine")
+   ```
+
+3. **Important:** Close and reopen terminal for PATH changes to take effect.
+
+#### Common Windows Issues
+
+**"execution of scripts is disabled"**
+
+```powershell
+Set-ExecutionPolicy -ExecutionPolicy RemoteSigned -Scope CurrentUser
+```
+
+**Windows Defender SmartScreen warning**
+
+1. Click "More info"
+2. Click "Run anyway"
+3. Safe to run - source code is verified on GitHub
+
+For complete Windows installation guide, see [docs/INSTALLATION.md](docs/INSTALLATION.md#windows).
+
+</details>
 
 ### Using Go
 

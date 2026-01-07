@@ -212,9 +212,10 @@ export const SystemHealth: React.FC<SystemHealthProps> = ({
                             onClick={() => {
                                 // Collect missing tools
                                 const missing: string[] = [];
-                                if (!systemHealth?.suiInstalled) missing.push('Sui CLI');
-                                if (!systemHealth?.walrusInstalled) missing.push('Walrus CLI');
-                                if (!systemHealth?.siteBuilder) missing.push('Site Builder');
+                                if (!systemHealth?.suiInstalled) missing.push('sui');
+                                if (!systemHealth?.walrusInstalled) missing.push('walrus');
+                                if (!systemHealth?.siteBuilder) missing.push('site-builder');
+                                if (!systemHealth?.hugoInstalled) missing.push('hugo');
                                 setMissingTools(missing);
                                 setShowInstallModal(true);
                             }}
@@ -315,4 +316,3 @@ export const SystemHealth: React.FC<SystemHealthProps> = ({
         );
     }
 };
-

@@ -5,6 +5,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"runtime"
 	"strings"
 
 	"github.com/selimozten/walgo/internal/deps"
@@ -82,10 +83,10 @@ Examples:
 			purpose  string
 			install  string
 		}{
-			"hugo":         {"hugo", true, "Static site generation", "brew install hugo (macOS) or https://gohugo.io/installation/"},
-			"site-builder": {"site-builder", false, "On-chain deployment", "walgo setup-deps (uses suiup)"},
-			"walrus":       {"walrus", false, "Walrus CLI operations", "walgo setup-deps (uses suiup)"},
-			"sui":          {"sui", false, "On-chain wallet management", "walgo setup-deps (uses suiup)"},
+			"hugo":         {"hugo", true, "Static site generation", installHint("hugo")},
+			"site-builder": {"site-builder", false, "On-chain deployment", installHint("site-builder")},
+			"walrus":       {"walrus", false, "Walrus CLI operations", installHint("walrus")},
+			"sui":          {"sui", false, "On-chain wallet management", installHint("sui")},
 		}
 
 		// Check for suiup first (tool manager)
@@ -236,7 +237,7 @@ Examples:
 			if err != nil {
 				fmt.Fprintf(os.Stderr, "%s Warning: Could not read sites-config.yaml: %v\n", icons.Warning, err)
 			} else {
-				if strings.Contains(string(data), "~/") {
+				if containsTildePath(string(data)) {
 					fmt.Printf("  %s Configuration contains tilde paths (~)\n", icons.Warning)
 					fmt.Println("    Run: walgo doctor --fix-paths")
 					warnings++
@@ -316,12 +317,9 @@ func ensureAbsolutePaths(scPath, home string) error {
 		return err
 	}
 	for k, ctx := range sc.Contexts {
-		if strings.HasPrefix(ctx.General.Wallet, "~/") {
-			ctx.General.Wallet = filepath.Join(home, ctx.General.Wallet[2:])
-		}
-		if strings.HasPrefix(ctx.General.WalrusConfig, "~/") {
-			ctx.General.WalrusConfig = filepath.Join(home, ctx.General.WalrusConfig[2:])
-		}
+		ctx.General.Wallet = expandTilde(ctx.General.Wallet, home)
+		ctx.General.WalrusConfig = expandTilde(ctx.General.WalrusConfig, home)
+		ctx.General.WalrusBinary = expandTilde(ctx.General.WalrusBinary, home)
 		sc.Contexts[k] = ctx
 	}
 	out, err := yaml.Marshal(&sc)
@@ -329,6 +327,38 @@ func ensureAbsolutePaths(scPath, home string) error {
 		return err
 	}
 	return os.WriteFile(scPath, out, 0644) // #nosec G306 - config file needs to be readable for site-builder
+}
+
+func containsTildePath(content string) bool {
+	return strings.Contains(content, "~/") || strings.Contains(content, "~\\")
+}
+
+func expandTilde(value, home string) string {
+	if strings.HasPrefix(value, "~/") || strings.HasPrefix(value, "~\\") {
+		return filepath.Join(home, value[2:])
+	}
+	return value
+}
+
+func installHint(tool string) string {
+	switch tool {
+	case "hugo":
+		switch runtime.GOOS {
+		case "darwin":
+			return "brew install hugo (installs the Extended build)"
+		case "linux":
+			return "Install Hugo Extended via your package manager or download from https://gohugo.io/installation/"
+		case "windows":
+			return "Download the Hugo Extended release ZIP from https://gohugo.io/installation/ and add it to PATH"
+		default:
+			return "Install Hugo Extended from https://gohugo.io/installation/"
+		}
+	default:
+		if runtime.GOOS == "windows" {
+			return "Run: walgo setup-deps (PowerShell) to install via suiup"
+		}
+		return "Run: walgo setup-deps (uses suiup)"
+	}
 }
 
 func init() {

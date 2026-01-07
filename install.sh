@@ -4,6 +4,25 @@
 
 set -e
 
+# Detect Windows and show helpful message
+case "$(uname -s)" in
+    MINGW*|MSYS*|CYGWIN*|Windows_NT)
+        echo "╔═══════════════════════════════════════════════════════════╗"
+        echo "║                   IMPORTANT: WINDOWS USERS                    ║"
+        echo "╚═══════════════════════════════════════════════════════════╝"
+        echo ""
+        echo "This installation script is for Linux/macOS only."
+        echo ""
+        echo "For Windows installation, use PowerShell:"
+        echo ""
+        echo "  irm https://raw.githubusercontent.com/selimozten/walgo/main/install.ps1 | iex"
+        echo ""
+        echo "Or visit: https://github.com/selimozten/walgo/blob/main/docs/INSTALLATION.md"
+        echo ""
+        exit 1
+        ;;
+esac
+
 # ============================================================================
 # TERMINAL DETECTION & COMPATIBILITY
 # ============================================================================
@@ -127,6 +146,14 @@ INSTALL_DIR="${INSTALL_DIR:-/usr/local/bin}"
 USE_SUDO="${USE_SUDO:-true}"
 TEMP_DIR=""
 
+# Shell detection & PATH guidance state
+DETECTED_SHELL="unknown"
+DETECTED_SHELL_PATH=""
+declare -a SHELL_PROFILE_FILES=()
+declare -a PATH_UPDATED_FILES=()
+PATH_PRIMARY_PROFILE=""
+NEEDS_SHELL_RELOAD=false
+
 # ============================================================================
 # CLEANUP & ERROR HANDLING
 # ============================================================================
@@ -206,9 +233,6 @@ detect_platform() {
         linux)
             OS="linux"
             ;;
-        mingw*|msys*|cygwin*|windows*)
-            OS="windows"
-            ;;
         *)
             print_error "Unsupported operating system: $OS"
             exit 1
@@ -229,6 +253,124 @@ detect_platform() {
     esac
 
     print_info "Detected platform: $OS/$ARCH"
+}
+
+# Convert full path to something with ~ for readability
+tilde_path() {
+    local input="$1"
+    if [ -z "$HOME" ]; then
+        echo "$input"
+        return
+    fi
+
+    case "$input" in
+        "$HOME"*)
+            echo "~${input#$HOME}"
+            ;;
+        *)
+            echo "$input"
+            ;;
+    esac
+}
+
+# Determine which profile files apply to the detected shell
+set_shell_profiles() {
+    local shell_name="$1"
+    SHELL_PROFILE_FILES=()
+
+    case "$shell_name" in
+        zsh)
+            SHELL_PROFILE_FILES=(
+                "$HOME/.zprofile"
+                "$HOME/.zshrc"
+                "$HOME/.profile"
+            )
+            ;;
+        bash)
+            SHELL_PROFILE_FILES=(
+                "$HOME/.bash_profile"
+                "$HOME/.bashrc"
+                "$HOME/.profile"
+            )
+            ;;
+        fish)
+            SHELL_PROFILE_FILES=("$HOME/.config/fish/config.fish")
+            ;;
+        tcsh|csh)
+            SHELL_PROFILE_FILES=(
+                "$HOME/.tcshrc"
+                "$HOME/.cshrc"
+                "$HOME/.profile"
+            )
+            ;;
+        ksh)
+            SHELL_PROFILE_FILES=("$HOME/.kshrc" "$HOME/.profile")
+            ;;
+        sh|dash)
+            SHELL_PROFILE_FILES=("$HOME/.profile")
+            ;;
+        *)
+            SHELL_PROFILE_FILES=(
+                "$HOME/.profile"
+                "$HOME/.bashrc"
+                "$HOME/.zshrc"
+            )
+            ;;
+    esac
+}
+
+# Detect the user's default shell reliably even when script runs under bash
+detect_user_shell() {
+    local candidate=""
+    local user_name=""
+    printf -v user_name '%s' \
+        "${USER:-$(id -un 2>/dev/null || echo "")}" 
+
+    if [ -n "$WALGO_SHELL" ]; then
+        candidate="$WALGO_SHELL"
+    elif [ -n "$SHELL" ]; then
+        candidate="$SHELL"
+    fi
+
+    if [ -z "$candidate" ]; then
+        local uname_s=$(uname -s 2>/dev/null || echo "")
+        if [ "$uname_s" = "Darwin" ] && command -v dscl >/dev/null 2>&1 && [ -n "$user_name" ]; then
+            candidate=$(dscl . -read "/Users/$user_name" UserShell 2>/dev/null | awk -F': ' 'NR==1 {print $2}')
+        elif command -v getent >/dev/null 2>&1 && [ -n "$user_name" ]; then
+            candidate=$(getent passwd "$user_name" 2>/dev/null | awk -F: '{print $7}')
+        fi
+    fi
+
+    if [ -z "$candidate" ] && [ -n "$user_name" ] && [ -r /etc/passwd ]; then
+        candidate=$(grep -E "^${user_name}:" /etc/passwd 2>/dev/null | head -n 1 | awk -F: '{print $7}')
+    fi
+
+    if [ -z "$candidate" ]; then
+        local parent_shell=$(ps -p "$PPID" -o comm= 2>/dev/null | awk 'NR==1 {print $1}')
+        if [ -n "$parent_shell" ]; then
+            if command -v "$parent_shell" >/dev/null 2>&1; then
+                candidate=$(command -v "$parent_shell")
+            else
+                candidate="$parent_shell"
+            fi
+        fi
+    fi
+
+    if [ -z "$candidate" ]; then
+        candidate="/bin/sh"
+    fi
+
+    if command -v "$candidate" >/dev/null 2>&1; then
+        candidate=$(command -v "$candidate")
+    fi
+
+    DETECTED_SHELL_PATH="$candidate"
+    DETECTED_SHELL=$(basename "$candidate")
+    if [ -z "$DETECTED_SHELL" ]; then
+        DETECTED_SHELL="sh"
+    fi
+
+    set_shell_profiles "$DETECTED_SHELL"
 }
 
 # Get latest release version
@@ -257,11 +399,7 @@ get_latest_version() {
 install_binary() {
     local filename="${BINARY_NAME}_${VERSION}_${OS}_${ARCH}"
 
-    if [ "$OS" = "windows" ]; then
-        filename="${filename}.zip"
-    else
-        filename="${filename}.tar.gz"
-    fi
+    filename="${filename}.tar.gz"
 
     local download_url="https://github.com/$REPO/releases/download/v${VERSION}/${filename}"
     TEMP_DIR=$(mktemp -d)
@@ -282,18 +420,11 @@ install_binary() {
     (
         cd "$TEMP_DIR"
 
-        if [ "$OS" = "windows" ]; then
-            unzip -q "$tmp_file"
-        else
-            tar -xzf "$tmp_file"
-        fi
+        tar -xzf "$tmp_file"
     )
 
     # Find the binary
     local binary_path="${TEMP_DIR}/${BINARY_NAME}"
-    if [ "$OS" = "windows" ]; then
-        binary_path="${binary_path}.exe"
-    fi
 
     if [ ! -f "$binary_path" ]; then
         print_error "Binary not found in archive"
@@ -327,10 +458,6 @@ install_desktop() {
         darwin)
             # macOS: architecture-specific builds (arm64 or amd64)
             filename="walgo-desktop_${VERSION}_darwin_${ARCH}.tar.gz"
-            ;;
-        windows)
-            # Windows: architecture-specific builds (arm64 or amd64)
-            filename="walgo-desktop_${VERSION}_windows_${ARCH}.zip"
             ;;
         linux)
             # Linux: only amd64 is supported for desktop app
@@ -371,19 +498,7 @@ install_desktop() {
         cd "$tmp_dir"
 
         # Extract based on file format
-        case "$filename" in
-            *.zip)
-                if command -v unzip >/dev/null 2>&1; then
-                    unzip -q "$tmp_file"
-                else
-                    print_warning "unzip not found. Cannot extract desktop app."
-                    exit 1
-                fi
-                ;;
-            *.tar.gz)
-                tar -xzf "$tmp_file"
-                ;;
-        esac
+        tar -xzf "$tmp_file"
     )
 
     # Check if extraction succeeded
@@ -396,9 +511,6 @@ install_desktop() {
     case "$OS" in
         darwin)
             install_desktop_macos "$tmp_dir"
-            ;;
-        windows)
-            install_desktop_windows "$tmp_dir"
             ;;
         linux)
             install_desktop_linux "$tmp_dir"
@@ -455,34 +567,6 @@ install_desktop_macos() {
     echo "  2. Or go to System Settings → Privacy & Security → Open Anyway"
     echo ""
     print_info "Run with: walgo desktop"
-}
-
-# Install desktop app on Windows
-install_desktop_windows() {
-    local tmp_dir="$1"
-
-    # Look for .exe file
-    local exe_file=$(find "$tmp_dir" -maxdepth 2 -name "*.exe" -type f | head -n1)
-
-    if [ -z "$exe_file" ]; then
-        print_warning "Desktop executable not found in archive. Skipping desktop installation."
-        return
-    fi
-
-    local install_dir="${LOCALAPPDATA}/Programs/Walgo"
-
-    # Create directory
-    mkdir -p "$install_dir"
-
-    # Copy executable
-    cp "$exe_file" "$install_dir/Walgo.exe"
-
-    if [ -f "$install_dir/Walgo.exe" ]; then
-        print_success "Walgo Desktop installed to $install_dir"
-        print_info "Run with: walgo desktop"
-    else
-        print_warning "Failed to copy desktop app"
-    fi
 }
 
 # Install desktop app on Linux
@@ -562,13 +646,6 @@ install_hugo_direct() {
         arm64) hugo_arch="arm64" ;;
     esac
 
-    local hugo_os=""
-    case "$OS" in
-        darwin) hugo_os="darwin" ;;
-        linux) hugo_os="linux" ;;
-        windows) hugo_os="windows" ;;
-    esac
-
     local hugo_filename=""
     local use_pkg=false
 
@@ -576,8 +653,6 @@ install_hugo_direct() {
     if [ "$OS" = "darwin" ]; then
         hugo_filename="hugo_extended_${hugo_version}_darwin-universal.pkg"
         use_pkg=true
-    elif [ "$OS" = "windows" ]; then
-        hugo_filename="hugo_extended_${hugo_version}_windows-${hugo_arch}.zip"
     else
         hugo_filename="hugo_extended_${hugo_version}_linux-${hugo_arch}.tar.gz"
     fi
@@ -617,22 +692,14 @@ install_hugo_direct() {
         return 0
     fi
 
-    # Extract archive for Linux/Windows
+    # Extract archive for Linux
     print_info "Extracting Hugo..."
     (
         cd "$tmp_dir"
-
-        if [ "$OS" = "windows" ]; then
-            unzip -q "$tmp_file"
-        else
-            tar -xzf "$tmp_file"
-        fi
+        tar -xzf "$tmp_file"
     )
 
     local hugo_binary="${tmp_dir}/hugo"
-    if [ "$OS" = "windows" ]; then
-        hugo_binary="${tmp_dir}/hugo.exe"
-    fi
 
     if [ ! -f "$hugo_binary" ]; then
         print_error "Hugo binary not found in archive"
@@ -673,102 +740,13 @@ check_dependencies() {
         print_info "Walgo works best with these tools installed."
         echo ""
 
-        # Offer to install Hugo
         if [[ " ${missing_deps[@]} " =~ " hugo " ]]; then
-            case "$OS" in
-                darwin)
-                    if command -v brew >/dev/null 2>&1; then
-                        print_info "Homebrew detected. Install Hugo? [y/N]"
-                        if [ -t 0 ]; then
-                            read -r response
-                        else
-                            read -r response < /dev/tty 2>/dev/null || response="n"
-                        fi
-                        if [[ "$response" =~ ^[Yy]$ ]]; then
-                            print_info "Installing Hugo via Homebrew..."
-                            brew install hugo
-                            if command -v hugo >/dev/null 2>&1; then
-                                print_success "Hugo installed successfully"
-                            fi
-                        fi
-                    else
-                        print_warning "Homebrew not found"
-                        print_info "Would you like to:"
-                        echo "  1) Install Hugo directly (recommended)"
-                        echo "  2) Install Homebrew first, then Hugo"
-                        echo "  3) Skip Hugo installation"
-                        if [ -t 0 ]; then
-                            read -r -p "Choose option [1-3]: " choice
-                        else
-                            read -r choice < /dev/tty 2>/dev/null || choice="1"
-                        fi
-
-                        case "$choice" in
-                            1)
-                                install_hugo_direct
-                                ;;
-                            2)
-                                print_info "Installing Homebrew..."
-                                /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"
-                                if command -v brew >/dev/null 2>&1; then
-                                    print_success "Homebrew installed"
-                                    print_info "Installing Hugo..."
-                                    brew install hugo
-                                fi
-                                ;;
-                            *)
-                                print_info "Skipping Hugo installation"
-                                echo "  You can install it later with: brew install hugo"
-                                echo "  Or download from: https://gohugo.io/installation/"
-                                ;;
-                        esac
-                    fi
-                    ;;
-                linux)
-                    print_info "Install Hugo? [y/N]"
-                    if [ -t 0 ]; then
-                        read -r response
-                    else
-                        read -r response < /dev/tty 2>/dev/null || response="n"
-                    fi
-                    if [[ "$response" =~ ^[Yy]$ ]]; then
-                        if command -v apt-get >/dev/null 2>&1; then
-                            print_info "Installing Hugo via apt..."
-                            sudo apt-get update && sudo apt-get install -y hugo
-                        elif command -v dnf >/dev/null 2>&1; then
-                            print_info "Installing Hugo via dnf..."
-                            sudo dnf install -y hugo
-                        elif command -v pacman >/dev/null 2>&1; then
-                            print_info "Installing Hugo via pacman..."
-                            sudo pacman -S hugo
-                        else
-                            print_info "Package manager not detected. Installing Hugo directly..."
-                            install_hugo_direct
-                        fi
-                    else
-                        echo "  # Ubuntu/Debian:"
-                        echo "    sudo apt install hugo"
-                        echo ""
-                        echo "  # Or download from: https://gohugo.io/installation/"
-                    fi
-                    ;;
-                windows)
-                    if command -v choco >/dev/null 2>&1; then
-                        print_info "Install Hugo via Chocolatey? [y/N]"
-                        if [ -t 0 ]; then
-                            read -r response
-                        else
-                            read -r response < /dev/tty 2>/dev/null || response="n"
-                        fi
-                        if [[ "$response" =~ ^[Yy]$ ]]; then
-                            choco install hugo-extended -y
-                        fi
-                    else
-                        print_info "Installing Hugo directly..."
-                        install_hugo_direct
-                    fi
-                    ;;
-            esac
+            print_info "Installing Hugo directly from GitHub releases..."
+            if install_hugo_direct; then
+                print_success "Hugo installed successfully"
+            else
+                print_warning "Failed to install Hugo automatically. Install manually from https://gohugo.io/installation/"
+            fi
         fi
 
         echo ""
@@ -782,90 +760,12 @@ check_dependencies() {
 add_path_to_profile() {
     local path_to_add="$HOME/.local/bin"
     local path_line='export PATH="$HOME/.local/bin:$PATH"'
-
-    # Detect current shell
-    local current_shell=""
-    if [ -n "$ZSH_VERSION" ]; then
-        current_shell="zsh"
-    elif [ -n "$BASH_VERSION" ]; then
-        current_shell="bash"
-    elif [ -n "$FISH_VERSION" ]; then
-        current_shell="fish"
-    else
-        # Fallback to $SHELL variable
-        current_shell=$(basename "$SHELL" 2>/dev/null || echo "unknown")
-    fi
-
-    print_info "Detected shell: $current_shell"
-
-    # Determine all profile files to check/update based on OS and shell
     local profiles_to_check=()
-    local fish_config="$HOME/.config/fish/config.fish"
 
-    if [ "$OS" = "darwin" ]; then
-        # macOS - zsh is default since Catalina, but bash still common
-        case "$current_shell" in
-            zsh)
-                # Login shells read .zprofile, interactive read .zshrc
-                # Add to both to cover all cases
-                profiles_to_check=(
-                    "$HOME/.zprofile"
-                    "$HOME/.zshrc"
-                )
-                ;;
-            bash)
-                # Login shells read .bash_profile or .profile
-                # Interactive read .bashrc
-                profiles_to_check=(
-                    "$HOME/.bash_profile"
-                    "$HOME/.bashrc"
-                    "$HOME/.profile"
-                )
-                ;;
-            fish)
-                profiles_to_check=("$fish_config")
-                ;;
-            *)
-                # Unknown shell - try common files
-                profiles_to_check=(
-                    "$HOME/.profile"
-                    "$HOME/.zprofile"
-                    "$HOME/.bash_profile"
-                )
-                ;;
-        esac
+    if [ ${#SHELL_PROFILE_FILES[@]} -gt 0 ]; then
+        profiles_to_check=("${SHELL_PROFILE_FILES[@]}")
     else
-        # Linux/Unix
-        case "$current_shell" in
-            zsh)
-                profiles_to_check=(
-                    "$HOME/.zshrc"
-                    "$HOME/.zprofile"
-                )
-                ;;
-            bash)
-                profiles_to_check=(
-                    "$HOME/.bashrc"
-                    "$HOME/.bash_profile"
-                    "$HOME/.profile"
-                )
-                ;;
-            fish)
-                profiles_to_check=("$fish_config")
-                ;;
-            ksh|sh)
-                profiles_to_check=(
-                    "$HOME/.profile"
-                )
-                ;;
-            *)
-                # Unknown shell - try common files
-                profiles_to_check=(
-                    "$HOME/.profile"
-                    "$HOME/.bashrc"
-                )
-                ;;
-        esac
+        profiles_to_check=("$HOME/.profile")
     fi
 
     # Function to check if PATH is already configured in a file
@@ -879,27 +779,26 @@ add_path_to_profile() {
         local file="$1"
         local dir=$(dirname "$file")
 
+        if [ -z "$file" ]; then
+            return 1
+        fi
+
         # Create directory if needed (for fish config)
         if [ ! -d "$dir" ]; then
             mkdir -p "$dir" 2>/dev/null || return 1
         fi
 
-        # Check if already configured
         if path_already_configured "$file"; then
-            print_info "PATH already configured in $(basename $file)"
             return 0
         fi
 
-        # Add PATH based on file type
         if [[ "$file" == *"fish"* ]]; then
-            # Fish shell uses different syntax
             {
                 echo ""
                 echo "# Added by Walgo installer - Sui/Walrus tools"
                 echo "fish_add_path -p $path_to_add"
             } >> "$file"
         else
-            # POSIX-compatible shells (bash, zsh, sh, ksh)
             {
                 echo ""
                 echo "# Added by Walgo installer - Sui/Walrus tools"
@@ -908,53 +807,47 @@ add_path_to_profile() {
         fi
 
         print_success "Added ~/.local/bin to PATH in $(basename $file)"
+        PATH_UPDATED_FILES+=("$file")
+        if [ -z "$PATH_PRIMARY_PROFILE" ]; then
+            PATH_PRIMARY_PROFILE="$file"
+        fi
+        NEEDS_SHELL_RELOAD=true
         return 0
     }
 
-    # Try to add PATH to appropriate profile files
     local added_count=0
-    local primary_profile=""
 
     for profile in "${profiles_to_check[@]}"; do
-        # Skip if file doesn't exist and we've already added to one file
-        if [ ! -f "$profile" ] && [ $added_count -gt 0 ]; then
+        if [ -z "$profile" ]; then
             continue
         fi
 
-        # If file exists, update it
         if [ -f "$profile" ]; then
             if add_to_file "$profile"; then
                 added_count=$((added_count + 1))
-                [ -z "$primary_profile" ] && primary_profile="$profile"
             fi
         else
-            # Create the first file in the list if nothing exists
             if [ $added_count -eq 0 ]; then
                 if add_to_file "$profile"; then
                     added_count=$((added_count + 1))
-                    primary_profile="$profile"
                 fi
             fi
         fi
     done
 
-    # Fallback: if nothing was added, use .profile
     if [ $added_count -eq 0 ]; then
-        print_warning "Could not detect shell profile, using ~/.profile"
-        add_to_file "$HOME/.profile"
-        primary_profile="$HOME/.profile"
+        local fallback="$HOME/.profile"
+        if add_to_file "$fallback"; then
+            PATH_PRIMARY_PROFILE="$fallback"
+            added_count=1
+        fi
     fi
 
-    # Show instructions based on what was added
-    echo ""
-    print_info "To activate PATH changes, choose ONE of these:"
-    echo ""
-    echo "  1. Restart your terminal (recommended)"
-    echo "  2. Run: exec \$SHELL"
-    if [ -n "$primary_profile" ]; then
-        echo "  3. Run: source $primary_profile"
+    if [ -z "$PATH_PRIMARY_PROFILE" ] && [ ${#profiles_to_check[@]} -gt 0 ]; then
+        PATH_PRIMARY_PROFILE="${profiles_to_check[0]}"
     fi
-    echo ""
+
+    return 0
 }
 
 # Install Walrus dependencies via suiup
@@ -1165,6 +1058,74 @@ install_walrus_dependencies() {
     echo ""
 }
 
+show_shell_guidance() {
+    local shell_label="$DETECTED_SHELL"
+    local shell_path="$DETECTED_SHELL_PATH"
+    local profile_hint=""
+
+    if [ -n "$PATH_PRIMARY_PROFILE" ]; then
+        profile_hint=$(tilde_path "$PATH_PRIMARY_PROFILE")
+    fi
+
+    echo ""
+    if [ -n "$shell_path" ]; then
+        print_info "Detected default shell: $shell_label ($shell_path)"
+    else
+        print_info "Detected default shell: $shell_label"
+    fi
+
+    if [ ${#PATH_UPDATED_FILES[@]} -gt 0 ]; then
+        print_info "Updated PATH entries were written to:"
+        for file in "${PATH_UPDATED_FILES[@]}"; do
+            echo "  - $(tilde_path "$file")"
+        done
+    else
+        print_info "Existing shell configuration already included ~/.local/bin"
+    fi
+
+    echo ""
+    if [ "$NEEDS_SHELL_RELOAD" = true ]; then
+        print_warning "Reload your shell to activate the new PATH right away:"
+    else
+        print_info "If commands are unavailable, reload your shell using one of these:"
+    fi
+
+    case "$shell_label" in
+        zsh)
+            echo "     exec zsh"
+            echo "     source ~/.zprofile && source ~/.zshrc"
+            ;;
+        bash)
+            echo "     exec bash"
+            echo "     source ${profile_hint:-~/.bash_profile}"
+            echo "     source ~/.bashrc"
+            ;;
+        fish)
+            echo "     exec fish"
+            echo "     source ~/.config/fish/config.fish"
+            ;;
+        tcsh|csh)
+            echo "     exec $shell_label"
+            echo "     source ~/.tcshrc && source ~/.cshrc"
+            ;;
+        ksh)
+            echo "     exec ksh"
+            echo "     source ~/.kshrc"
+            ;;
+        *)
+            echo "     exec \$SHELL"
+            if [ -n "$profile_hint" ]; then
+                echo "     source $profile_hint"
+            else
+                echo "     source ~/.profile"
+            fi
+            ;;
+    esac
+
+    echo "     open a new terminal window"
+    echo ""
+}
+
 # Post-install instructions
 show_next_steps() {
     echo ""
@@ -1172,19 +1133,6 @@ show_next_steps() {
     print_success "Walgo installation complete!"
     echo "═══════════════════════════════════════════════════════════"
     echo ""
-
-    # Determine shell profile for restart instructions
-    local shell_profile=""
-    if [ -n "$ZSH_VERSION" ] || [ "$SHELL" = "/bin/zsh" ] || [ "$SHELL" = "/usr/bin/zsh" ]; then
-        shell_profile="~/.zshrc"
-    elif [ -n "$BASH_VERSION" ] || [ "$SHELL" = "/bin/bash" ] || [ "$SHELL" = "/usr/bin/bash" ]; then
-        shell_profile="~/.bashrc"
-        if [ "$OS" = "darwin" ] && [ -f "$HOME/.bash_profile" ]; then
-            shell_profile="~/.bash_profile"
-        fi
-    else
-        shell_profile="~/.profile"
-    fi
 
     if [ "$USE_COLORS" = true ]; then
         echo -e "${YELLOW}╔═══════════════════════════════════════════════════════════╗${NC}"
@@ -1195,27 +1143,9 @@ show_next_steps() {
         echo "║         IMPORTANT: RESTART YOUR TERMINAL NOW             ║"
         echo "╚═══════════════════════════════════════════════════════════╝"
     fi
-    echo ""
-    print_warning "To use sui, walrus, and site-builder commands, you MUST:"
-    echo ""
-    echo "  Option 1 (Recommended):"
-    if [ "$USE_COLORS" = true ]; then
-        echo -e "     ${GREEN}exec \$SHELL${NC}            (restart current shell)"
-    else
-        echo "     exec \$SHELL            (restart current shell)"
-    fi
-    echo ""
-    echo "  Option 2:"
-    if [ "$USE_COLORS" = true ]; then
-        echo -e "     ${GREEN}source $shell_profile${NC}   (reload shell config)"
-    else
-        echo "     source $shell_profile   (reload shell config)"
-    fi
-    echo ""
-    echo "  Option 3:"
-    echo "     Open a new terminal window"
-    echo ""
-    print_warning "Until you restart, 'sui' command will show: command not found"
+
+    show_shell_guidance
+    print_warning "Until you restart or reload, 'sui' will show: command not found"
     echo ""
     echo "═══════════════════════════════════════════════════════════"
     echo ""
@@ -1284,9 +1214,6 @@ show_next_steps() {
         darwin)
             echo "       /Applications/Walgo.app"
             ;;
-        windows)
-            echo "       %LOCALAPPDATA%\\Programs\\Walgo\\Walgo.exe"
-            ;;
         linux)
             echo "       ~/.local/bin/Walgo"
             ;;
@@ -1309,6 +1236,7 @@ main() {
     echo ""
 
     detect_platform
+    detect_user_shell
     get_latest_version
     install_binary
     install_desktop

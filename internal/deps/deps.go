@@ -3,12 +3,245 @@
 package deps
 
 import (
+	"archive/zip"
+	"encoding/json"
 	"fmt"
+	"io"
+	"net/http"
 	"os"
 	"os/exec"
 	"path/filepath"
+	"runtime"
 	"strings"
+	"time"
 )
+
+const (
+	suiupRepo     = "MystenLabs/suiup"
+	releaseAPIURL = "https://api.github.com/repos/%s/releases/latest"
+)
+
+type githubRelease struct {
+	TagName string `json:"tag_name"`
+}
+
+func execCandidates(name string) []string {
+	candidates := []string{name}
+	if runtime.GOOS == "windows" && filepath.Ext(name) == "" {
+		candidates = append([]string{name + ".exe"}, candidates...)
+	}
+	return candidates
+}
+
+func samePath(a, b string) bool {
+	cleanA := filepath.Clean(a)
+	cleanB := filepath.Clean(b)
+	if runtime.GOOS == "windows" {
+		return strings.EqualFold(cleanA, cleanB)
+	}
+	return cleanA == cleanB
+}
+
+func pathListContains(list, dir string) bool {
+	for _, part := range filepath.SplitList(list) {
+		if samePath(part, dir) {
+			return true
+		}
+	}
+	return false
+}
+
+func ensureLocalBinOnPath(localBin string) {
+	if localBin == "" {
+		return
+	}
+	current := os.Getenv("PATH")
+	if pathListContains(current, localBin) {
+		return
+	}
+	if current == "" {
+		_ = os.Setenv("PATH", localBin)
+		return
+	}
+	updated := fmt.Sprintf("%s%c%s", localBin, os.PathListSeparator, current)
+	_ = os.Setenv("PATH", updated)
+}
+
+func getLocalBinDir() (string, error) {
+	home, err := os.UserHomeDir()
+	if err != nil {
+		return "", fmt.Errorf("failed to get home directory: %w", err)
+	}
+	return filepath.Join(home, ".local", "bin"), nil
+}
+
+func fetchLatestTag(repo string) (string, error) {
+	client := &http.Client{Timeout: 30 * time.Second}
+	url := fmt.Sprintf(releaseAPIURL, repo)
+	req, err := http.NewRequest(http.MethodGet, url, nil)
+	if err != nil {
+		return "", err
+	}
+	req.Header.Set("User-Agent", "walgo-installer")
+	resp, err := client.Do(req)
+	if err != nil {
+		return "", err
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		return "", fmt.Errorf("failed to query %s: %s", repo, resp.Status)
+	}
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return "", err
+	}
+	var release githubRelease
+	if err := json.Unmarshal(body, &release); err != nil {
+		return "", err
+	}
+	if release.TagName == "" {
+		return "", fmt.Errorf("no releases found for %s", repo)
+	}
+	return release.TagName, nil
+}
+
+func downloadToFile(url, destination string) error {
+	client := &http.Client{Timeout: 2 * time.Minute}
+	req, err := http.NewRequest(http.MethodGet, url, nil)
+	if err != nil {
+		return err
+	}
+	req.Header.Set("User-Agent", "walgo-installer")
+	resp, err := client.Do(req)
+	if err != nil {
+		return err
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		return fmt.Errorf("failed to download %s: %s", url, resp.Status)
+	}
+	file, err := os.Create(destination)
+	if err != nil {
+		return err
+	}
+	defer file.Close()
+	if _, err := io.Copy(file, resp.Body); err != nil {
+		return err
+	}
+	return nil
+}
+
+func installSuiupWindows() error {
+	localBin, err := getLocalBinDir()
+	if err != nil {
+		return err
+	}
+	if err := os.MkdirAll(localBin, 0755); err != nil {
+		return fmt.Errorf("failed to create %s: %w", localBin, err)
+	}
+	ensureLocalBinOnPath(localBin)
+
+	var arch string
+	switch runtime.GOARCH {
+	case "amd64":
+		arch = "amd64"
+	case "arm64":
+		arch = "arm64"
+	default:
+		return fmt.Errorf("unsupported architecture for suiup: %s", runtime.GOARCH)
+	}
+
+	tag, err := fetchLatestTag(suiupRepo)
+	if err != nil {
+		return fmt.Errorf("failed to fetch suiup release: %w", err)
+	}
+
+	filename := fmt.Sprintf("suiup-windows-%s.zip", arch)
+	url := fmt.Sprintf("https://github.com/%s/releases/download/%s/%s", suiupRepo, tag, filename)
+	tmpFile, err := os.CreateTemp("", "suiup-*.zip")
+	if err != nil {
+		return err
+	}
+	tmpName := tmpFile.Name()
+	tmpFile.Close()
+	defer os.Remove(tmpName)
+
+	if err := downloadToFile(url, tmpName); err != nil {
+		return err
+	}
+
+	r, err := zip.OpenReader(tmpName)
+	if err != nil {
+		return err
+	}
+	defer r.Close()
+
+	var extracted bool
+	for _, f := range r.File {
+		if strings.EqualFold(filepath.Base(f.Name), "suiup.exe") {
+			rc, err := f.Open()
+			if err != nil {
+				return err
+			}
+			dest := filepath.Join(localBin, "suiup.exe")
+			out, err := os.Create(dest)
+			if err != nil {
+				rc.Close()
+				return err
+			}
+			if _, err := io.Copy(out, rc); err != nil {
+				out.Close()
+				rc.Close()
+				return err
+			}
+			out.Close()
+			rc.Close()
+			extracted = true
+			break
+		}
+	}
+
+	if !extracted {
+		return fmt.Errorf("suiup.exe not found in downloaded archive")
+	}
+
+	return nil
+}
+
+func installSuiupPosix() error {
+	localBin, err := getLocalBinDir()
+	if err != nil {
+		return err
+	}
+	if err := os.MkdirAll(localBin, 0755); err != nil {
+		return fmt.Errorf("failed to create ~/.local/bin: %w", err)
+	}
+	ensureLocalBinOnPath(localBin)
+
+	installScript := "https://raw.githubusercontent.com/Mystenlabs/suiup/main/install.sh"
+
+	var cmd *exec.Cmd
+	if _, err := exec.LookPath("curl"); err == nil {
+		cmd = exec.Command("sh", "-c", fmt.Sprintf("curl -sSfL %s | sh", installScript))
+	} else if _, err := exec.LookPath("wget"); err == nil {
+		cmd = exec.Command("sh", "-c", fmt.Sprintf("wget -qO- %s | sh", installScript))
+	} else {
+		return fmt.Errorf("neither curl nor wget found. Please install one of them")
+	}
+
+	home, err := os.UserHomeDir()
+	if err != nil {
+		return fmt.Errorf("failed to get home directory: %w", err)
+	}
+	cmd.Env = append(os.Environ(), fmt.Sprintf("HOME=%s", home))
+
+	output, err := cmd.CombinedOutput()
+	if err != nil {
+		return fmt.Errorf("suiup installation failed: %w\nOutput: %s", err, string(output))
+	}
+
+	return nil
+}
 
 // Tool represents a required CLI tool
 type Tool struct {
@@ -94,22 +327,23 @@ func AllToolsInstalled() bool {
 
 // LookPath finds an executable in PATH or ~/.local/bin (where suiup installs)
 func LookPath(name string) (string, error) {
-	// First try standard PATH
-	if path, err := exec.LookPath(name); err == nil {
-		return path, nil
+	for _, candidate := range execCandidates(name) {
+		if path, err := exec.LookPath(candidate); err == nil {
+			return path, nil
+		}
 	}
 
-	// Fallback to ~/.local/bin (where suiup installs binaries)
-	home, err := os.UserHomeDir()
+	localBin, err := getLocalBinDir()
 	if err != nil {
 		return "", fmt.Errorf("%s not found in PATH", name)
 	}
 
-	localBinPath := filepath.Join(home, ".local", "bin", name)
-	if info, err := os.Stat(localBinPath); err == nil && !info.IsDir() {
-		// Check if executable
-		if info.Mode()&0111 != 0 {
-			return localBinPath, nil
+	for _, candidate := range execCandidates(name) {
+		localBinPath := filepath.Join(localBin, candidate)
+		if info, err := os.Stat(localBinPath); err == nil && !info.IsDir() {
+			if runtime.GOOS == "windows" || info.Mode()&0111 != 0 {
+				return localBinPath, nil
+			}
 		}
 	}
 
@@ -197,48 +431,22 @@ func InstallSuiup() error {
 		return nil
 	}
 
-	home, err := os.UserHomeDir()
+	var err error
+	switch runtime.GOOS {
+	case "windows":
+		err = installSuiupWindows()
+	default:
+		err = installSuiupPosix()
+	}
 	if err != nil {
-		return fmt.Errorf("failed to get home directory: %w", err)
+		return err
 	}
 
-	localBin := filepath.Join(home, ".local", "bin")
-
-	// Create ~/.local/bin if it doesn't exist
-	if err := os.MkdirAll(localBin, 0755); err != nil {
-		return fmt.Errorf("failed to create ~/.local/bin: %w", err)
+	localBin, binErr := getLocalBinDir()
+	if binErr == nil {
+		ensureLocalBinOnPath(localBin)
 	}
 
-	// Download and execute suiup installer
-	installScript := "https://raw.githubusercontent.com/Mystenlabs/suiup/main/install.sh"
-
-	// Use curl or wget to download and execute
-	var cmd *exec.Cmd
-	if _, err := exec.LookPath("curl"); err == nil {
-		cmd = exec.Command("sh", "-c", fmt.Sprintf("curl -sSfL %s | sh", installScript))
-	} else if _, err := exec.LookPath("wget"); err == nil {
-		cmd = exec.Command("sh", "-c", fmt.Sprintf("wget -qO- %s | sh", installScript))
-	} else {
-		return fmt.Errorf("neither curl nor wget found. Please install one of them")
-	}
-
-	// Set HOME environment variable and add ~/.local/bin to PATH
-	currentPath := os.Getenv("PATH")
-	newPath := fmt.Sprintf("%s:%s", localBin, currentPath)
-	cmd.Env = append(os.Environ(),
-		fmt.Sprintf("HOME=%s", home),
-		fmt.Sprintf("PATH=%s", newPath),
-	)
-
-	output, err := cmd.CombinedOutput()
-	if err != nil {
-		return fmt.Errorf("suiup installation failed: %w\nOutput: %s", err, string(output))
-	}
-
-	// Update PATH for current process
-	os.Setenv("PATH", newPath)
-
-	// Verify installation
 	if !SuiupInstalled() {
 		return fmt.Errorf("suiup installation completed but binary not found in PATH")
 	}
@@ -298,18 +506,17 @@ func InstallTool(tool, network string) error {
 		}
 	}
 
-	// Ensure PATH includes ~/.local/bin
-	home, _ := os.UserHomeDir()
-	localBin := filepath.Join(home, ".local", "bin")
-	currentPath := os.Getenv("PATH")
-	envVars := os.Environ()
-	if !strings.Contains(currentPath, localBin) {
-		envVars = append(envVars, fmt.Sprintf("PATH=%s:%s", localBin, currentPath))
+	localBin, err := getLocalBinDir()
+	if err != nil {
+		return err
 	}
+	if err := os.MkdirAll(localBin, 0755); err != nil {
+		return fmt.Errorf("failed to create %s: %w", localBin, err)
+	}
+	ensureLocalBinOnPath(localBin)
 
 	// Step 1: Install the tool
 	installCmd := exec.Command(suiupPath, "install", fmt.Sprintf("%s@%s", tool, version))
-	installCmd.Env = envVars
 
 	output, err := installCmd.CombinedOutput()
 	if err != nil {
@@ -319,7 +526,6 @@ func InstallTool(tool, network string) error {
 	// Step 2: Set as default (creates symlink in ~/.local/bin/)
 	// This is critical - without this, the binary won't be accessible
 	defaultCmd := exec.Command(suiupPath, "default", "set", fmt.Sprintf("%s@%s", tool, version))
-	defaultCmd.Env = envVars
 
 	defaultOutput, err := defaultCmd.CombinedOutput()
 	if err != nil {
@@ -328,15 +534,27 @@ func InstallTool(tool, network string) error {
 	}
 
 	// Step 3: Verify the binary exists
-	toolPath := filepath.Join(localBin, tool)
-	if _, err := os.Stat(toolPath); os.IsNotExist(err) {
+	toolPath := ""
+	for _, candidate := range execCandidates(tool) {
+		candidatePath := filepath.Join(localBin, candidate)
+		if _, err := os.Stat(candidatePath); err == nil {
+			toolPath = candidatePath
+			break
+		}
+	}
+	if toolPath == "" {
 		// Retry default set
 		retryCmd := exec.Command(suiupPath, "default", "set", fmt.Sprintf("%s@%s", tool, version))
-		retryCmd.Env = envVars
 		_, _ = retryCmd.CombinedOutput() // Ignore error
 
-		// Check again
-		if _, err := os.Stat(toolPath); os.IsNotExist(err) {
+		for _, candidate := range execCandidates(tool) {
+			candidatePath := filepath.Join(localBin, candidate)
+			if _, err := os.Stat(candidatePath); err == nil {
+				toolPath = candidatePath
+				break
+			}
+		}
+		if toolPath == "" {
 			return fmt.Errorf("%s binary not found in %s after installation", tool, localBin)
 		}
 	}
