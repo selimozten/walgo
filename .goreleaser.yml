@@ -41,6 +41,7 @@ release:
   github:
     owner: selimozten
     name: walgo
+  mode: keep-existing
   draft: false
   prerelease: auto
   name_template: "v{{.Version}}"

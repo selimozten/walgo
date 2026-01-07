@@ -333,7 +333,11 @@ install_desktop() {
             filename="walgo-desktop_${VERSION}_windows_${ARCH}.zip"
             ;;
         linux)
-            # Linux: architecture-specific builds (arm64 or amd64)
+            # Linux: only amd64 is supported for desktop app
+            if [ "$ARCH" = "arm64" ]; then
+                print_warning "Desktop app not available for Linux ARM64. Only CLI is supported."
+                return
+            fi
             filename="walgo-desktop_${VERSION}_linux_${ARCH}.tar.gz"
             ;;
         *)
