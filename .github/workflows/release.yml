@@ -166,7 +166,49 @@ jobs:
         with:
           files: desktop/build/bin/*.zip
 
-  # Job 5: Build Desktop for Linux (AMD64)
+  # Job 5: Build Desktop for Windows (ARM64)
+  build-desktop-windows-arm64:
+    name: Build Desktop (Windows ARM64)
+    runs-on: windows-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.23'
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Install Wails
+        run: go install github.com/wailsapp/wails/v2/cmd/wails@latest
+
+      - name: Build Desktop App
+        working-directory: ./desktop
+        run: |
+          wails build -platform windows/arm64 -clean
+
+      - name: Package App
+        working-directory: ./desktop/build/bin
+        shell: powershell
+        run: |
+          # Get version from tag (remove 'v' prefix)
+          $VERSION = "${env:GITHUB_REF}" -replace "refs/tags/v", ""
+
+          # Create zip package using PowerShell
+          Compress-Archive -Path Walgo.exe -DestinationPath "walgo-desktop_${VERSION}_windows_arm64.zip" -CompressionLevel Optimal
+
+      - name: Upload Release Asset
+        uses: softprops/action-gh-release@v1
+        if: startsWith(github.ref, 'refs/tags/')
+        with:
+          files: desktop/build/bin/*.zip
+
+  # Job 6: Build Desktop for Linux (AMD64)
   build-desktop-linux-amd64:
     name: Build Desktop (Linux AMD64)
     runs-on: ubuntu-22.04
@@ -204,6 +246,54 @@ jobs:
           VERSION=${GITHUB_REF#refs/tags/v}
 
           TAR_NAME="walgo-desktop_${VERSION}_linux_amd64.tar.gz"
+
+          echo "Packaging $TAR_NAME..."
+          tar -czf "$TAR_NAME" Walgo
+
+      - name: Upload Release Asset
+        uses: softprops/action-gh-release@v1
+        if: startsWith(github.ref, 'refs/tags/')
+        with:
+          files: desktop/build/bin/*.tar.gz
+
+  # Job 7: Build Desktop for Linux (ARM64)
+  build-desktop-linux-arm64:
+    name: Build Desktop (Linux ARM64)
+    runs-on: ubuntu-22.04
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.23'
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Install Linux dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libgtk-3-dev libwebkit2gtk-4.0-dev gcc-aarch64-linux-gnu
+
+      - name: Install Wails
+        run: go install github.com/wailsapp/wails/v2/cmd/wails@latest
+
+      - name: Build Desktop App
+        working-directory: ./desktop
+        run: |
+          wails build -platform linux/arm64 -clean
+
+      - name: Package App
+        working-directory: ./desktop/build/bin
+        run: |
+          # Get version from tag (remove 'v' prefix)
+          VERSION=${GITHUB_REF#refs/tags/v}
+
+          TAR_NAME="walgo-desktop_${VERSION}_linux_arm64.tar.gz"
 
           echo "Packaging $TAR_NAME..."
           tar -czf "$TAR_NAME" Walgo

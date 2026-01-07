@@ -28,8 +28,8 @@ type CheckResult struct {
 	Sui         *ToolVersion
 	Walrus      *ToolVersion
 	SiteBuilder *ToolVersion
-	// Hugo removed - users manage via package manager (brew/apt/choco)
-	HasUpdates bool
+	Hugo        *ToolVersion // Hugo version info (installed via package manager)
+	HasUpdates  bool
 }
 
 // GetCurrentVersion retrieves the currently installed version of a tool
@@ -107,7 +107,30 @@ func GetLatestSiteBuilderVersion() (string, error) {
 	return getLatestGitHubRelease("MystenLabs", "walrus-sites")
 }
 
-// Hugo version checking removed - users manage Hugo via package manager
+// GetLatestHugoVersion fetches the latest Hugo version from GitHub releases
+func GetLatestHugoVersion() (string, error) {
+	return getLatestGitHubRelease("gohugoio", "hugo")
+}
+
+// GetHugoVersion gets the current Hugo version and checks if it's Extended
+func GetHugoVersion() (currentVersion string, isExtended bool, err error) {
+	// Use deps package to check Hugo Extended
+	isInstalled, extended, version, checkErr := deps.CheckHugoExtended()
+	if checkErr != nil {
+		return "", false, checkErr
+	}
+	if !isInstalled {
+		return "", false, fmt.Errorf("hugo not installed")
+	}
+
+	// Parse version from output
+	parsedVersion := parseVersion(version)
+	if parsedVersion == "" {
+		parsedVersion = "unknown"
+	}
+
+	return parsedVersion, extended, nil
+}
 
 // getLatestGitHubRelease fetches the latest release version from GitHub
 func getLatestGitHubRelease(owner, repo string) (string, error) {
@@ -258,7 +281,36 @@ func CheckAllVersions() (*CheckResult, error) {
 		}
 	}
 
-	// Hugo version check removed - users manage Hugo via package manager
+	// Check Hugo (managed via package manager, so we don't auto-update)
+	if currentHugo, isExtended, err := GetHugoVersion(); err == nil {
+		latestHugo, err := GetLatestHugoVersion()
+		if err != nil {
+			latestHugo = "unknown"
+		}
+
+		// Note: We check for updates but don't set HasUpdates for Hugo
+		// since it's managed via package manager (brew/apt/choco), not suiup
+		updateRequired := false
+		if latestHugo != "unknown" && CompareVersions(latestHugo, currentHugo) > 0 {
+			updateRequired = true
+			// Don't set result.HasUpdates = true for Hugo (user manages via package manager)
+		}
+
+		// Add note to version if not Extended
+		versionNote := currentHugo
+		if !isExtended {
+			versionNote = currentHugo + " (standard - Extended recommended)"
+		} else {
+			versionNote = currentHugo + " extended"
+		}
+
+		result.Hugo = &ToolVersion{
+			Tool:           "hugo",
+			CurrentVersion: versionNote,
+			LatestVersion:  latestHugo,
+			UpdateRequired: updateRequired,
+		}
+	}
 
 	return result, nil
 }

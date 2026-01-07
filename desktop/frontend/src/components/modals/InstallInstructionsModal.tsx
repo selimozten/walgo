@@ -50,7 +50,7 @@ export const InstallInstructionsModal: React.FC<InstallInstructionsModalProps> =
         'Verify with: sui --version && walrus --version && site-builder --version',
       ],
     },
-    'Sui CLI': {
+    'sui': {
       name: 'Sui CLI',
       description: 'Sui blockchain command-line interface',
       releaseUrl: 'https://github.com/MystenLabs/sui/releases',
@@ -74,7 +74,7 @@ export const InstallInstructionsModal: React.FC<InstallInstructionsModalProps> =
         'You can switch networks with: suiup default set sui@mainnet',
       ],
     },
-    'Walrus CLI': {
+    'walrus': {
       name: 'Walrus CLI',
       description: 'Walrus decentralized storage command-line interface',
       releaseUrl: 'https://github.com/MystenLabs/walrus-docs/releases',
@@ -94,7 +94,7 @@ export const InstallInstructionsModal: React.FC<InstallInstructionsModalProps> =
         'You can switch networks with: suiup default set walrus@mainnet',
       ],
     },
-    'Site Builder': {
+    'site-builder': {
       name: 'Site Builder',
       description: 'Walrus site builder for deploying static sites',
       releaseUrl: 'https://github.com/MystenLabs/walrus-sites/releases',
@@ -109,6 +109,34 @@ export const InstallInstructionsModal: React.FC<InstallInstructionsModalProps> =
         'Requires suiup to be installed first',
         'Only mainnet version available (works for all networks)',
         'Verify with: site-builder --version',
+      ],
+    },
+    'hugo': {
+      name: 'Hugo Extended',
+      description: 'Static site generator (Extended version required)',
+      releaseUrl: 'https://github.com/gohugoio/hugo/releases',
+      commands: [
+        '# macOS (Homebrew)',
+        'brew install hugo',
+        '',
+        '# Linux (Snap)',
+        'snap install hugo',
+        '',
+        '# Linux (Debian/Ubuntu)',
+        'sudo apt-get install hugo',
+        '',
+        '# Windows (Chocolatey)',
+        'choco install hugo-extended',
+        '',
+        '# Or download directly from GitHub',
+        'https://github.com/gohugoio/hugo/releases',
+      ],
+      notes: [
+        'IMPORTANT: Install Hugo Extended, not standard Hugo',
+        'Extended version is required for SCSS/SASS support',
+        'Verify with: hugo version (should show "extended")',
+        'On macOS, brew install hugo automatically installs Extended',
+        'On Windows, use hugo-extended package, not hugo',
       ],
     },
   };

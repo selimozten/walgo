@@ -279,13 +279,15 @@ install_binary() {
 
     # Extract archive
     print_info "Extracting archive..."
-    cd "$TEMP_DIR"
+    (
+        cd "$TEMP_DIR"
 
-    if [ "$OS" = "windows" ]; then
-        unzip -q "$tmp_file"
-    else
-        tar -xzf "$tmp_file"
-    fi
+        if [ "$OS" = "windows" ]; then
+            unzip -q "$tmp_file"
+        else
+            tar -xzf "$tmp_file"
+        fi
+    )
 
     # Find the binary
     local binary_path="${TEMP_DIR}/${BINARY_NAME}"
@@ -319,18 +321,20 @@ install_binary() {
 install_desktop() {
     print_info "Installing Walgo Desktop..."
 
-    # Determine filename based on platform
+    # Determine filename based on platform and architecture
     local filename=""
     case "$OS" in
         darwin)
-            # Use architecture-specific builds (arm64 or amd64)
+            # macOS: architecture-specific builds (arm64 or amd64)
             filename="walgo-desktop_${VERSION}_darwin_${ARCH}.tar.gz"
             ;;
         windows)
-            filename="walgo-desktop_${VERSION}_windows_amd64.zip"
+            # Windows: architecture-specific builds (arm64 or amd64)
+            filename="walgo-desktop_${VERSION}_windows_${ARCH}.zip"
             ;;
         linux)
-            filename="walgo-desktop_${VERSION}_linux_amd64.tar.gz"
+            # Linux: architecture-specific builds (arm64 or amd64)
+            filename="walgo-desktop_${VERSION}_linux_${ARCH}.tar.gz"
             ;;
         *)
             print_warning "Desktop app not available for platform: $OS"
@@ -359,23 +363,30 @@ install_desktop() {
     fi
 
     print_info "Extracting..."
-    cd "$tmp_dir"
+    (
+        cd "$tmp_dir"
 
-    # Extract based on file format
-    case "$filename" in
-        *.zip)
-            if command -v unzip >/dev/null 2>&1; then
-                unzip -q "$tmp_file"
-            else
-                print_warning "unzip not found. Cannot extract desktop app."
-                rm -rf "$tmp_dir"
-                return
-            fi
-            ;;
-        *.tar.gz)
-            tar -xzf "$tmp_file"
-            ;;
-    esac
+        # Extract based on file format
+        case "$filename" in
+            *.zip)
+                if command -v unzip >/dev/null 2>&1; then
+                    unzip -q "$tmp_file"
+                else
+                    print_warning "unzip not found. Cannot extract desktop app."
+                    exit 1
+                fi
+                ;;
+            *.tar.gz)
+                tar -xzf "$tmp_file"
+                ;;
+        esac
+    )
+
+    # Check if extraction succeeded
+    if [ $? -ne 0 ]; then
+        rm -rf "$tmp_dir"
+        return
+    fi
 
     # Install based on platform
     case "$OS" in
@@ -604,17 +615,19 @@ install_hugo_direct() {
 
     # Extract archive for Linux/Windows
     print_info "Extracting Hugo..."
-    cd "$tmp_dir"
+    (
+        cd "$tmp_dir"
 
-    if [ "$OS" = "windows" ]; then
-        unzip -q "$tmp_file"
-    else
-        tar -xzf "$tmp_file"
-    fi
+        if [ "$OS" = "windows" ]; then
+            unzip -q "$tmp_file"
+        else
+            tar -xzf "$tmp_file"
+        fi
+    )
 
-    local hugo_binary="hugo"
+    local hugo_binary="${tmp_dir}/hugo"
     if [ "$OS" = "windows" ]; then
-        hugo_binary="hugo.exe"
+        hugo_binary="${tmp_dir}/hugo.exe"
     fi
 
     if [ ! -f "$hugo_binary" ]; then
@@ -761,39 +774,183 @@ check_dependencies() {
     fi
 }
 
-# Add PATH to shell profile
+# Add PATH to shell profile - Professional multi-shell/multi-OS support
 add_path_to_profile() {
+    local path_to_add="$HOME/.local/bin"
     local path_line='export PATH="$HOME/.local/bin:$PATH"'
-    local shell_profile=""
 
-    # Determine shell profile
-    if [ -n "$ZSH_VERSION" ] || [ "$SHELL" = "/bin/zsh" ] || [ "$SHELL" = "/usr/bin/zsh" ]; then
-        shell_profile="$HOME/.zshrc"
-    elif [ -n "$BASH_VERSION" ] || [ "$SHELL" = "/bin/bash" ] || [ "$SHELL" = "/usr/bin/bash" ]; then
-        shell_profile="$HOME/.bashrc"
-        # Also check for .bash_profile on macOS
-        if [ "$OS" = "darwin" ] && [ -f "$HOME/.bash_profile" ]; then
-            shell_profile="$HOME/.bash_profile"
-        fi
+    # Detect current shell
+    local current_shell=""
+    if [ -n "$ZSH_VERSION" ]; then
+        current_shell="zsh"
+    elif [ -n "$BASH_VERSION" ]; then
+        current_shell="bash"
+    elif [ -n "$FISH_VERSION" ]; then
+        current_shell="fish"
     else
-        # Fallback to .profile
-        shell_profile="$HOME/.profile"
+        # Fallback to $SHELL variable
+        current_shell=$(basename "$SHELL" 2>/dev/null || echo "unknown")
     fi
 
-    # Check if an UNCOMMENTED PATH line for .local/bin already exists
-    # Use grep -E to match uncommented export PATH lines containing .local/bin
-    if [ -f "$shell_profile" ] && grep -E '^[[:space:]]*export[[:space:]]+PATH=.*\.local/bin' "$shell_profile" >/dev/null 2>&1; then
-        print_info "PATH already configured in $shell_profile"
+    print_info "Detected shell: $current_shell"
+
+    # Determine all profile files to check/update based on OS and shell
+    local profiles_to_check=()
+    local fish_config="$HOME/.config/fish/config.fish"
+
+    if [ "$OS" = "darwin" ]; then
+        # macOS - zsh is default since Catalina, but bash still common
+        case "$current_shell" in
+            zsh)
+                # Login shells read .zprofile, interactive read .zshrc
+                # Add to both to cover all cases
+                profiles_to_check=(
+                    "$HOME/.zprofile"
+                    "$HOME/.zshrc"
+                )
+                ;;
+            bash)
+                # Login shells read .bash_profile or .profile
+                # Interactive read .bashrc
+                profiles_to_check=(
+                    "$HOME/.bash_profile"
+                    "$HOME/.bashrc"
+                    "$HOME/.profile"
+                )
+                ;;
+            fish)
+                profiles_to_check=("$fish_config")
+                ;;
+            *)
+                # Unknown shell - try common files
+                profiles_to_check=(
+                    "$HOME/.profile"
+                    "$HOME/.zprofile"
+                    "$HOME/.bash_profile"
+                )
+                ;;
+        esac
+    else
+        # Linux/Unix
+        case "$current_shell" in
+            zsh)
+                profiles_to_check=(
+                    "$HOME/.zshrc"
+                    "$HOME/.zprofile"
+                )
+                ;;
+            bash)
+                profiles_to_check=(
+                    "$HOME/.bashrc"
+                    "$HOME/.bash_profile"
+                    "$HOME/.profile"
+                )
+                ;;
+            fish)
+                profiles_to_check=("$fish_config")
+                ;;
+            ksh|sh)
+                profiles_to_check=(
+                    "$HOME/.profile"
+                )
+                ;;
+            *)
+                # Unknown shell - try common files
+                profiles_to_check=(
+                    "$HOME/.profile"
+                    "$HOME/.bashrc"
+                )
+                ;;
+        esac
+    fi
+
+    # Function to check if PATH is already configured in a file
+    path_already_configured() {
+        local file="$1"
+        [ -f "$file" ] && grep -qE "^\s*(export\s+)?PATH=.*\.local/bin|^\s*set\s+-gx\s+PATH.*\.local/bin|^\s*fish_add_path.*\.local/bin" "$file"
+    }
+
+    # Function to add PATH to a profile file
+    add_to_file() {
+        local file="$1"
+        local dir=$(dirname "$file")
+
+        # Create directory if needed (for fish config)
+        if [ ! -d "$dir" ]; then
+            mkdir -p "$dir" 2>/dev/null || return 1
+        fi
+
+        # Check if already configured
+        if path_already_configured "$file"; then
+            print_info "PATH already configured in $(basename $file)"
+            return 0
+        fi
+
+        # Add PATH based on file type
+        if [[ "$file" == *"fish"* ]]; then
+            # Fish shell uses different syntax
+            {
+                echo ""
+                echo "# Added by Walgo installer - Sui/Walrus tools"
+                echo "fish_add_path -p $path_to_add"
+            } >> "$file"
+        else
+            # POSIX-compatible shells (bash, zsh, sh, ksh)
+            {
+                echo ""
+                echo "# Added by Walgo installer - Sui/Walrus tools"
+                echo "$path_line"
+            } >> "$file"
+        fi
+
+        print_success "Added ~/.local/bin to PATH in $(basename $file)"
         return 0
+    }
+
+    # Try to add PATH to appropriate profile files
+    local added_count=0
+    local primary_profile=""
+
+    for profile in "${profiles_to_check[@]}"; do
+        # Skip if file doesn't exist and we've already added to one file
+        if [ ! -f "$profile" ] && [ $added_count -gt 0 ]; then
+            continue
+        fi
+
+        # If file exists, update it
+        if [ -f "$profile" ]; then
+            if add_to_file "$profile"; then
+                added_count=$((added_count + 1))
+                [ -z "$primary_profile" ] && primary_profile="$profile"
+            fi
+        else
+            # Create the first file in the list if nothing exists
+            if [ $added_count -eq 0 ]; then
+                if add_to_file "$profile"; then
+                    added_count=$((added_count + 1))
+                    primary_profile="$profile"
+                fi
+            fi
+        fi
+    done
+
+    # Fallback: if nothing was added, use .profile
+    if [ $added_count -eq 0 ]; then
+        print_warning "Could not detect shell profile, using ~/.profile"
+        add_to_file "$HOME/.profile"
+        primary_profile="$HOME/.profile"
     fi
 
-    # Add PATH to profile
-    echo "" >> "$shell_profile"
-    echo "# Added by Walgo installer - Sui/Walrus tools" >> "$shell_profile"
-    echo "$path_line" >> "$shell_profile"
-
-    print_success "Added ~/.local/bin to PATH in $shell_profile"
-    print_info "Run 'source $shell_profile' or restart your terminal to apply"
+    # Show instructions based on what was added
+    echo ""
+    print_info "To activate PATH changes, choose ONE of these:"
+    echo ""
+    echo "  1. Restart your terminal (recommended)"
+    echo "  2. Run: exec \$SHELL"
+    if [ -n "$primary_profile" ]; then
+        echo "  3. Run: source $primary_profile"
+    fi
+    echo ""
 }
 
 # Install Walrus dependencies via suiup
@@ -817,6 +974,8 @@ install_walrus_dependencies() {
     # Install suiup
     print_info "Installing suiup..."
     if ! command -v suiup >/dev/null 2>&1 && ! [ -f "$HOME/.local/bin/suiup" ]; then
+        # Ensure we're in a safe directory before running external installer
+        cd "$HOME" 2>/dev/null || cd /tmp
         curl -sSfL https://raw.githubusercontent.com/Mystenlabs/suiup/main/install.sh | sh
 
         # Add to PATH for current session
@@ -836,40 +995,13 @@ install_walrus_dependencies() {
         print_success "suiup already installed"
     fi
 
-    # Ask which network to configure for
+    # Automatically install both testnet and mainnet
     echo ""
-    print_info "Which network would you like to configure?"
-    echo "  1) Testnet (recommended for development)"
-    echo "  2) Mainnet (production)"
-    echo "  3) Both"
-    if [ -t 0 ]; then
-        read -r -p "Choose option [1-3]: " network_choice
-    else
-        read -r network_choice < /dev/tty 2>/dev/null || network_choice="1"
-    fi
+    print_info "Installing Walrus dependencies for both testnet and mainnet..."
 
-    local install_testnet=false
-    local install_mainnet=false
+    local install_testnet=true
+    local install_mainnet=true
     local default_network="testnet"
-
-    case "$network_choice" in
-        1)
-            install_testnet=true
-            default_network="testnet"
-            ;;
-        2)
-            install_mainnet=true
-            default_network="mainnet"
-            ;;
-        3)
-            install_testnet=true
-            install_mainnet=true
-            ;;
-        *)
-            print_info "Invalid choice. Defaulting to testnet"
-            install_testnet=true
-            ;;
-    esac
 
     # Install Sui
     print_info "Installing Sui CLI..."
@@ -965,34 +1097,17 @@ install_walrus_dependencies() {
     if [ ! -f "$HOME/.sui/sui_config/client.yaml" ]; then
         print_info "Initializing Sui client for $default_network..."
 
-        # Create a script to automate sui client init
-        local sui_init_script=$(mktemp)
-        cat > "$sui_init_script" << EOF
-spawn sui client
-expect "Connect to a Sui Full Node server"
-send "Y\r"
-expect "Full node server URL"
-send "https://fullnode.$default_network.sui.io:443\r"
-expect "Environment alias"
-send "$default_network\r"
-expect "Select key scheme"
-send "0\r"
-expect eof
-EOF
+        # Ensure we're in a safe directory before running sui client
+        cd "$HOME" 2>/dev/null || cd /tmp
 
-        # Try to run with expect if available, otherwise guide user
-        if command -v expect >/dev/null 2>&1; then
-            expect -f "$sui_init_script"
-        else
-            print_info "Please configure Sui client manually:"
-            echo "  1. Run: sui client"
-            echo "  2. Connect to Sui Full Node: Y"
-            echo "  3. URL: https://fullnode.$default_network.sui.io:443"
-            echo "  4. Environment alias: $default_network"
-            echo "  5. Key scheme: 0 (ed25519)"
-        fi
-
-        rm -f "$sui_init_script"
+        # Automatically initialize sui client with piped input
+        print_info "Automatically configuring Sui client..."
+        {
+            echo "y"  # Connect to Sui Full Node
+            echo "https://fullnode.$default_network.sui.io:443"  # Full node URL
+            echo "$default_network"  # Environment alias
+            echo "0"  # Key scheme (ed25519)
+        } | sui client 2>&1 | grep -v "^Usage:" | head -50 || true
     else
         print_success "Sui client already configured"
     fi
@@ -1067,18 +1182,36 @@ show_next_steps() {
         shell_profile="~/.profile"
     fi
 
-    print_warning "IMPORTANT: To use sui, walrus, and site-builder commands:"
-    echo ""
-    echo "  Run one of these commands:"
     if [ "$USE_COLORS" = true ]; then
-        echo -e "     ${GREEN}source $shell_profile${NC}   (apply PATH changes)"
-        echo -e "     ${GREEN}exec \$SHELL${NC}            (restart shell)"
+        echo -e "${YELLOW}╔═══════════════════════════════════════════════════════════╗${NC}"
+        echo -e "${YELLOW}║         ${RED}IMPORTANT: RESTART YOUR TERMINAL NOW${YELLOW}             ║${NC}"
+        echo -e "${YELLOW}╚═══════════════════════════════════════════════════════════╝${NC}"
     else
-        echo "     source $shell_profile   (apply PATH changes)"
-        echo "     exec \$SHELL            (restart shell)"
+        echo "╔═══════════════════════════════════════════════════════════╗"
+        echo "║         IMPORTANT: RESTART YOUR TERMINAL NOW             ║"
+        echo "╚═══════════════════════════════════════════════════════════╝"
     fi
     echo ""
-    echo "  Or simply open a new terminal window."
+    print_warning "To use sui, walrus, and site-builder commands, you MUST:"
+    echo ""
+    echo "  Option 1 (Recommended):"
+    if [ "$USE_COLORS" = true ]; then
+        echo -e "     ${GREEN}exec \$SHELL${NC}            (restart current shell)"
+    else
+        echo "     exec \$SHELL            (restart current shell)"
+    fi
+    echo ""
+    echo "  Option 2:"
+    if [ "$USE_COLORS" = true ]; then
+        echo -e "     ${GREEN}source $shell_profile${NC}   (reload shell config)"
+    else
+        echo "     source $shell_profile   (reload shell config)"
+    fi
+    echo ""
+    echo "  Option 3:"
+    echo "     Open a new terminal window"
+    echo ""
+    print_warning "Until you restart, 'sui' command will show: command not found"
     echo ""
     echo "═══════════════════════════════════════════════════════════"
     echo ""
@@ -1161,6 +1294,9 @@ show_next_steps() {
 
 # Main installation flow
 main() {
+    # Ensure we start in a safe directory
+    cd "$HOME" 2>/dev/null || cd /tmp || true
+
     echo ""
     echo "╔═══════════════════════════════════════════════════════════╗"
     echo "║                   Walgo Installer                         ║"

@@ -31,41 +31,54 @@ Example:
 	RunE: func(cmd *cobra.Command, args []string) error {
 		icons := ui.GetIcons()
 
-		// Get standard install location based on platform
-		var binaryPath string
+		// Get possible install locations based on platform (check multiple locations)
+		var possiblePaths []string
 		var installLocation string
+
+		homeDir, _ := os.UserHomeDir()
 
 		switch runtime.GOOS {
 		case "darwin":
-			// macOS: ~/Applications/Walgo.app
-			homeDir, _ := os.UserHomeDir()
-			binaryPath = filepath.Join(homeDir, "Applications", "Walgo.app")
-			installLocation = filepath.Join(homeDir, "Applications")
+			// macOS: Check both system and user Applications
+			possiblePaths = []string{
+				"/Applications/Walgo.app",                              // System-wide (preferred)
+				filepath.Join(homeDir, "Applications", "Walgo.app"),    // User-specific
+			}
 		case "windows":
-			// Windows: %LOCALAPPDATA%\Programs\Walgo\Walgo.exe
+			// Windows: Check LOCALAPPDATA and USERPROFILE
 			localAppData := os.Getenv("LOCALAPPDATA")
 			if localAppData != "" {
-				binaryPath = filepath.Join(localAppData, "Programs", "Walgo", "Walgo.exe")
-				installLocation = filepath.Join(localAppData, "Programs", "Walgo")
-			} else {
-				// Fallback
-				binaryPath = filepath.Join(os.Getenv("USERPROFILE"), "AppData", "Local", "Programs", "Walgo", "Walgo.exe")
-				installLocation = filepath.Join(os.Getenv("USERPROFILE"), "AppData", "Local", "Programs", "Walgo")
+				possiblePaths = append(possiblePaths, filepath.Join(localAppData, "Programs", "Walgo", "Walgo.exe"))
 			}
+			possiblePaths = append(possiblePaths, filepath.Join(os.Getenv("USERPROFILE"), "AppData", "Local", "Programs", "Walgo", "Walgo.exe"))
 		default: // linux
-			// Linux: ~/.local/bin/Walgo
-			homeDir, _ := os.UserHomeDir()
-			binaryPath = filepath.Join(homeDir, ".local", "bin", "Walgo")
-			installLocation = filepath.Join(homeDir, ".local", "bin")
+			// Linux: Check multiple possible locations
+			possiblePaths = []string{
+				filepath.Join(homeDir, ".local", "bin", "Walgo"),
+				"/usr/local/bin/Walgo",
+			}
+		}
+
+		// Find the first existing path
+		var binaryPath string
+		for _, path := range possiblePaths {
+			if _, err := os.Stat(path); err == nil {
+				binaryPath = path
+				installLocation = filepath.Dir(path)
+				break
+			}
 		}
 
 		// Check if binary exists
-		if _, err := os.Stat(binaryPath); os.IsNotExist(err) {
+		if binaryPath == "" {
 			fmt.Fprintf(os.Stderr, "%s Error: Desktop app not found\n", icons.Error)
-			fmt.Fprintf(os.Stderr, "  %s Looking for: %s\n", icons.File, binaryPath)
+			fmt.Fprintf(os.Stderr, "  %s Checked locations:\n", icons.File)
+			for _, path := range possiblePaths {
+				fmt.Fprintf(os.Stderr, "    - %s\n", path)
+			}
 			fmt.Fprintf(os.Stderr, "\n%s Install desktop app:\n", icons.Lightbulb)
 			fmt.Fprintf(os.Stderr, "  Run installer: curl -fsSL https://raw.githubusercontent.com/selimozten/walgo/main/install.sh | bash\n")
-			return fmt.Errorf("desktop app not found: %s", binaryPath)
+			return fmt.Errorf("desktop app not found in any standard location")
 		}
 
 		// Launch production binary

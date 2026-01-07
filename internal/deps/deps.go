@@ -166,6 +166,30 @@ func GetToolVersion(name string) (string, error) {
 	return strings.TrimSpace(string(output)), nil
 }
 
+// CheckHugoExtended checks if Hugo Extended is installed
+// Returns: (isInstalled bool, isExtended bool, version string, error)
+func CheckHugoExtended() (bool, bool, string, error) {
+	// Check if Hugo is installed
+	path, err := LookPath("hugo")
+	if err != nil {
+		return false, false, "", err
+	}
+
+	// Get Hugo version
+	cmd := exec.Command(path, "version")
+	output, err := cmd.CombinedOutput()
+	if err != nil {
+		return true, false, "", fmt.Errorf("failed to get hugo version: %w", err)
+	}
+
+	version := strings.TrimSpace(string(output))
+
+	// Check if Extended version is installed
+	isExtended := strings.Contains(strings.ToLower(version), "extended")
+
+	return true, isExtended, version, nil
+}
+
 // InstallSuiup installs suiup automatically
 func InstallSuiup() error {
 	// Check if already installed

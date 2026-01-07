@@ -2074,9 +2074,10 @@ func GetSystemHealth() SystemHealth {
 		health.SiteBuilder = true
 	}
 
-	// Check Hugo
-	if _, err := deps.LookPath("hugo"); err == nil {
-		health.HugoInstalled = true
+	// Check Hugo Extended
+	if isInstalled, isExtended, _, err := deps.CheckHugoExtended(); err == nil && isInstalled {
+		// Only consider Hugo as properly installed if Extended version is present
+		health.HugoInstalled = isExtended
 	}
 
 	// Set message based on status
@@ -2163,6 +2164,16 @@ func CheckToolVersions() CheckToolVersionsResult {
 			CurrentVersion: versionResult.SiteBuilder.CurrentVersion,
 			LatestVersion:  versionResult.SiteBuilder.LatestVersion,
 			UpdateRequired: versionResult.SiteBuilder.UpdateRequired,
+			Installed:      true,
+		})
+	}
+
+	if versionResult.Hugo != nil {
+		result.Tools = append(result.Tools, ToolVersionInfo{
+			Tool:           versionResult.Hugo.Tool,
+			CurrentVersion: versionResult.Hugo.CurrentVersion,
+			LatestVersion:  versionResult.Hugo.LatestVersion,
+			UpdateRequired: versionResult.Hugo.UpdateRequired,
 			Installed:      true,
 		})
 	}
