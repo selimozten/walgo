@@ -448,7 +448,8 @@ func (a *App) Serve(params ServeParams) ServeResult {
 	}
 
 	// Check if hugo is installed
-	if _, err := lookPath("hugo"); err != nil {
+	hugoPath, err := lookPath("hugo")
+	if err != nil {
 		return ServeResult{Error: "hugo is not installed or not found in PATH"}
 	}
 
@@ -479,7 +480,7 @@ func (a *App) Serve(params ServeParams) ServeResult {
 	hugoArgs = append(hugoArgs, "--port", strconv.Itoa(port))
 
 	// Create and start the command
-	cmd := exec.Command("hugo", hugoArgs...)
+	cmd := exec.Command(hugoPath, hugoArgs...)
 	cmd.Dir = sitePath
 
 	if err := cmd.Start(); err != nil {

@@ -111,11 +111,12 @@ func countMarkdownFiles(dir string) int {
 
 // InitializeSite creates a new Hugo site at the given path.
 func InitializeSite(sitePath string) error {
-	if _, err := deps.LookPath("hugo"); err != nil {
+	hugoPath, err := deps.LookPath("hugo")
+	if err != nil {
 		return fmt.Errorf("hugo is not installed or not found in PATH")
 	}
 
-	cmd := exec.Command("hugo", "new", "site", ".", "--format", "toml")
+	cmd := exec.Command(hugoPath, "new", "site", ".", "--format", "toml")
 	cmd.Dir = sitePath
 	output, err := cmd.CombinedOutput()
 	if err != nil {
@@ -179,7 +180,8 @@ func cleanPublicDir(publicDir string) error {
 
 // BuildSite runs the Hugo build process in the given site path.
 func BuildSite(sitePath string) error {
-	if _, err := deps.LookPath("hugo"); err != nil {
+	hugoPath, err := deps.LookPath("hugo")
+	if err != nil {
 		return fmt.Errorf("hugo is not installed or not found in PATH")
 	}
 
@@ -207,7 +209,7 @@ func BuildSite(sitePath string) error {
 	}
 
 	fmt.Printf("Building Hugo site in %s...\n", sitePath)
-	cmd := exec.Command("hugo", "build", "--environment", "production", "--minify", "--gc", "--cleanDestinationDir")
+	cmd := exec.Command(hugoPath, "build", "--environment", "production", "--minify", "--gc", "--cleanDestinationDir")
 	cmd.Dir = sitePath
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr
@@ -342,12 +344,13 @@ func BuildSite(sitePath string) error {
 
 // ServeSite starts the Hugo development server
 func ServeSite(sitePath string) error {
-	if _, err := deps.LookPath("hugo"); err != nil {
+	hugoPath, err := deps.LookPath("hugo")
+	if err != nil {
 		return fmt.Errorf("hugo is not installed or not found in PATH")
 	}
 
 	fmt.Printf("Starting Hugo development server...\n")
-	cmd := exec.Command("hugo", "server", "--environment", "development", "--bind", "0.0.0.0",
+	cmd := exec.Command(hugoPath, "server", "--environment", "development", "--bind", "0.0.0.0",
 		"--port", "1313", "--buildDrafts", "--buildFuture", "--disableFastRender", "--noHTTPCache")
 	cmd.Dir = sitePath
 	cmd.Stdout = os.Stdout
@@ -359,11 +362,12 @@ func ServeSite(sitePath string) error {
 
 // CreateContent creates new content using Hugo's new command
 func CreateContent(sitePath, contentPath string) error {
-	if _, err := deps.LookPath("hugo"); err != nil {
+	hugoPath, err := deps.LookPath("hugo")
+	if err != nil {
 		return fmt.Errorf("hugo is not installed or not found in PATH")
 	}
 
-	cmd := exec.Command("hugo", "new", contentPath)
+	cmd := exec.Command(hugoPath, "new", contentPath)
 	cmd.Dir = sitePath
 	output, err := cmd.CombinedOutput()
 	if err != nil {

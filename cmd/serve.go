@@ -36,7 +36,8 @@ Press Ctrl+C to stop the server.`,
 		}
 
 		// Check if Hugo is installed
-		if _, err := deps.LookPath("hugo"); err != nil {
+		hugoPath, err := deps.LookPath("hugo")
+		if err != nil {
 			fmt.Fprintf(os.Stderr, "%s Error: Hugo is not installed or not found in PATH\n", icons.Error)
 			fmt.Fprintf(os.Stderr, "\n%s Install Hugo: https://gohugo.io/installation/\n", icons.Lightbulb)
 			return fmt.Errorf("hugo is not installed or not found in PATH")
@@ -92,7 +93,7 @@ Press Ctrl+C to stop the server.`,
 		// Append any remaining arguments (including unrecognized flags) to be passed to hugo server
 		hugoArgs = append(hugoArgs, args...)
 
-		hugoCmd := exec.Command("hugo", hugoArgs...)
+		hugoCmd := exec.Command(hugoPath, hugoArgs...)
 		hugoCmd.Dir = sitePath
 
 		// Capture stdout and stderr to filter verbose output
