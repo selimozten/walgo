@@ -75,6 +75,19 @@ func getLocalBinDir() (string, error) {
 	return filepath.Join(home, ".local", "bin"), nil
 }
 
+func extraBinaryDirs() []string {
+	var dirs []string
+	switch runtime.GOOS {
+	case "darwin":
+		dirs = []string{"/opt/homebrew/bin", "/usr/local/bin", "/usr/bin"}
+	case "linux":
+		dirs = []string{"/usr/local/bin", "/usr/bin", "/bin"}
+	case "windows":
+		// Windows installers typically add to PATH already
+	}
+	return dirs
+}
+
 func fetchLatestTag(repo string) (string, error) {
 	client := &http.Client{Timeout: 30 * time.Second}
 	url := fmt.Sprintf(releaseAPIURL, repo)
@@ -343,6 +356,17 @@ func LookPath(name string) (string, error) {
 		if info, err := os.Stat(localBinPath); err == nil && !info.IsDir() {
 			if runtime.GOOS == "windows" || info.Mode()&0111 != 0 {
 				return localBinPath, nil
+			}
+		}
+	}
+
+	for _, dir := range extraBinaryDirs() {
+		for _, candidate := range execCandidates(name) {
+			candidatePath := filepath.Join(dir, candidate)
+			if info, err := os.Stat(candidatePath); err == nil && !info.IsDir() {
+				if runtime.GOOS == "windows" || info.Mode()&0111 != 0 {
+					return candidatePath, nil
+				}
 			}
 		}
 	}
