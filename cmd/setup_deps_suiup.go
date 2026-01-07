@@ -103,7 +103,7 @@ func runSetupDeps(cmd *cobra.Command, args []string) error {
 	if withHugo {
 		fmt.Println()
 		fmt.Printf("%s Checking Hugo...\n", icons.Info)
-		if _, err := exec.LookPath("hugo"); err == nil {
+		if _, err := deps.LookPath("hugo"); err == nil {
 			version := strings.TrimSpace(runQuiet("hugo", "version"))
 			fmt.Printf("  %s Hugo already installed\n", icons.Check)
 			if strings.Contains(strings.ToLower(version), "extended") {

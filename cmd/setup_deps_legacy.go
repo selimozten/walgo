@@ -5,10 +5,10 @@ import (
 	"io"
 	"net/http"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"runtime"
 
+	"github.com/selimozten/walgo/internal/deps"
 	"github.com/selimozten/walgo/internal/ui"
 	"github.com/spf13/cobra"
 )
@@ -69,7 +69,7 @@ func runLegacyInstall(cmd *cobra.Command, withSiteBuilder, withWalrus, withHugo 
 	if withHugo {
 		fmt.Println()
 		fmt.Printf("%s Checking Hugo...\n", icons.Info)
-		if _, err := exec.LookPath("hugo"); err == nil {
+		if _, err := deps.LookPath("hugo"); err == nil {
 			fmt.Printf("  %s Hugo already present in PATH\n", icons.Check)
 		} else {
 			fmt.Printf("  %s Hugo not found\n", icons.Warning)

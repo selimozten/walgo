@@ -1,16 +1,21 @@
 package hugo
 
 import (
+	"archive/zip"
 	"embed"
 	"fmt"
+	"io"
+	"net/http"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"sort"
 	"strings"
+	"time"
 
 	"github.com/selimozten/walgo/internal/compress"
 	"github.com/selimozten/walgo/internal/config"
+	"github.com/selimozten/walgo/internal/deps"
 	"github.com/selimozten/walgo/internal/optimizer"
 	"github.com/selimozten/walgo/internal/projects"
 	"gopkg.in/yaml.v3"
@@ -106,7 +111,7 @@ func countMarkdownFiles(dir string) int {
 
 // InitializeSite creates a new Hugo site at the given path.
 func InitializeSite(sitePath string) error {
-	if _, err := exec.LookPath("hugo"); err != nil {
+	if _, err := deps.LookPath("hugo"); err != nil {
 		return fmt.Errorf("hugo is not installed or not found in PATH")
 	}
 
@@ -174,7 +179,7 @@ func cleanPublicDir(publicDir string) error {
 
 // BuildSite runs the Hugo build process in the given site path.
 func BuildSite(sitePath string) error {
-	if _, err := exec.LookPath("hugo"); err != nil {
+	if _, err := deps.LookPath("hugo"); err != nil {
 		return fmt.Errorf("hugo is not installed or not found in PATH")
 	}
 
@@ -337,7 +342,7 @@ func BuildSite(sitePath string) error {
 
 // ServeSite starts the Hugo development server
 func ServeSite(sitePath string) error {
-	if _, err := exec.LookPath("hugo"); err != nil {
+	if _, err := deps.LookPath("hugo"); err != nil {
 		return fmt.Errorf("hugo is not installed or not found in PATH")
 	}
 
@@ -354,7 +359,7 @@ func ServeSite(sitePath string) error {
 
 // CreateContent creates new content using Hugo's new command
 func CreateContent(sitePath, contentPath string) error {
-	if _, err := exec.LookPath("hugo"); err != nil {
+	if _, err := deps.LookPath("hugo"); err != nil {
 		return fmt.Errorf("hugo is not installed or not found in PATH")
 	}
 
@@ -539,7 +544,8 @@ func GetThemeInfo(siteType SiteType) ThemeInfo {
 	}
 }
 
-// InstallTheme clones a theme to the site's themes directory
+// InstallTheme installs a theme to the site's themes directory
+// Uses git clone if available, otherwise downloads and extracts ZIP archive
 func InstallTheme(sitePath string, siteType SiteType) error {
 	theme := GetThemeInfo(siteType)
 	themesDir := filepath.Join(sitePath, "themes")
@@ -556,13 +562,138 @@ func InstallTheme(sitePath string, siteType SiteType) error {
 		return nil // Theme already installed
 	}
 
-	// Clone the theme
-	cmd := exec.Command("git", "clone", "--depth", "1", theme.RepoURL, themePath)
-	output, err := cmd.CombinedOutput()
-	if err != nil {
-		return fmt.Errorf("cloning theme %s: %w\nOutput: %s", theme.Name, err, string(output))
+	// Try git clone first if git is available
+	if _, err := exec.LookPath("git"); err == nil {
+		cmd := exec.Command("git", "clone", "--depth", "1", theme.RepoURL, themePath)
+		if err := cmd.Run(); err == nil {
+			return nil // Successfully cloned
+		}
+		// Git clone failed, fall through to HTTP download
+		fmt.Printf("Git clone failed, falling back to HTTP download...\n")
+	} else {
+		fmt.Printf("Git not found, downloading theme via HTTP...\n")
 	}
 
+	// Fallback: Download theme as ZIP from GitHub
+	return downloadThemeZip(theme, themePath)
+}
+
+// downloadThemeZip downloads a theme as a ZIP archive from GitHub and extracts it
+func downloadThemeZip(theme ThemeInfo, themePath string) error {
+	// Convert git URL to ZIP download URL
+	// Example: https://github.com/theNewDynamic/gohugo-theme-ananke.git
+	//       -> https://github.com/theNewDynamic/gohugo-theme-ananke/archive/refs/heads/master.zip
+	repoURL := strings.TrimSuffix(theme.RepoURL, ".git")
+	zipURL := repoURL + "/archive/refs/heads/master.zip"
+
+	// Create temporary file for download
+	tmpFile, err := os.CreateTemp("", "hugo-theme-*.zip")
+	if err != nil {
+		return fmt.Errorf("creating temp file: %w", err)
+	}
+	tmpName := tmpFile.Name()
+	tmpFile.Close()
+	defer os.Remove(tmpName)
+
+	// Download the ZIP file
+	fmt.Printf("Downloading theme from %s...\n", zipURL)
+	client := &http.Client{Timeout: 2 * time.Minute}
+	req, err := http.NewRequest(http.MethodGet, zipURL, nil)
+	if err != nil {
+		return fmt.Errorf("creating download request: %w", err)
+	}
+	req.Header.Set("User-Agent", "walgo-theme-installer")
+
+	resp, err := client.Do(req)
+	if err != nil {
+		return fmt.Errorf("downloading theme: %w", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		return fmt.Errorf("failed to download theme: HTTP %d", resp.StatusCode)
+	}
+
+	// Save to temporary file
+	file, err := os.Create(tmpName)
+	if err != nil {
+		return fmt.Errorf("creating download file: %w", err)
+	}
+
+	if _, err := io.Copy(file, resp.Body); err != nil {
+		file.Close()
+		return fmt.Errorf("saving theme download: %w", err)
+	}
+	file.Close()
+
+	// Extract ZIP archive
+	fmt.Printf("Extracting theme...\n")
+	r, err := zip.OpenReader(tmpName)
+	if err != nil {
+		return fmt.Errorf("opening theme archive: %w", err)
+	}
+	defer r.Close()
+
+	// GitHub ZIP archives have a root directory named {repo}-{branch}
+	// We need to extract contents and strip this root directory
+	var rootDir string
+	for _, f := range r.File {
+		if rootDir == "" {
+			// First entry should be the root directory
+			parts := strings.Split(f.Name, "/")
+			if len(parts) > 0 {
+				rootDir = parts[0] + "/"
+			}
+		}
+
+		// Skip the root directory itself
+		if f.Name == strings.TrimSuffix(rootDir, "/") || f.Name == rootDir {
+			continue
+		}
+
+		// Strip root directory from path
+		relativePath := strings.TrimPrefix(f.Name, rootDir)
+		if relativePath == "" {
+			continue
+		}
+
+		targetPath := filepath.Join(themePath, relativePath)
+
+		if f.FileInfo().IsDir() {
+			// Create directory
+			if err := os.MkdirAll(targetPath, f.Mode()); err != nil {
+				return fmt.Errorf("creating directory %s: %w", targetPath, err)
+			}
+		} else {
+			// Create parent directory if needed
+			if err := os.MkdirAll(filepath.Dir(targetPath), 0755); err != nil {
+				return fmt.Errorf("creating parent directory for %s: %w", targetPath, err)
+			}
+
+			// Extract file
+			rc, err := f.Open()
+			if err != nil {
+				return fmt.Errorf("opening file in archive: %w", err)
+			}
+
+			outFile, err := os.OpenFile(targetPath, os.O_WRONLY|os.O_CREATE|os.O_TRUNC, f.Mode())
+			if err != nil {
+				rc.Close()
+				return fmt.Errorf("creating file %s: %w", targetPath, err)
+			}
+
+			if _, err := io.Copy(outFile, rc); err != nil {
+				outFile.Close()
+				rc.Close()
+				return fmt.Errorf("extracting file %s: %w", targetPath, err)
+			}
+
+			outFile.Close()
+			rc.Close()
+		}
+	}
+
+	fmt.Printf("Theme %s installed successfully\n", theme.Name)
 	return nil
 }
 

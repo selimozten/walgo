@@ -7,6 +7,10 @@ $REPO = "selimozten/walgo"
 $BINARY_NAME = "walgo"
 $TEMP_DIR = [IO.Path]::GetTempPath()
 
+# Global variables to store wallet info for display at end
+$script:SuiMnemonicPhrase = ""
+$script:SuiAddress = ""
+
 # Color handling
 $useColors = $true
 try {
@@ -380,6 +384,42 @@ function Test-Installation {
     }
 }
 
+function Install-Git {
+    Print-Info "Checking for Git installation..."
+
+    # Check if winget is available (Windows 10+)
+    if (Get-Command winget -ErrorAction SilentlyContinue) {
+        Print-Info "Installing Git using winget..."
+        try {
+            winget install --id Git.Git -e --source winget --silent
+            Print-Success "Git installed successfully"
+            return $true
+        } catch {
+            Print-Warning "Failed to install Git via winget: $_"
+        }
+    }
+
+    # Check if chocolatey is available
+    if (Get-Command choco -ErrorAction SilentlyContinue) {
+        Print-Info "Installing Git using Chocolatey..."
+        try {
+            choco install git -y
+            Print-Success "Git installed successfully"
+            return $true
+        } catch {
+            Print-Warning "Failed to install Git via Chocolatey: $_"
+        }
+    }
+
+    # Manual installation instructions
+    Print-Warning "Could not automatically install Git"
+    Print-Info "Please install Git manually:"
+    Print-Info "  Download from: https://git-scm.com/download/win"
+    Print-Info "  Or use: winget install --id Git.Git"
+    Print-Info "  Or use: choco install git"
+    return $false
+}
+
 function Install-HugoDirect {
     Print-Info "Fetching latest Hugo version..."
     $release = Get-LatestRelease -Repository "gohugoio/hugo"
@@ -436,6 +476,19 @@ function Install-HugoDirect {
 
 function Check-Dependencies {
     Print-Info "Checking optional dependencies..."
+
+    # Check for Git
+    $git = Get-Command git.exe -ErrorAction SilentlyContinue
+    if ($null -eq $git) {
+        Print-Warning "Git not found. Installing..."
+        if (-not (Install-Git)) {
+            Print-Warning "Git installation failed. Install manually from https://git-scm.com/download/win"
+        }
+    } else {
+        Print-Success "Git found: $($git.Source)"
+    }
+
+    # Check for Hugo
     $hugo = Get-Command hugo.exe -ErrorAction SilentlyContinue
     if ($null -eq $hugo) {
         Print-Warning "Hugo not found. Installing from GitHub releases..."
@@ -538,6 +591,89 @@ function Download-WalrusConfigs {
     }
 }
 
+function Initialize-SuiClient {
+    param([string]$Network = "testnet")
+
+    Print-Info "Configuring Sui client..."
+
+    $suiConfigPath = Join-Path $env:USERPROFILE ".sui\sui_config\client.yaml"
+
+    if (Test-Path $suiConfigPath) {
+        Print-Success "Sui client already configured"
+        return
+    }
+
+    Print-Info "Initializing Sui client for $Network..."
+    Print-Info "Creating new Sui address..."
+
+    $suiPath = Join-Path $script:LocalBinDir "sui.exe"
+    if (-not (Test-Path $suiPath)) {
+        Print-Warning "Sui CLI not found. Skipping client initialization."
+        return
+    }
+
+    try {
+        # Prepare input for sui client initialization
+        $fullNodeUrl = "https://fullnode.$Network.sui.io:443"
+        $inputs = @(
+            "y",           # Connect to Sui Full Node
+            $fullNodeUrl,  # Full node URL
+            $Network,      # Environment alias
+            "0"            # Key scheme (ed25519)
+        )
+
+        # Run sui client with timeout and capture output
+        $job = Start-Job -ScriptBlock {
+            param($suiPath, $inputs)
+            $inputString = $inputs -join "`n"
+            $output = $inputString | & $suiPath client 2>&1
+            return $output -join "`n"
+        } -ArgumentList $suiPath, $inputs
+
+        $completed = Wait-Job $job -Timeout 30
+        if ($completed) {
+            $suiOutput = Receive-Job $job
+            Remove-Job $job -Force
+
+            # Extract recovery phrase from JSON output
+            if ($suiOutput -match '"recoveryPhrase"\s*:\s*"([^"]*)"') {
+                $script:SuiMnemonicPhrase = $matches[1]
+            }
+
+            # Extract address from JSON output
+            if ($suiOutput -match '"address"\s*:\s*"([^"]*)"') {
+                $script:SuiAddress = $matches[1]
+            }
+
+            # Alternative: try to extract from non-JSON format if JSON extraction failed
+            if (-not $script:SuiMnemonicPhrase) {
+                # Try to find lines with 12 or 24 words (typical mnemonic formats)
+                if ($suiOutput -match '([a-z]+\s+){11,23}[a-z]+') {
+                    $script:SuiMnemonicPhrase = $matches[0].Trim()
+                }
+            }
+
+            if (Test-Path $suiConfigPath) {
+                Print-Success "Sui client configured successfully"
+                if ($script:SuiMnemonicPhrase) {
+                    Print-Success "New wallet address created"
+                }
+            } else {
+                Print-Warning "Sui client initialization may have failed"
+                Print-Info "You can configure it manually later with: sui client"
+            }
+        } else {
+            Stop-Job $job
+            Remove-Job $job -Force
+            Print-Warning "Sui client initialization timed out after 30 seconds"
+            Print-Info "You can configure it manually later with: sui client"
+        }
+    } catch {
+        Print-Warning "Failed to initialize Sui client: $_"
+        Print-Info "You can configure it manually later with: sui client"
+    }
+}
+
 function Install-WalrusDependencies {
     Print-Info "Would you like to install Walrus dependencies (Sui CLI, Walrus CLI, site-builder)? [y/N]"
     $response = Read-Host
@@ -608,6 +744,7 @@ function Install-WalrusDependencies {
     }
 
     Download-WalrusConfigs
+    Initialize-SuiClient -Network "testnet"
     Print-Success "Walrus dependencies installation attempted. Verify with: sui --version"
 }
 
@@ -623,6 +760,55 @@ function Show-NextSteps {
         Print-Info "PATH updated with:"
         foreach ($entry in $script:PathUpdates) {
             Write-Host "  - $entry"
+        }
+    }
+
+    # Display mnemonic phrase if a new address was created
+    if ($script:SuiMnemonicPhrase) {
+        Write-Host ""
+        Write-Host "═══════════════════════════════════════════════════════════"
+        if ($useColors) {
+            Write-Host "║  IMPORTANT: SAVE YOUR WALLET RECOVERY PHRASE" -ForegroundColor $colorError
+        } else {
+            Write-Host "║  IMPORTANT: SAVE YOUR WALLET RECOVERY PHRASE"
+        }
+        Write-Host "═══════════════════════════════════════════════════════════"
+        Write-Host ""
+
+        if ($script:SuiAddress) {
+            if ($useColors) {
+                Write-Host "  Your Sui Address:" -ForegroundColor $colorWarning
+                Write-Host "  $script:SuiAddress" -ForegroundColor $colorSuccess
+            } else {
+                Write-Host "  Your Sui Address:"
+                Write-Host "  $script:SuiAddress"
+            }
+            Write-Host ""
+        }
+
+        if ($useColors) {
+            Write-Host "  Secret Recovery Phrase:" -ForegroundColor $colorWarning
+            Write-Host "  $script:SuiMnemonicPhrase" -ForegroundColor $colorSuccess
+        } else {
+            Write-Host "  Secret Recovery Phrase:"
+            Write-Host "  $script:SuiMnemonicPhrase"
+        }
+        Write-Host ""
+
+        if ($useColors) {
+            Write-Host "  ⚠️  Write this down and store it safely!" -ForegroundColor $colorError
+            Write-Host "  ⚠️  You will need this phrase to recover your wallet." -ForegroundColor $colorError
+            Write-Host "  ⚠️  Never share this phrase with anyone!" -ForegroundColor $colorError
+        } else {
+            Write-Host "  ⚠️  Write this down and store it safely!"
+            Write-Host "  ⚠️  You will need this phrase to recover your wallet."
+            Write-Host "  ⚠️  Never share this phrase with anyone!"
+        }
+        Write-Host ""
+
+        if (-not $script:SuiAddress) {
+            Write-Host "  Get your address: sui client active-address"
+            Write-Host ""
         }
     }
 

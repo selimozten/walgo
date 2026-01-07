@@ -3,10 +3,11 @@ package hugo
 import (
 	"fmt"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/selimozten/walgo/internal/deps"
 )
 
 // TestMain sets up and tears down the test environment
@@ -84,7 +85,7 @@ func TestInitializeSite(t *testing.T) {
 
 			if tt.mockHugo && !tt.hugoNotFound {
 				// Check if hugo is actually installed
-				if _, err := exec.LookPath("hugo"); err != nil {
+				if _, err := deps.LookPath("hugo"); err != nil {
 					// Hugo is not installed, skip this test
 					t.Skip("Hugo is not installed, skipping test that requires Hugo")
 				}
@@ -242,7 +243,7 @@ title = "Test Site"
 			// Check if hugo is actually installed for tests that need it
 			// Skip if Hugo is not found, unless we're specifically testing the "hugo not found" case
 			if !tt.hugoNotFound {
-				if _, err := exec.LookPath("hugo"); err != nil {
+				if _, err := deps.LookPath("hugo"); err != nil {
 					// Hugo is not installed, skip this test
 					t.Skip("Hugo is not installed, skipping test that requires Hugo")
 				}
@@ -299,7 +300,7 @@ title = "Test Site"
 // TestHugoCommandExecution tests the actual command execution paths
 func TestHugoCommandExecution(t *testing.T) {
 	// Check if Hugo is installed
-	if _, err := exec.LookPath("hugo"); err != nil {
+	if _, err := deps.LookPath("hugo"); err != nil {
 		t.Skip("Hugo is not installed, skipping integration tests")
 	}
 
@@ -335,7 +336,7 @@ func TestHugoCommandExecution(t *testing.T) {
 // TestInitializeSiteOutput tests that output is properly captured
 func TestInitializeSiteOutput(t *testing.T) {
 	// Check if Hugo is installed
-	if _, err := exec.LookPath("hugo"); err != nil {
+	if _, err := deps.LookPath("hugo"); err != nil {
 		t.Skip("Hugo is not installed, skipping output test")
 	}
 
@@ -358,7 +359,7 @@ func TestInitializeSiteOutput(t *testing.T) {
 // TestBuildSiteOutput tests that output is properly directed
 func TestBuildSiteOutput(t *testing.T) {
 	// Check if Hugo is installed
-	if _, err := exec.LookPath("hugo"); err != nil {
+	if _, err := deps.LookPath("hugo"); err != nil {
 		t.Skip("Hugo is not installed, skipping output test")
 	}
 
@@ -445,7 +446,7 @@ func TestErrorMessages(t *testing.T) {
 
 	t.Run("BuildSite config not found message", func(t *testing.T) {
 		// Skip if Hugo is not installed
-		if _, err := exec.LookPath("hugo"); err != nil {
+		if _, err := deps.LookPath("hugo"); err != nil {
 			t.Skip("Hugo is not installed, skipping test that requires Hugo")
 		}
 
@@ -470,7 +471,7 @@ func TestErrorMessages(t *testing.T) {
 func TestPathValidation(t *testing.T) {
 	t.Run("InitializeSite with relative path", func(t *testing.T) {
 		// Check if Hugo is installed
-		if _, err := exec.LookPath("hugo"); err != nil {
+		if _, err := deps.LookPath("hugo"); err != nil {
 			t.Skip("Hugo is not installed")
 		}
 
@@ -513,7 +514,7 @@ func TestPathValidation(t *testing.T) {
 // TestConcurrentExecution tests that functions can be called concurrently
 func TestConcurrentExecution(t *testing.T) {
 	// Check if Hugo is installed
-	if _, err := exec.LookPath("hugo"); err != nil {
+	if _, err := deps.LookPath("hugo"); err != nil {
 		t.Skip("Hugo is not installed")
 	}
 

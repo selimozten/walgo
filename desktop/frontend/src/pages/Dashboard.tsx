@@ -15,7 +15,7 @@ const NETWORKS = [
     { id: 'mainnet', label: 'Mainnet', color: 'text-green-400' },
 ] as const;
 
-const COPY_FEEDBACK_DURATION = 2000; // ms
+const COPY_FEEDBACK_DURATION = 5000; // ms - increased for better visibility
 const DROPDOWN_OFFSET = 4; // px
 
 interface DashboardProps {

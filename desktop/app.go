@@ -6,11 +6,12 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"runtime"
 	"strconv"
 	"strings"
 
 	"github.com/selimozten/walgo/pkg/api"
-	"github.com/wailsapp/wails/v2/pkg/runtime"
+	wruntime "github.com/wailsapp/wails/v2/pkg/runtime"
 )
 
 // App represents the main desktop application structure.
@@ -26,6 +27,48 @@ func NewApp() *App {
 	return &App{}
 }
 
+// lookPath finds an executable in PATH or common installation directories
+func lookPath(name string) (string, error) {
+	// Try standard PATH lookup first
+	if path, err := exec.LookPath(name); err == nil {
+		return path, nil
+	}
+
+	// Check common binary directories
+	var extraDirs []string
+	switch runtime.GOOS {
+	case "darwin":
+		extraDirs = []string{"/opt/homebrew/bin", "/usr/local/bin", "/usr/bin"}
+	case "linux":
+		extraDirs = []string{"/usr/local/bin", "/usr/bin", "/bin"}
+	case "windows":
+		// Windows installers typically add to PATH
+		return "", fmt.Errorf("%s not found in PATH", name)
+	}
+
+	// Check extra directories
+	for _, dir := range extraDirs {
+		candidatePath := filepath.Join(dir, name)
+		if info, err := os.Stat(candidatePath); err == nil && !info.IsDir() {
+			if runtime.GOOS == "windows" || info.Mode()&0111 != 0 {
+				return candidatePath, nil
+			}
+		}
+	}
+
+	// Check ~/.local/bin
+	if home, err := os.UserHomeDir(); err == nil {
+		localBin := filepath.Join(home, ".local", "bin", name)
+		if info, err := os.Stat(localBin); err == nil && !info.IsDir() {
+			if runtime.GOOS == "windows" || info.Mode()&0111 != 0 {
+				return localBin, nil
+			}
+		}
+	}
+
+	return "", fmt.Errorf("%s not found in PATH", name)
+}
+
 // startup is invoked when the application starts. The context is saved
 // to enable runtime method calls throughout the application lifecycle.
 func (a *App) startup(ctx context.Context) {
@@ -36,19 +79,19 @@ func (a *App) startup(ctx context.Context) {
 
 // Minimize minimizes application window.
 func (a *App) Minimize() {
-	runtime.WindowMinimise(a.ctx)
+	wruntime.WindowMinimise(a.ctx)
 }
 
 // Maximize toggles between maximize and restore states for window.
 func (a *App) Maximize() {
-	runtime.WindowToggleMaximise(a.ctx)
+	wruntime.WindowToggleMaximise(a.ctx)
 }
 
 // Close stops any running server and terminates the application.
 func (a *App) Close() {
 	// Stop any running server first
 	a.StopServe()
-	runtime.Quit(a.ctx)
+	wruntime.Quit(a.ctx)
 }
 
 // File Dialogs
@@ -56,7 +99,7 @@ func (a *App) Close() {
 // SelectDirectory opens a directory selection dialog and returns the chosen path.
 func (a *App) SelectDirectory(title string) (string, error) {
 	homeDir, _ := os.UserHomeDir()
-	return runtime.OpenDirectoryDialog(a.ctx, runtime.OpenDialogOptions{
+	return wruntime.OpenDirectoryDialog(a.ctx, wruntime.OpenDialogOptions{
 		Title:            title,
 		DefaultDirectory: homeDir,
 	})
@@ -405,7 +448,7 @@ func (a *App) Serve(params ServeParams) ServeResult {
 	}
 
 	// Check if hugo is installed
-	if _, err := exec.LookPath("hugo"); err != nil {
+	if _, err := lookPath("hugo"); err != nil {
 		return ServeResult{Error: "hugo is not installed or not found in PATH"}
 	}
 
@@ -607,7 +650,7 @@ func (a *App) AICreateSite(params AICreateSiteParams) AICreateSiteResult {
 	// Create a progress handler that emits Wails runtime events
 	progressHandler := func(event api.ProgressEvent) {
 		// Emit progress event to frontend
-		runtime.EventsEmit(a.ctx, "ai:progress", map[string]interface{}{
+		wruntime.EventsEmit(a.ctx, "ai:progress", map[string]interface{}{
 			"phase":     event.Phase,
 			"eventType": event.EventType,
 			"message":   event.Message,
@@ -652,7 +695,7 @@ func (a *App) RemoveAICredentials(provider string) error {
 
 // OpenInBrowser opens a URL in the default browser
 func (a *App) OpenInBrowser(url string) {
-	runtime.BrowserOpenURL(a.ctx, url)
+	wruntime.BrowserOpenURL(a.ctx, url)
 }
 
 // OpenInFinder opens a path in Finder (macOS) or file explorer

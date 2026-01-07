@@ -115,7 +115,7 @@ function App() {
     message: string;
   }) => {
     setStatus(newStatus);
-    setTimeout(() => setStatus(null), 2000);
+    setTimeout(() => setStatus(null), 5000); // Increased from 2000ms to 5000ms
   };
 
   // Navigation handler

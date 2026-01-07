@@ -7,7 +7,6 @@ import (
 	"io"
 	"net/http"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"regexp"
 	"strings"
@@ -460,7 +459,7 @@ type VersionResult struct {
 // GetVersion returns current version information
 func GetVersion() VersionResult {
 	return VersionResult{
-		Version:   "0.3.0",
+		Version:   "0.3.1",
 		GitCommit: "dev",
 		BuildDate: "unknown",
 	}
@@ -704,7 +703,7 @@ func Serve(params ServeParams) ServeResult {
 		return ServeResult{Error: "site path is required"}
 	}
 
-	if _, err := exec.LookPath("hugo"); err != nil {
+	if _, err := deps.LookPath("hugo"); err != nil {
 		return ServeResult{Error: "hugo is not installed or not found in PATH"}
 	}
 

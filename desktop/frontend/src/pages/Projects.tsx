@@ -35,7 +35,7 @@ interface ProjectsProps {
 }
 
 const ITEMS_PER_PAGE = 6;
-const COPY_FEEDBACK_DURATION = 2000; // ms
+const COPY_FEEDBACK_DURATION = 5000; // ms - increased for better visibility
 
 const STATUS_OPTIONS = [
     { value: 'all', label: 'All Status' },

@@ -12,7 +12,7 @@ NC='\033[0m'
 
 echo -e "${BLUE}╔══════════════════════════════════════════════╗${NC}"
 echo -e "${BLUE}║   Walgo Performance Benchmark               ║${NC}"
-echo -e "${BLUE}║   v0.1.0 vs v0.3.0 Comparison                ║${NC}"
+echo -e "${BLUE}║   v0.1.0 vs v0.3.1 Comparison                ║${NC}"
 echo -e "${BLUE}╚══════════════════════════════════════════════╝${NC}"
 echo ""
 
@@ -197,13 +197,13 @@ echo -e "${BLUE}━━━━━━━━━━━━━━━━━━━━━�
 echo ""
 echo -e "${GREEN}Scenario 1: First Deployment${NC}"
 echo "v0.1.0: Upload ALL $PUBLIC_FILES files (${PUBLIC_SIZE}KB)"
-echo "v0.3.0: Upload ALL $PUBLIC_FILES files (${PUBLIC_SIZE}KB)"
+echo "v0.3.1: Upload ALL $PUBLIC_FILES files (${PUBLIC_SIZE}KB)"
 echo "Improvement: 0% (first deployment)"
 echo ""
 
 echo -e "${GREEN}Scenario 2: No Changes (redeploy)${NC}"
 echo "v0.1.0: Upload ALL $PUBLIC_FILES files (${PUBLIC_SIZE}KB)"
-echo "v0.3.0: Upload 0 files (cache hit)"
+echo "v0.3.1: Upload 0 files (cache hit)"
 echo "Improvement: 100% (no upload needed)"
 echo ""
 
@@ -219,7 +219,7 @@ UNCHANGED_FILES=$((PUBLIC_FILES - CHANGED_FILES))
 IMPROVEMENT=$(echo "scale=2; ($UNCHANGED_FILES * 100) / $PUBLIC_FILES" | bc)
 
 echo "v0.1.0: Upload ALL $PUBLIC_FILES files (${PUBLIC_SIZE}KB)"
-echo "v0.3.0: Upload $CHANGED_FILES file (~1-2KB)"
+echo "v0.3.1: Upload $CHANGED_FILES file (~1-2KB)"
 echo -e "Improvement: ${GREEN}~${IMPROVEMENT}%${NC}"
 echo ""
 
@@ -229,7 +229,7 @@ UNCHANGED_90PCT=$((PUBLIC_FILES - CHANGED_10PCT))
 IMPROVEMENT_10PCT=$(echo "scale=2; ($UNCHANGED_90PCT * 100) / $PUBLIC_FILES" | bc)
 
 echo "v0.1.0: Upload ALL $PUBLIC_FILES files (${PUBLIC_SIZE}KB)"
-echo "v0.3.0: Upload $CHANGED_10PCT files (~10% of total)"
+echo "v0.3.1: Upload $CHANGED_10PCT files (~10% of total)"
 echo -e "Improvement: ${GREEN}~${IMPROVEMENT_10PCT}%${NC}"
 echo ""
 
@@ -282,7 +282,7 @@ echo -e "${BLUE}║   Benchmark Summary                          ║${NC}"
 echo -e "${BLUE}╚══════════════════════════════════════════════╝${NC}"
 echo ""
 
-echo -e "${GREEN}Performance Improvements in v0.3.0:${NC}"
+echo -e "${GREEN}Performance Improvements in v0.3.1:${NC}"
 echo ""
 echo "1. ${YELLOW}Build Performance${NC}"
 echo "   ├─ Cold build: ${COLD_BUILD_TIME}ms"

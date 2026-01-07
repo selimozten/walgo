@@ -12,7 +12,7 @@ NC='\033[0m'
 
 echo -e "${BLUE}╔══════════════════════════════════════════════╗${NC}"
 echo -e "${BLUE}║   Walgo Security Audit Report               ║${NC}"
-echo -e "${BLUE}║   Internal Security Review - v0.3.0          ║${NC}"
+echo -e "${BLUE}║   Internal Security Review - v0.3.1          ║${NC}"
 echo -e "${BLUE}╚══════════════════════════════════════════════╝${NC}"
 echo ""
 
@@ -266,7 +266,7 @@ REPORT_FILE="security_audit_report_$(date +%Y%m%d).txt"
 {
     echo "Walgo Security Audit Report"
     echo "Date: $(date)"
-    echo "Version: v0.3.0"
+    echo "Version: v0.3.1"
     echo ""
     echo "Dependencies: $DEP_COUNT (all verified)"
     echo "Hardcoded secrets: None detected"

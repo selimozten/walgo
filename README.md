@@ -54,12 +54,23 @@ Deploy your Hugo sites to the decentralized web with an interactive wizard. No b
 **macOS/Linux:**
 
 ```bash
+# Prerequisites: Install Git first
+# macOS: brew install git
+# Ubuntu/Debian: sudo apt install git
+# Fedora: sudo dnf install git
+# Arch: sudo pacman -S git
+
 curl -fsSL https://raw.githubusercontent.com/selimozten/walgo/main/install.sh | bash
 ```
 
 **Windows:**
 
 ```powershell
+# Prerequisites: Install Git first
+# Using Chocolatey (recommended):
+# choco install git
+# Or download from: https://git-scm.com/download/win
+
 irm https://raw.githubusercontent.com/selimozten/walgo/main/install.ps1 | iex
 ```
 
@@ -374,6 +385,27 @@ Comprehensive documentation is available in the [`docs/`](docs/) directory:
 
 ### Required
 
+- **[Git](https://git-scm.com)** — Version control system (required for installation and some features)
+
+  ```bash
+  # macOS
+  brew install git
+
+  # Ubuntu/Debian
+  sudo apt install git
+
+  # Fedora
+  sudo dnf install git
+
+  # Windows (Chocolatey)
+  choco install git
+
+  # Windows (Scoop)
+  scoop install git
+
+  # Or download from https://git-scm.com
+  ```
+
 - **[Hugo Extended](https://gohugo.io)** — Static site generator
 
   > **Important:** The **Extended** version is required for SCSS/SASS support.
@@ -381,6 +413,18 @@ Comprehensive documentation is available in the [`docs/`](docs/) directory:
   ```bash
   # macOS
   brew install hugo
+
+  # Ubuntu/Debian
+  sudo apt install hugo
+
+  # Fedora
+  sudo dnf install hugo
+
+  # Windows (Chocolatey)
+  choco install hugo-extended
+
+  # Windows (Scoop)
+  scoop install hugo-extended
 
   # Verify it's the extended version
   hugo version  # Should show "extended"

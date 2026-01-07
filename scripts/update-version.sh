@@ -1,9 +1,9 @@
 #!/bin/bash
 
-# Update version to v0.3.0
+# Update version to v0.3.1
 # Run from project root: ./scripts/update-version.sh
 
-NEW_VERSION="0.3.0"
+NEW_VERSION="0.3.1"
 OLD_VERSION="0.2.1"
 
 echo "🔄 Updating version from $OLD_VERSION to $NEW_VERSION..."

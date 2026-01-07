@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"sync"
 	"time"
 
 	"github.com/selimozten/walgo/internal/ui"
@@ -44,6 +45,7 @@ type Collector struct {
 	sinkPath  string
 	sessionID string
 	startTime time.Time
+	mu        sync.Mutex // protects concurrent access to the sink file
 }
 
 // defaultSinkPath returns the default path for telemetry data
@@ -152,6 +154,10 @@ func (c *Collector) RecordCommand(command string, startTime time.Time, success b
 
 // writeEvent writes an event to the sink
 func (c *Collector) writeEvent(event Event) error {
+	// Lock to prevent concurrent writes from corrupting the file
+	c.mu.Lock()
+	defer c.mu.Unlock()
+
 	// Ensure directory exists
 	dir := filepath.Dir(c.sinkPath)
 	// #nosec G301 - metrics directory needs standard permissions

@@ -2,9 +2,10 @@ package cmd
 
 import (
 	"os"
-	"os/exec"
 	"path/filepath"
 	"testing"
+
+	"github.com/selimozten/walgo/internal/deps"
 )
 
 func TestInitCommand(t *testing.T) {
@@ -37,7 +38,7 @@ func TestInitCommand(t *testing.T) {
 
 func TestInitCommandExecution(t *testing.T) {
 	t.Run("Successful site initialization", func(t *testing.T) {
-		if _, err := exec.LookPath("hugo"); err != nil {
+		if _, err := deps.LookPath("hugo"); err != nil {
 			t.Skip("Hugo not installed, skipping site initialization test")
 		}
 		// Create temp directory for testing
@@ -78,7 +79,7 @@ func TestInitCommandExecution(t *testing.T) {
 	})
 
 	t.Run("Init with existing directory", func(t *testing.T) {
-		if _, err := exec.LookPath("hugo"); err != nil {
+		if _, err := deps.LookPath("hugo"); err != nil {
 			t.Skip("Hugo not installed, skipping existing directory test")
 		}
 		tempDir := t.TempDir()

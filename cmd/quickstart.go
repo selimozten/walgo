@@ -3,10 +3,10 @@ package cmd
 import (
 	"fmt"
 	"os"
-	"os/exec"
 	"path/filepath"
 
 	"github.com/selimozten/walgo/internal/config"
+	"github.com/selimozten/walgo/internal/deps"
 	"github.com/selimozten/walgo/internal/hugo"
 	"github.com/selimozten/walgo/internal/projects"
 	"github.com/selimozten/walgo/internal/ui"
@@ -49,19 +49,12 @@ Example:
 
 		// [1/4] Check dependencies
 		fmt.Println("  [1/4] Checking dependencies...")
-		if _, err := exec.LookPath("hugo"); err != nil {
+		if _, err := deps.LookPath("hugo"); err != nil {
 			fmt.Fprintf(os.Stderr, "\n%s Error: Hugo not found\n", icons.Error)
 			fmt.Fprintf(os.Stderr, "\n%s Install from https://gohugo.io/installation/\n", icons.Lightbulb)
 			return fmt.Errorf("hugo not found: %w", err)
 		}
 		fmt.Printf("        %s Hugo found\n", icons.Check)
-
-		if _, err := exec.LookPath("git"); err != nil {
-			fmt.Fprintf(os.Stderr, "\n%s Error: Git not found\n", icons.Error)
-			fmt.Fprintf(os.Stderr, "\n%s Git is required for theme installation\n", icons.Lightbulb)
-			return fmt.Errorf("git not found: %w", err)
-		}
-		fmt.Printf("        %s Git found\n", icons.Check)
 
 		// [2/4] Create site directory and initialize Hugo
 		fmt.Println("\n  [2/4] Creating Hugo site...")

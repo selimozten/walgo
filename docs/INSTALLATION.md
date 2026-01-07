@@ -32,6 +32,84 @@ Complete installation guide for Walgo on all supported platforms.
 
 ## Quick Install
 
+### Prerequisite: Install Git
+
+Before running the installation script, make sure Git is installed on your system.
+
+#### macOS (using Homebrew)
+
+```bash
+# Install Homebrew if not already installed
+/bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"
+
+# Install Git
+brew install git
+
+# Verify installation
+git --version
+```
+
+#### Linux (Ubuntu/Debian)
+
+```bash
+sudo apt update
+sudo apt install git
+
+# Verify installation
+git --version
+```
+
+#### Linux (Fedora)
+
+```bash
+sudo dnf install git
+
+# Verify installation
+git --version
+```
+
+#### Linux (Arch)
+
+```bash
+sudo pacman -S git
+
+# Verify installation
+git --version
+```
+
+#### Windows (Chocolatey)
+
+```powershell
+# Install Chocolatey if not already installed (run as Administrator)
+Set-ExecutionPolicy Bypass -Scope Process -Force
+[System.Net.ServicePointManager]::SecurityProtocol = [System.Net.ServicePointManager]::SecurityProtocol -bor 3072
+iex ((New-Object System.Net.WebClient).DownloadString('https://community.chocolatey.org/install.ps1'))
+
+# Install Git
+choco install git
+
+# Verify installation
+git --version
+```
+
+#### Windows (Scoop)
+
+```powershell
+# Install Scoop if not already installed
+Set-ExecutionPolicy -ExecutionPolicy RemoteSigned -Scope CurrentUser
+Invoke-RestMethod -Uri https://get.scoop.sh | Invoke-Expression
+
+# Install Git
+scoop install git
+
+# Verify installation
+git --version
+```
+
+#### Other Platforms
+
+Download Git from: https://git-scm.com/downloads
+
 ### One-Line Install (macOS/Linux)
 
 ```bash
@@ -139,6 +217,43 @@ sudo mv walgo /usr/local/bin/
 
 ### Windows
 
+#### Prerequisite: Install Git
+
+Before installing Walgo, make sure Git is installed on Windows.
+
+**Option A: Using Chocolatey (Recommended)**
+
+```powershell
+# Install Chocolatey if not already installed (run as Administrator)
+Set-ExecutionPolicy Bypass -Scope Process -Force
+[System.Net.ServicePointManager]::SecurityProtocol = [System.Net.ServicePointManager]::SecurityProtocol -bor 3072
+iex ((New-Object System.Net.WebClient).DownloadString('https://community.chocolatey.org/install.ps1'))
+
+# Install Git
+choco install git
+
+# Verify installation
+git --version
+```
+
+**Option B: Using Scoop**
+
+```powershell
+# Install Scoop if not already installed
+Set-ExecutionPolicy -ExecutionPolicy RemoteSigned -Scope CurrentUser
+Invoke-RestMethod -Uri https://get.scoop.sh | Invoke-Expression
+
+# Install Git
+scoop install git
+
+# Verify installation
+git --version
+```
+
+**Option C: Download Installer**
+
+Download and install Git from: https://git-scm.com/download/win
+
 #### Option 1: PowerShell One-Line Install (Recommended)
 
 Open PowerShell and run:
@@ -153,6 +268,7 @@ This script will:
 - Download the latest Walgo binary
 - Install to a location in your PATH
 - Verify installation
+- Check for Git installation and provide guidance if missing
 
 **Note:** Run PowerShell as Administrator for system-wide installation, or as regular user for user-only installation.
 

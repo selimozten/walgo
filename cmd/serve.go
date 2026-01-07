@@ -9,6 +9,7 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/selimozten/walgo/internal/deps"
 	"github.com/selimozten/walgo/internal/hugo"
 	"github.com/selimozten/walgo/internal/ui"
 	"github.com/spf13/cobra"
@@ -35,7 +36,7 @@ Press Ctrl+C to stop the server.`,
 		}
 
 		// Check if Hugo is installed
-		if _, err := exec.LookPath("hugo"); err != nil {
+		if _, err := deps.LookPath("hugo"); err != nil {
 			fmt.Fprintf(os.Stderr, "%s Error: Hugo is not installed or not found in PATH\n", icons.Error)
 			fmt.Fprintf(os.Stderr, "\n%s Install Hugo: https://gohugo.io/installation/\n", icons.Lightbulb)
 			return fmt.Errorf("hugo is not installed or not found in PATH")

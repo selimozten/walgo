@@ -1,6 +1,6 @@
 # Walgo - Complete Command Reference
 
-**Walgo v0.3.0** - Deploy Hugo Sites to Walrus Decentralized Storage
+**Walgo v0.3.1** - Deploy Hugo Sites to Walrus Decentralized Storage
 
 Complete reference for all Walgo commands with examples, flags, and workflows.
 
@@ -1151,7 +1151,7 @@ walgo doctor --verbose
 Checking Walgo Installation
 ===========================
 
-✓ Walgo is installed correctly (v0.3.0)
+✓ Walgo is installed correctly (v0.3.1)
 ✓ Hugo is installed (v0.125.0)
 ✓ site-builder is installed (v0.1.0)
 ✓ Sui CLI is installed (v1.20.0)
@@ -1247,7 +1247,7 @@ walgo version
 **Output:**
 
 ```
-Walgo version 0.3.0
+Walgo version 0.3.1
 Built with Go 1.24.4
 Commit: 2ecac6b
 Build date: 2025-01-15
@@ -1576,4 +1576,4 @@ walgo projects --help
 
 **Total Commands: 29**
 
-Last updated: v0.3.0
+Last updated: v0.3.1

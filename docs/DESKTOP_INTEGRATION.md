@@ -1,6 +1,6 @@
 # Desktop App Integration Guide
 
-**Walgo v0.3.0** - Desktop Application Documentation
+**Walgo v0.3.1** - Desktop Application Documentation
 
 Complete guide to Walgo's desktop application features, usage, and development.
 
@@ -32,7 +32,7 @@ The Walgo desktop application provides a graphical user interface for all Walgo 
 - **Wallet Integration** - Manage Sui wallets and switch networks
 - **System Health** - Monitor dependencies and auto-install tools
 
-**Version:** v0.3.0
+**Version:** v0.3.1
 
 ---
 

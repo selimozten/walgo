@@ -6,6 +6,30 @@ Complete installation instructions for all platforms.
 
 ### One-Line Install (Linux/macOS)
 
+**Prerequisite: Install Git first**
+
+Before running the installation script, make sure Git is installed:
+
+```bash
+# macOS (using Homebrew)
+brew install git
+
+# Ubuntu/Debian
+sudo apt update
+sudo apt install git
+
+# Fedora
+sudo dnf install git
+
+# Arch Linux
+sudo pacman -S git
+
+# Verify Git installation
+git --version
+```
+
+**Install Walgo:**
+
 ```bash
 curl -fsSL https://raw.githubusercontent.com/selimozten/walgo/main/install.sh | bash
 ```
@@ -13,6 +37,23 @@ curl -fsSL https://raw.githubusercontent.com/selimozten/walgo/main/install.sh | 
 **⚠️ Windows Users:** The command above will NOT work on Windows PowerShell or CMD.
 
 ### Windows PowerShell Install
+
+**Prerequisite: Install Git first**
+
+```powershell
+# Using Chocolatey (recommended)
+choco install git
+
+# Or using Scoop
+scoop install git
+
+# Or download from https://git-scm.com/download/win
+
+# Verify Git installation
+git --version
+```
+
+**Install Walgo:**
 
 ```powershell
 irm https://raw.githubusercontent.com/selimozten/walgo/main/install.ps1 | iex
@@ -145,26 +186,110 @@ This installs:
 
 ### Manual Dependency Installation
 
+#### Git (Required)
+
+Git is required for installation and some features.
+
+**macOS (Homebrew):**
+
+```bash
+# If Homebrew is not installed, install it first:
+/bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"
+
+# Then install Git
+brew install git
+```
+
+**Linux (Ubuntu/Debian):**
+
+```bash
+sudo apt update
+sudo apt install git
+```
+
+**Linux (Fedora):**
+
+```bash
+sudo dnf install git
+```
+
+**Linux (Arch):**
+
+```bash
+sudo pacman -S git
+```
+
+**Windows (Chocolatey):**
+
+```powershell
+# If Chocolatey is not installed, run this as Administrator:
+Set-ExecutionPolicy Bypass -Scope Process -Force
+[System.Net.ServicePointManager]::SecurityProtocol = [System.Net.ServicePointManager]::SecurityProtocol -bor 3072
+iex ((New-Object System.Net.WebClient).DownloadString('https://community.chocolatey.org/install.ps1'))
+
+# Then install Git
+choco install git
+```
+
+**Windows (Scoop):**
+
+```powershell
+# If Scoop is not installed:
+Set-ExecutionPolicy -ExecutionPolicy RemoteSigned -Scope CurrentUser
+Invoke-RestMethod -Uri https://get.scoop.sh | Invoke-Expression
+
+# Then install Git
+scoop install git
+```
+
+**Other platforms:**
+Visit [Git Downloads](https://git-scm.com/downloads)
+
 #### Hugo (Required)
 
 Hugo is required for static site generation.
 
-**macOS:**
+**macOS (Homebrew):**
 
 ```bash
+# Install Homebrew if needed (see Git section above)
 brew install hugo
+
+# Verify it's the extended version
+hugo version
 ```
 
-**Ubuntu/Debian:**
+**Linux (Ubuntu/Debian):**
 
 ```bash
+sudo apt update
 sudo apt install hugo
 ```
 
-**Windows:**
+**Linux (Fedora):**
 
 ```bash
+sudo dnf install hugo
+```
+
+**Linux (Arch):**
+
+```bash
+sudo pacman -S hugo
+```
+
+**Windows (Chocolatey):**
+
+```powershell
+# Install Chocolatey if needed (see Git section above)
 choco install hugo-extended
+```
+
+**Windows (Scoop):**
+
+```powershell
+# Install Scoop if needed (see Git section above)
+scoop install hugo-extended
 ```
 
 **Other platforms:**

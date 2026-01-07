@@ -629,6 +629,52 @@ verify_installation() {
     fi
 }
 
+# Install Git
+install_git() {
+    print_info "Installing Git..."
+
+    case "$OS" in
+        darwin)
+            if command -v brew >/dev/null 2>&1; then
+                print_info "Using Homebrew to install Git..."
+                brew install git
+            else
+                print_warning "Homebrew not found. Please install Git manually:"
+                print_info "  Download from: https://git-scm.com/download/mac"
+                return 1
+            fi
+            ;;
+        linux)
+            if command -v apt-get >/dev/null 2>&1; then
+                print_info "Using apt-get to install Git..."
+                sudo apt-get update && sudo apt-get install -y git
+            elif command -v yum >/dev/null 2>&1; then
+                print_info "Using yum to install Git..."
+                sudo yum install -y git
+            elif command -v dnf >/dev/null 2>&1; then
+                print_info "Using dnf to install Git..."
+                sudo dnf install -y git
+            else
+                print_warning "Package manager not found. Please install Git manually:"
+                print_info "  https://git-scm.com/download/linux"
+                return 1
+            fi
+            ;;
+        *)
+            print_warning "Unsupported OS for automatic Git installation"
+            return 1
+            ;;
+    esac
+
+    if command -v git >/dev/null 2>&1; then
+        print_success "Git installed successfully: $(git --version)"
+        return 0
+    else
+        print_error "Git installation failed"
+        return 1
+    fi
+}
+
 # Install Hugo directly (without package manager)
 install_hugo_direct() {
     print_info "Fetching latest Hugo version..."
@@ -759,6 +805,13 @@ check_dependencies() {
 
     local missing_deps=()
 
+    # Check for Git
+    if ! command -v git >/dev/null 2>&1; then
+        missing_deps+=("git")
+    else
+        print_success "Git found: $(git --version 2>&1 | head -1)"
+    fi
+
     # Check for Hugo
     if ! command -v hugo >/dev/null 2>&1; then
         missing_deps+=("hugo")
@@ -772,7 +825,17 @@ check_dependencies() {
         print_info "Walgo works best with these tools installed."
         echo ""
 
+        if [[ " ${missing_deps[@]} " =~ " git " ]]; then
+            print_info "Installing Git..."
+            if install_git; then
+                print_success "Git installed successfully"
+            else
+                print_warning "Failed to install Git automatically. Install manually from https://git-scm.com/downloads"
+            fi
+        fi
+
         if [[ " ${missing_deps[@]} " =~ " hugo " ]]; then
+            echo ""
             print_info "Installing Hugo directly from GitHub releases..."
             if install_hugo_direct; then
                 print_success "Hugo installed successfully"
@@ -1047,14 +1110,16 @@ install_walrus_dependencies() {
     echo ""
     print_info "Configuring Sui client..."
 
+    # Global variables to store mnemonic phrase and address for display at end
+    SUI_MNEMONIC_PHRASE=""
+    SUI_ADDRESS=""
+
     if [ ! -f "$HOME/.sui/sui_config/client.yaml" ]; then
         print_info "Initializing Sui client for $default_network..."
+        print_info "Creating new Sui address..."
 
         # Ensure we're in a safe directory before running sui client
         cd "$HOME" 2>/dev/null || cd /tmp
-
-        # Automatically initialize sui client with piped input
-        print_info "Automatically configuring Sui client..."
 
         # Use timeout if available (30 seconds max)
         local timeout_cmd=""
@@ -1064,7 +1129,7 @@ install_walrus_dependencies() {
             timeout_cmd="gtimeout 30"
         fi
 
-        # Run with or without timeout
+        # Run with or without timeout - capture full output including mnemonic
         local sui_output
         if [ -n "$timeout_cmd" ]; then
             sui_output=$({
@@ -1072,17 +1137,33 @@ install_walrus_dependencies() {
                 echo "https://fullnode.$default_network.sui.io:443"  # Full node URL
                 echo "$default_network"  # Environment alias
                 echo "0"  # Key scheme (ed25519)
-            } | $timeout_cmd sui client 2>&1 | grep -v "^Usage:" | head -50 || true)
+            } | $timeout_cmd sui client 2>&1 || true)
         else
             sui_output=$({
                 echo "y"  # Connect to Sui Full Node
                 echo "https://fullnode.$default_network.sui.io:443"  # Full node URL
                 echo "$default_network"  # Environment alias
                 echo "0"  # Key scheme (ed25519)
-            } | sui client 2>&1 | grep -v "^Usage:" | head -50 || true)
+            } | sui client 2>&1 || true)
         fi
 
-        if [ $? -ne 0 ]; then
+        # Extract recovery phrase and address from JSON output
+        # The output contains JSON with "recoveryPhrase": "word1 word2 ..." and "address": "0x..."
+        SUI_MNEMONIC_PHRASE=$(echo "$sui_output" | grep -o '"recoveryPhrase"[[:space:]]*:[[:space:]]*"[^"]*"' | sed 's/"recoveryPhrase"[[:space:]]*:[[:space:]]*"\([^"]*\)"/\1/')
+        SUI_ADDRESS=$(echo "$sui_output" | grep -o '"address"[[:space:]]*:[[:space:]]*"[^"]*"' | sed 's/"address"[[:space:]]*:[[:space:]]*"\([^"]*\)"/\1/')
+
+        # Alternative: try to extract from non-JSON format if JSON extraction failed
+        if [ -z "$SUI_MNEMONIC_PHRASE" ]; then
+            # Try to find lines with 12 or 24 words (typical mnemonic formats)
+            SUI_MNEMONIC_PHRASE=$(echo "$sui_output" | grep -E '([a-z]+ ){11,23}[a-z]+' | head -1 | sed 's/^[[:space:]]*//' | sed 's/[[:space:]]*$//')
+        fi
+
+        if [ -f "$HOME/.sui/sui_config/client.yaml" ]; then
+            print_success "Sui client configured successfully"
+            if [ -n "$SUI_MNEMONIC_PHRASE" ]; then
+                print_success "New wallet address created"
+            fi
+        else
             print_warning "Sui client initialization may have failed or timed out"
             print_info "You can configure it manually later with: sui client"
         fi
@@ -1300,6 +1381,51 @@ show_next_steps() {
             ;;
     esac
     echo ""
+
+    # Display mnemonic phrase if a new address was created
+    if [ -n "$SUI_MNEMONIC_PHRASE" ]; then
+        echo "═══════════════════════════════════════════════════════════"
+        if [ "$USE_COLORS" = true ]; then
+            echo -e "${RED}║  IMPORTANT: SAVE YOUR WALLET RECOVERY PHRASE${NC}"
+        else
+            echo "║  IMPORTANT: SAVE YOUR WALLET RECOVERY PHRASE"
+        fi
+        echo "═══════════════════════════════════════════════════════════"
+        echo ""
+        if [ -n "$SUI_ADDRESS" ]; then
+            if [ "$USE_COLORS" = true ]; then
+                echo -e "${YELLOW}  Your Sui Address:${NC}"
+                echo -e "  ${GREEN}${SUI_ADDRESS}${NC}"
+            else
+                echo "  Your Sui Address:"
+                echo "  $SUI_ADDRESS"
+            fi
+            echo ""
+        fi
+        if [ "$USE_COLORS" = true ]; then
+            echo -e "${YELLOW}  Secret Recovery Phrase:${NC}"
+            echo -e "  ${GREEN}${SUI_MNEMONIC_PHRASE}${NC}"
+        else
+            echo "  Secret Recovery Phrase:"
+            echo "  $SUI_MNEMONIC_PHRASE"
+        fi
+        echo ""
+        if [ "$USE_COLORS" = true ]; then
+            echo -e "${RED}  ⚠️  Write this down and store it safely!${NC}"
+            echo -e "${RED}  ⚠️  You will need this phrase to recover your wallet.${NC}"
+            echo -e "${RED}  ⚠️  Never share this phrase with anyone!${NC}"
+        else
+            echo "  ⚠️  Write this down and store it safely!"
+            echo "  ⚠️  You will need this phrase to recover your wallet."
+            echo "  ⚠️  Never share this phrase with anyone!"
+        fi
+        echo ""
+        if [ -z "$SUI_ADDRESS" ]; then
+            echo "  Get your address: sui client active-address"
+            echo ""
+        fi
+    fi
+
     echo "Documentation: https://github.com/$REPO"
     echo ""
 }

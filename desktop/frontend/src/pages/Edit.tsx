@@ -30,7 +30,7 @@ import { cn, renderMarkdown } from "../utils";
 import { useEditProject, useDependencyCheck } from "../hooks";
 import { Project, SystemHealth } from "../types";
 
-const SAVE_STATUS_DURATION = 2000; // ms
+const SAVE_STATUS_DURATION = 5000; // ms - increased for better visibility
 
 interface EditProps {
   aiConfigured?: boolean;
