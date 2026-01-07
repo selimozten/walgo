@@ -408,20 +408,30 @@ install_binary() {
     print_info "Downloading $BINARY_NAME from $download_url..."
 
     if command -v curl >/dev/null 2>&1; then
-        curl -fsSL -o "$tmp_file" "$download_url"
+        if ! curl -fsSL -o "$tmp_file" "$download_url"; then
+            print_error "Failed to download $BINARY_NAME"
+            print_info "Please check your internet connection and try again"
+            print_info "Or download manually from: https://github.com/$REPO/releases"
+            exit 1
+        fi
     else
-        wget -q -O "$tmp_file" "$download_url"
+        if ! wget -q -O "$tmp_file" "$download_url"; then
+            print_error "Failed to download $BINARY_NAME"
+            print_info "Please check your internet connection and try again"
+            print_info "Or download manually from: https://github.com/$REPO/releases"
+            exit 1
+        fi
     fi
 
     print_success "Downloaded successfully"
 
     # Extract archive
     print_info "Extracting archive..."
-    (
-        cd "$TEMP_DIR"
-
-        tar -xzf "$tmp_file"
-    )
+    if ! (cd "$TEMP_DIR" && tar -xzf "$tmp_file"); then
+        print_error "Failed to extract archive"
+        print_info "The downloaded file may be corrupted. Please try again."
+        exit 1
+    fi
 
     # Find the binary
     local binary_path="${TEMP_DIR}/${BINARY_NAME}"
@@ -435,6 +445,15 @@ install_binary() {
 
     # Install binary
     print_info "Installing to $INSTALL_DIR..."
+
+    # Create installation directory if it doesn't exist
+    if [ ! -d "$INSTALL_DIR" ]; then
+        if [ "$USE_SUDO" = "true" ]; then
+            sudo mkdir -p "$INSTALL_DIR"
+        else
+            mkdir -p "$INSTALL_DIR"
+        fi
+    fi
 
     # Check if we need sudo
     if [ "$USE_SUDO" = "true" ] && [ ! -w "$INSTALL_DIR" ]; then
@@ -494,15 +513,8 @@ install_desktop() {
     fi
 
     print_info "Extracting..."
-    (
-        cd "$tmp_dir"
-
-        # Extract based on file format
-        tar -xzf "$tmp_file"
-    )
-
-    # Check if extraction succeeded
-    if [ $? -ne 0 ]; then
+    if ! (cd "$tmp_dir" && tar -xzf "$tmp_file"); then
+        print_warning "Failed to extract desktop app archive. Skipping."
         rm -rf "$tmp_dir"
         return
     fi
@@ -682,9 +694,19 @@ install_hugo_direct() {
         print_info "Installing Hugo from .pkg..."
 
         if [ "$USE_SUDO" = "true" ] || [ ! -w "/usr/local" ]; then
-            sudo installer -pkg "$tmp_file" -target /
+            if ! sudo installer -pkg "$tmp_file" -target /; then
+                print_error "Failed to install Hugo from .pkg"
+                print_info "You may need to install Hugo manually from https://gohugo.io/installation/"
+                rm -rf "$tmp_dir"
+                return 1
+            fi
         else
-            installer -pkg "$tmp_file" -target /
+            if ! installer -pkg "$tmp_file" -target /; then
+                print_error "Failed to install Hugo from .pkg"
+                print_info "You may need to install Hugo manually from https://gohugo.io/installation/"
+                rm -rf "$tmp_dir"
+                return 1
+            fi
         fi
 
         rm -rf "$tmp_dir"
@@ -694,10 +716,11 @@ install_hugo_direct() {
 
     # Extract archive for Linux
     print_info "Extracting Hugo..."
-    (
-        cd "$tmp_dir"
-        tar -xzf "$tmp_file"
-    )
+    if ! (cd "$tmp_dir" && tar -xzf "$tmp_file"); then
+        print_error "Failed to extract Hugo archive"
+        rm -rf "$tmp_dir"
+        return 1
+    fi
 
     local hugo_binary="${tmp_dir}/hugo"
 
@@ -708,6 +731,15 @@ install_hugo_direct() {
     fi
 
     print_info "Installing Hugo to $INSTALL_DIR..."
+
+    # Create installation directory if it doesn't exist
+    if [ ! -d "$INSTALL_DIR" ]; then
+        if [ "$USE_SUDO" = "true" ]; then
+            sudo mkdir -p "$INSTALL_DIR"
+        else
+            mkdir -p "$INSTALL_DIR"
+        fi
+    fi
 
     if [ "$USE_SUDO" = "true" ] && [ ! -w "$INSTALL_DIR" ]; then
         sudo install -m 755 "$hugo_binary" "$INSTALL_DIR/hugo"
@@ -873,7 +905,31 @@ install_walrus_dependencies() {
     if ! command -v suiup >/dev/null 2>&1 && ! [ -f "$HOME/.local/bin/suiup" ]; then
         # Ensure we're in a safe directory before running external installer
         cd "$HOME" 2>/dev/null || cd /tmp
-        curl -sSfL https://raw.githubusercontent.com/Mystenlabs/suiup/main/install.sh | sh
+
+        # Download to temp file instead of piping to shell
+        local suiup_script=$(mktemp)
+        print_info "Downloading suiup installer..."
+        if command -v curl >/dev/null 2>&1; then
+            if ! curl -fsSL -o "$suiup_script" https://raw.githubusercontent.com/Mystenlabs/suiup/main/install.sh; then
+                print_error "Failed to download suiup installer"
+                rm -f "$suiup_script"
+                return
+            fi
+        else
+            if ! wget -q -O "$suiup_script" https://raw.githubusercontent.com/Mystenlabs/suiup/main/install.sh; then
+                print_error "Failed to download suiup installer"
+                rm -f "$suiup_script"
+                return
+            fi
+        fi
+
+        # Run the installer
+        if sh "$suiup_script"; then
+            rm -f "$suiup_script"
+        else
+            print_warning "suiup installation encountered issues"
+            rm -f "$suiup_script"
+        fi
 
         # Add to PATH for current session
         export PATH="$HOME/.local/bin:$PATH"
@@ -999,12 +1055,37 @@ install_walrus_dependencies() {
 
         # Automatically initialize sui client with piped input
         print_info "Automatically configuring Sui client..."
-        {
-            echo "y"  # Connect to Sui Full Node
-            echo "https://fullnode.$default_network.sui.io:443"  # Full node URL
-            echo "$default_network"  # Environment alias
-            echo "0"  # Key scheme (ed25519)
-        } | sui client 2>&1 | grep -v "^Usage:" | head -50 || true
+
+        # Use timeout if available (30 seconds max)
+        local timeout_cmd=""
+        if command -v timeout >/dev/null 2>&1; then
+            timeout_cmd="timeout 30"
+        elif command -v gtimeout >/dev/null 2>&1; then
+            timeout_cmd="gtimeout 30"
+        fi
+
+        # Run with or without timeout
+        local sui_output
+        if [ -n "$timeout_cmd" ]; then
+            sui_output=$({
+                echo "y"  # Connect to Sui Full Node
+                echo "https://fullnode.$default_network.sui.io:443"  # Full node URL
+                echo "$default_network"  # Environment alias
+                echo "0"  # Key scheme (ed25519)
+            } | $timeout_cmd sui client 2>&1 | grep -v "^Usage:" | head -50 || true)
+        else
+            sui_output=$({
+                echo "y"  # Connect to Sui Full Node
+                echo "https://fullnode.$default_network.sui.io:443"  # Full node URL
+                echo "$default_network"  # Environment alias
+                echo "0"  # Key scheme (ed25519)
+            } | sui client 2>&1 | grep -v "^Usage:" | head -50 || true)
+        fi
+
+        if [ $? -ne 0 ]; then
+            print_warning "Sui client initialization may have failed or timed out"
+            print_info "You can configure it manually later with: sui client"
+        fi
     else
         print_success "Sui client already configured"
     fi

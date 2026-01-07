@@ -136,10 +136,31 @@ function Download-File {
     $label = if ($Description) { $Description } else { $Url }
     Print-Info "Downloading $label..."
     try {
-        Invoke-WebRequest -Uri $Url -OutFile $Destination -UseBasicParsing
+        # Ensure destination directory exists
+        $destDir = Split-Path -Parent $Destination
+        if ($destDir -and -not (Test-Path $destDir)) {
+            New-Item -ItemType Directory -Force -Path $destDir | Out-Null
+        }
+
+        Invoke-WebRequest -Uri $Url -OutFile $Destination -UseBasicParsing -ErrorAction Stop
+
+        # Verify file was created and has content
+        if (-not (Test-Path $Destination)) {
+            Print-Error "Download completed but file not found at $Destination"
+            return $false
+        }
+
+        $fileInfo = Get-Item $Destination
+        if ($fileInfo.Length -eq 0) {
+            Print-Error "Downloaded file is empty (0 bytes)"
+            Remove-Item $Destination -Force -ErrorAction SilentlyContinue
+            return $false
+        }
+
         return $true
     } catch {
-        Print-Error "Failed to download $label: $_"
+        Print-Error "Failed to download $label`: $_"
+        Print-Info "Please check your internet connection and try again"
         return $false
     }
 }
@@ -151,10 +172,36 @@ function Expand-ArchiveSafe {
     )
 
     try {
-        Expand-Archive -Path $Archive -DestinationPath $Destination -Force
+        # Verify archive exists and is readable
+        if (-not (Test-Path $Archive)) {
+            Print-Error "Archive file not found: $Archive"
+            return $false
+        }
+
+        $archiveInfo = Get-Item $Archive
+        if ($archiveInfo.Length -eq 0) {
+            Print-Error "Archive file is empty (0 bytes)"
+            return $false
+        }
+
+        # Ensure destination directory exists
+        if (-not (Test-Path $Destination)) {
+            New-Item -ItemType Directory -Force -Path $Destination | Out-Null
+        }
+
+        Expand-Archive -Path $Archive -DestinationPath $Destination -Force -ErrorAction Stop
+
+        # Verify extraction succeeded
+        $extractedItems = Get-ChildItem -Path $Destination -ErrorAction SilentlyContinue
+        if ($null -eq $extractedItems -or $extractedItems.Count -eq 0) {
+            Print-Error "Archive extraction completed but no files found"
+            return $false
+        }
+
         return $true
     } catch {
         Print-Error "Failed to extract archive: $_"
+        Print-Info "The archive file may be corrupted. Please try again."
         return $false
     }
 }
@@ -242,11 +289,24 @@ function Install-WalgoBinary {
     $binary = Get-ChildItem -Path $extractDir -Filter "${BINARY_NAME}.exe" -Recurse | Select-Object -First 1
     if (-not $binary) {
         Print-Error "walgo.exe not found in archive"
+        Print-Info "The downloaded archive may be corrupted. Please try again."
         exit 1
     }
 
-    Copy-Item -Path $binary.FullName -Destination $script:WalgoBinaryPath -Force
-    Print-Success "Installed $BINARY_NAME to $script:WalgoBinaryPath"
+    try {
+        # Ensure parent directory exists
+        $parentDir = Split-Path -Parent $script:WalgoBinaryPath
+        if (-not (Test-Path $parentDir)) {
+            New-Item -ItemType Directory -Force -Path $parentDir | Out-Null
+        }
+
+        Copy-Item -Path $binary.FullName -Destination $script:WalgoBinaryPath -Force -ErrorAction Stop
+        Print-Success "Installed $BINARY_NAME to $script:WalgoBinaryPath"
+    } catch {
+        Print-Error "Failed to copy binary to $script:WalgoBinaryPath: $_"
+        Print-Info "Check if you have write permissions to the directory"
+        exit 1
+    }
 
     if ($script:IsAdmin) {
         Add-PathEntry -PathValue $script:WalgoInstallRoot -Machine
@@ -283,11 +343,23 @@ function Install-WalgoDesktop {
         return
     }
 
-    Ensure-Directory $script:DesktopInstallDir
-    $destination = Join-Path $script:DesktopInstallDir "Walgo.exe"
-    Copy-Item -Path $exe.FullName -Destination $destination -Force
-    Print-Success "Walgo Desktop installed to $destination"
-    Print-Info "Launch via: walgo desktop"
+    try {
+        Ensure-Directory $script:DesktopInstallDir
+        $destination = Join-Path $script:DesktopInstallDir "Walgo.exe"
+        Copy-Item -Path $exe.FullName -Destination $destination -Force -ErrorAction Stop
+
+        # Verify copy succeeded
+        if (-not (Test-Path $destination)) {
+            Print-Warning "Desktop installation completed but file not found at $destination"
+            return
+        }
+
+        Print-Success "Walgo Desktop installed to $destination"
+        Print-Info "Launch via: walgo desktop"
+    } catch {
+        Print-Warning "Failed to install desktop app: $_"
+        Print-Info "You can try installing it manually later"
+    }
 
     Remove-Item -Path $tempFile -Force -ErrorAction SilentlyContinue
     Remove-Item -Path $extractDir -Recurse -Force -ErrorAction SilentlyContinue
@@ -338,10 +410,24 @@ function Install-HugoDirect {
         return $false
     }
 
-    $destination = Join-Path $script:WalgoToolsDir "hugo.exe"
-    Copy-Item -Path $binary.FullName -Destination $destination -Force
-    Add-PathEntry -PathValue $script:WalgoToolsDir
-    Print-Success "Hugo installed to $destination"
+    try {
+        Ensure-Directory $script:WalgoToolsDir
+        $destination = Join-Path $script:WalgoToolsDir "hugo.exe"
+        Copy-Item -Path $binary.FullName -Destination $destination -Force -ErrorAction Stop
+
+        # Verify copy succeeded
+        if (-not (Test-Path $destination)) {
+            Print-Error "Hugo installation completed but file not found at $destination"
+            return $false
+        }
+
+        Add-PathEntry -PathValue $script:WalgoToolsDir
+        Print-Success "Hugo installed to $destination"
+    } catch {
+        Print-Error "Failed to install Hugo: $_"
+        Print-Info "Install manually from https://gohugo.io/installation/"
+        return $false
+    }
 
     Remove-Item -Path $tempFile -Force -ErrorAction SilentlyContinue
     Remove-Item -Path $extractDir -Recurse -Force -ErrorAction SilentlyContinue
@@ -394,10 +480,23 @@ function Install-Suiup {
         return $null
     }
 
-    Copy-Item -Path $binary.FullName -Destination $target -Force
-    Add-PathEntry -PathValue $script:WalgoToolsDir
-    Add-PathEntry -PathValue $script:LocalBinDir
-    Print-Success "suiup installed to $target"
+    try {
+        Ensure-Directory $script:WalgoToolsDir
+        Copy-Item -Path $binary.FullName -Destination $target -Force -ErrorAction Stop
+
+        # Verify copy succeeded
+        if (-not (Test-Path $target)) {
+            Print-Warning "suiup installation completed but file not found at $target"
+            return $null
+        }
+
+        Add-PathEntry -PathValue $script:WalgoToolsDir
+        Add-PathEntry -PathValue $script:LocalBinDir
+        Print-Success "suiup installed to $target"
+    } catch {
+        Print-Warning "Failed to install suiup: $_"
+        return $null
+    }
 
     Remove-Item -Path $tempFile -Force -ErrorAction SilentlyContinue
     Remove-Item -Path $extractDir -Recurse -Force -ErrorAction SilentlyContinue
@@ -408,18 +507,34 @@ function Download-WalrusConfigs {
     $configDir = Join-Path $env:USERPROFILE ".config\walrus"
     Ensure-Directory $configDir
 
+    $clientConfigPath = Join-Path $configDir "client_config.yaml"
     try {
-        Invoke-WebRequest -Uri "https://docs.wal.app/setup/client_config.yaml" -OutFile (Join-Path $configDir "client_config.yaml") -UseBasicParsing
-        Print-Success "Walrus client config downloaded"
+        Invoke-WebRequest -Uri "https://docs.wal.app/setup/client_config.yaml" -OutFile $clientConfigPath -UseBasicParsing -ErrorAction Stop
+
+        # Verify download
+        if ((Test-Path $clientConfigPath) -and (Get-Item $clientConfigPath).Length -gt 0) {
+            Print-Success "Walrus client config downloaded"
+        } else {
+            Print-Warning "Failed to download Walrus client config (file empty or missing)"
+        }
     } catch {
-        Print-Warning "Failed to download Walrus client config"
+        Print-Warning "Failed to download Walrus client config: $_"
+        Print-Info "You can download it manually from: https://docs.wal.app/setup/client_config.yaml"
     }
 
+    $sitesConfigPath = Join-Path $configDir "sites-config.yaml"
     try {
-        Invoke-WebRequest -Uri "https://raw.githubusercontent.com/MystenLabs/walrus-sites/refs/heads/mainnet/sites-config.yaml" -OutFile (Join-Path $configDir "sites-config.yaml") -UseBasicParsing
-        Print-Success "site-builder config downloaded"
+        Invoke-WebRequest -Uri "https://raw.githubusercontent.com/MystenLabs/walrus-sites/refs/heads/mainnet/sites-config.yaml" -OutFile $sitesConfigPath -UseBasicParsing -ErrorAction Stop
+
+        # Verify download
+        if ((Test-Path $sitesConfigPath) -and (Get-Item $sitesConfigPath).Length -gt 0) {
+            Print-Success "site-builder config downloaded"
+        } else {
+            Print-Warning "Failed to download site-builder config (file empty or missing)"
+        }
     } catch {
-        Print-Warning "Failed to download site-builder config"
+        Print-Warning "Failed to download site-builder config: $_"
+        Print-Info "You can download it manually from: https://raw.githubusercontent.com/MystenLabs/walrus-sites/refs/heads/mainnet/sites-config.yaml"
     }
 }
 
@@ -448,8 +563,22 @@ function Install-WalrusDependencies {
     foreach ($target in $targets) {
         Print-Info "Installing $($target.Label)..."
         try {
-            & $suiupPath install $($target.Spec) | Out-Null
-            Print-Success "$($target.Label) installed"
+            # Run with 120 second timeout
+            $job = Start-Job -ScriptBlock {
+                param($suiupPath, $spec)
+                & $suiupPath install $spec 2>&1
+            } -ArgumentList $suiupPath, $($target.Spec)
+
+            $completed = Wait-Job $job -Timeout 120
+            if ($completed) {
+                $output = Receive-Job $job
+                Remove-Job $job -Force
+                Print-Success "$($target.Label) installed"
+            } else {
+                Stop-Job $job
+                Remove-Job $job -Force
+                Print-Warning "$($target.Label) installation timed out after 120 seconds"
+            }
         } catch {
             Print-Warning "Failed to install $($target.Label): $_"
         }
