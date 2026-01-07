@@ -384,42 +384,6 @@ function Test-Installation {
     }
 }
 
-function Install-Git {
-    Print-Info "Checking for Git installation..."
-
-    # Check if winget is available (Windows 10+)
-    if (Get-Command winget -ErrorAction SilentlyContinue) {
-        Print-Info "Installing Git using winget..."
-        try {
-            winget install --id Git.Git -e --source winget --silent
-            Print-Success "Git installed successfully"
-            return $true
-        } catch {
-            Print-Warning "Failed to install Git via winget: $_"
-        }
-    }
-
-    # Check if chocolatey is available
-    if (Get-Command choco -ErrorAction SilentlyContinue) {
-        Print-Info "Installing Git using Chocolatey..."
-        try {
-            choco install git -y
-            Print-Success "Git installed successfully"
-            return $true
-        } catch {
-            Print-Warning "Failed to install Git via Chocolatey: $_"
-        }
-    }
-
-    # Manual installation instructions
-    Print-Warning "Could not automatically install Git"
-    Print-Info "Please install Git manually:"
-    Print-Info "  Download from: https://git-scm.com/download/win"
-    Print-Info "  Or use: winget install --id Git.Git"
-    Print-Info "  Or use: choco install git"
-    return $false
-}
-
 function Install-HugoDirect {
     Print-Info "Fetching latest Hugo version..."
     $release = Get-LatestRelease -Repository "gohugoio/hugo"
@@ -476,17 +440,6 @@ function Install-HugoDirect {
 
 function Check-Dependencies {
     Print-Info "Checking optional dependencies..."
-
-    # Check for Git
-    $git = Get-Command git.exe -ErrorAction SilentlyContinue
-    if ($null -eq $git) {
-        Print-Warning "Git not found. Installing..."
-        if (-not (Install-Git)) {
-            Print-Warning "Git installation failed. Install manually from https://git-scm.com/download/win"
-        }
-    } else {
-        Print-Success "Git found: $($git.Source)"
-    }
 
     # Check for Hugo
     $hugo = Get-Command hugo.exe -ErrorAction SilentlyContinue

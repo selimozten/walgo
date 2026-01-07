@@ -629,52 +629,6 @@ verify_installation() {
     fi
 }
 
-# Install Git
-install_git() {
-    print_info "Installing Git..."
-
-    case "$OS" in
-        darwin)
-            if command -v brew >/dev/null 2>&1; then
-                print_info "Using Homebrew to install Git..."
-                brew install git
-            else
-                print_warning "Homebrew not found. Please install Git manually:"
-                print_info "  Download from: https://git-scm.com/download/mac"
-                return 1
-            fi
-            ;;
-        linux)
-            if command -v apt-get >/dev/null 2>&1; then
-                print_info "Using apt-get to install Git..."
-                sudo apt-get update && sudo apt-get install -y git
-            elif command -v yum >/dev/null 2>&1; then
-                print_info "Using yum to install Git..."
-                sudo yum install -y git
-            elif command -v dnf >/dev/null 2>&1; then
-                print_info "Using dnf to install Git..."
-                sudo dnf install -y git
-            else
-                print_warning "Package manager not found. Please install Git manually:"
-                print_info "  https://git-scm.com/download/linux"
-                return 1
-            fi
-            ;;
-        *)
-            print_warning "Unsupported OS for automatic Git installation"
-            return 1
-            ;;
-    esac
-
-    if command -v git >/dev/null 2>&1; then
-        print_success "Git installed successfully: $(git --version)"
-        return 0
-    else
-        print_error "Git installation failed"
-        return 1
-    fi
-}
-
 # Install Hugo directly (without package manager)
 install_hugo_direct() {
     print_info "Fetching latest Hugo version..."
@@ -805,13 +759,6 @@ check_dependencies() {
 
     local missing_deps=()
 
-    # Check for Git
-    if ! command -v git >/dev/null 2>&1; then
-        missing_deps+=("git")
-    else
-        print_success "Git found: $(git --version 2>&1 | head -1)"
-    fi
-
     # Check for Hugo
     if ! command -v hugo >/dev/null 2>&1; then
         missing_deps+=("hugo")
@@ -824,15 +771,6 @@ check_dependencies() {
         print_warning "Optional dependencies not found: ${missing_deps[*]}"
         print_info "Walgo works best with these tools installed."
         echo ""
-
-        if [[ " ${missing_deps[@]} " =~ " git " ]]; then
-            print_info "Installing Git..."
-            if install_git; then
-                print_success "Git installed successfully"
-            else
-                print_warning "Failed to install Git automatically. Install manually from https://git-scm.com/downloads"
-            fi
-        fi
 
         if [[ " ${missing_deps[@]} " =~ " hugo " ]]; then
             echo ""
