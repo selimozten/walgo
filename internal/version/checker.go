@@ -297,11 +297,9 @@ func CheckAllVersions() (*CheckResult, error) {
 		}
 
 		// Add note to version if not Extended
-		versionNote := currentHugo
+		versionNote := currentHugo + " extended"
 		if !isExtended {
 			versionNote = currentHugo + " (standard - Extended recommended)"
-		} else {
-			versionNote = currentHugo + " extended"
 		}
 
 		result.Hugo = &ToolVersion{

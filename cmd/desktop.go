@@ -41,8 +41,8 @@ Example:
 		case "darwin":
 			// macOS: Check both system and user Applications
 			possiblePaths = []string{
-				"/Applications/Walgo.app",                              // System-wide (preferred)
-				filepath.Join(homeDir, "Applications", "Walgo.app"),    // User-specific
+				"/Applications/Walgo.app",                           // System-wide (preferred)
+				filepath.Join(homeDir, "Applications", "Walgo.app"), // User-specific
 			}
 		case "windows":
 			// Windows: Check LOCALAPPDATA and USERPROFILE

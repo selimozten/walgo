@@ -264,28 +264,25 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
 
-      - name: Setup Go
-        uses: actions/setup-go@v5
-        with:
-          go-version: '1.23'
+      - name: Set up QEMU
+        uses: docker/setup-qemu-action@v3
 
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version: '20'
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
 
-      - name: Install Linux dependencies
+      - name: Build ARM64 Desktop App
         run: |
-          sudo apt-get update
-          sudo apt-get install -y libgtk-3-dev libwebkit2gtk-4.0-dev gcc-aarch64-linux-gnu
-
-      - name: Install Wails
-        run: go install github.com/wailsapp/wails/v2/cmd/wails@latest
-
-      - name: Build Desktop App
-        working-directory: ./desktop
-        run: |
-          wails build -platform linux/arm64 -clean
+          docker run --platform linux/arm64 \
+            -v $PWD:/workspace \
+            -w /workspace/desktop \
+            --rm \
+            golang:1.23-alpine \
+            sh -c "
+              apk add --no-cache git nodejs npm musl-dev gcc libgcc libstdc++ \
+                libgtk-3 webkit2gtk-dev pkgconf && \
+              go install github.com/wailsapp/wails/v2/cmd/wails@latest && \
+              wails build -platform linux/arm64 -clean
+            "
 
       - name: Package App
         working-directory: ./desktop/build/bin
