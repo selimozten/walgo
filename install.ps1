@@ -573,7 +573,9 @@ function Install-Suiup {
 
     $tag = $release.tag_name
     $arch = Get-Architecture
-    $filename = "suiup-windows-${arch}.zip"
+    # Suiup Windows releases use format: suiup-Windows-msvc-x86_64.zip
+    $suiupArch = if ($arch -eq "amd64") { "x86_64" } else { $arch }
+    $filename = "suiup-Windows-msvc-${suiupArch}.zip"
     $downloadUrl = "https://github.com/MystenLabs/suiup/releases/download/$tag/$filename"
     $tempFile = Join-Path $TEMP_DIR $filename
 
