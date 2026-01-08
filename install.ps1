@@ -212,6 +212,88 @@ function Expand-ArchiveSafe {
     }
 }
 
+function Expand-TarGz {
+    param(
+        [Parameter(Mandatory = $true)][string]$Archive,
+        [Parameter(Mandatory = $true)][string]$Destination
+    )
+
+    try {
+        # Verify archive exists and is readable
+        if (-not (Test-Path $Archive)) {
+            Print-Error "Archive file not found: $Archive"
+            return $false
+        }
+
+        $archiveInfo = Get-Item $Archive
+        if ($archiveInfo.Length -eq 0) {
+            Print-Error "Archive file is empty (0 bytes)"
+            return $false
+        }
+
+        # Ensure destination directory exists
+        if (-not (Test-Path $Destination)) {
+            New-Item -ItemType Directory -Force -Path $Destination | Out-Null
+        }
+
+        # Check if tar command is available (Windows 10 build 17063+ has built-in tar)
+        $tarCommand = Get-Command tar.exe -ErrorAction SilentlyContinue
+        if ($tarCommand) {
+            # Use built-in tar command
+            $result = & tar.exe -xzf $Archive -C $Destination 2>&1
+            if ($LASTEXITCODE -ne 0) {
+                Print-Error "tar extraction failed: $result"
+                return $false
+            }
+        } else {
+            # Fallback: Use .NET to decompress and extract
+            Print-Info "Using .NET extraction (tar.exe not available)..."
+
+            # First decompress .gz to get .tar
+            $tarFile = $Archive -replace '\.gz$', ''
+            $gzStream = New-Object System.IO.FileStream($Archive, [System.IO.FileMode]::Open)
+            $tarStream = New-Object System.IO.FileStream($tarFile, [System.IO.FileMode]::Create)
+            $gzipStream = New-Object System.IO.Compression.GzipStream($gzStream, [System.IO.Compression.CompressionMode]::Decompress)
+
+            $gzipStream.CopyTo($tarStream)
+            $gzipStream.Close()
+            $tarStream.Close()
+            $gzStream.Close()
+
+            # Now extract .tar using PowerShell tar or manual extraction
+            if (Get-Command tar.exe -ErrorAction SilentlyContinue) {
+                $result = & tar.exe -xf $tarFile -C $Destination 2>&1
+                if ($LASTEXITCODE -ne 0) {
+                    Remove-Item $tarFile -Force -ErrorAction SilentlyContinue
+                    Print-Error "tar extraction failed: $result"
+                    return $false
+                }
+            } else {
+                Remove-Item $tarFile -Force -ErrorAction SilentlyContinue
+                Print-Error "Cannot extract .tar.gz: tar.exe not found. Please install tar or use Windows 10/11."
+                Print-Info "Manual extraction: extract $Archive to $Destination and rerun the installer"
+                return $false
+            }
+
+            Remove-Item $tarFile -Force -ErrorAction SilentlyContinue
+        }
+
+        # Verify extraction succeeded
+        $extractedItems = Get-ChildItem -Path $Destination -ErrorAction SilentlyContinue
+        if ($null -eq $extractedItems -or $extractedItems.Count -eq 0) {
+            Print-Error "Archive extraction completed but no files found"
+            return $false
+        }
+
+        return $true
+    } catch {
+        $errorMsg = $_.Exception.Message
+        Print-Error "Failed to extract tar.gz archive - $errorMsg"
+        Print-Info "The archive file may be corrupted. Please try again."
+        return $false
+    }
+}
+
 function New-TempDirectory {
     param([string]$Suffix)
     $folder = Join-Path $TEMP_DIR ("walgo-" + $Suffix + "-" + [Guid]::NewGuid().ToString("N"))
@@ -280,16 +362,34 @@ function Install-WalgoBinary {
     param([Parameter(Mandatory = $true)][string]$Version)
 
     $arch = Get-Architecture
-    $filename = "${BINARY_NAME}_${Version}_windows_${arch}.zip"
-    $downloadUrl = "https://github.com/$REPO/releases/download/v$Version/$filename"
-    $tempFile = Join-Path $TEMP_DIR $filename
+    $extractDir = New-TempDirectory "cli"
 
-    if (-not (Download-File -Url $downloadUrl -Destination $tempFile -Description "$BINARY_NAME CLI")) {
-        exit 1
+    # Try .zip first (newer releases), then .tar.gz (v0.3.2 and earlier)
+    $formats = @(
+        @{ Ext = "zip"; Func = { param($a, $d) Expand-ArchiveSafe -Archive $a -Destination $d } },
+        @{ Ext = "tar.gz"; Func = { param($a, $d) Expand-TarGz -Archive $a -Destination $d } }
+    )
+
+    $success = $false
+    foreach ($format in $formats) {
+        $filename = "${BINARY_NAME}_${Version}_windows_${arch}.$($format.Ext)"
+        $downloadUrl = "https://github.com/$REPO/releases/download/v$Version/$filename"
+        $tempFile = Join-Path $TEMP_DIR $filename
+
+        Print-Info "Trying to download $filename..."
+        if (Download-File -Url $downloadUrl -Destination $tempFile -Description "$BINARY_NAME CLI") {
+            Print-Info "Extracting archive..."
+            if (& $format.Func $tempFile $extractDir) {
+                $success = $true
+                Remove-Item -Path $tempFile -Force -ErrorAction SilentlyContinue
+                break
+            }
+        }
     }
 
-    $extractDir = New-TempDirectory "cli"
-    if (-not (Expand-ArchiveSafe -Archive $tempFile -Destination $extractDir)) {
+    if (-not $success) {
+        Print-Error "Failed to download or extract walgo binary"
+        Print-Info "Tried formats: .zip, .tar.gz"
         exit 1
     }
 

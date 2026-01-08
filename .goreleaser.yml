@@ -28,6 +28,9 @@ builds:
 archives:
   - id: walgo-archives
     name_template: "{{ .ProjectName }}_{{ .Version }}_{{ .Os }}_{{ .Arch }}"
+    format_overrides:
+      - goos: windows
+        format: zip
     files:
       - README.md
       - LICENSE
