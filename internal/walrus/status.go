@@ -24,9 +24,16 @@ func GetSiteStatus(objectID string) (*SiteBuilderOutput, error) {
 		return nil, fmt.Errorf("'%s' CLI not found. Please install it and ensure it's in your PATH", siteBuilderCmd)
 	}
 
+	// Find walrus binary path to pass to site-builder
+	walrusPath, err := execLookPath("walrus")
+	if err != nil {
+		return nil, fmt.Errorf("'walrus' CLI not found in PATH. Please install it using:\n  suiup install walrus@mainnet\n  Or run: walgo setup-deps")
+	}
+
 	siteBuilderContext := GetWalrusContext()
 	args := []string{
 		"--context", siteBuilderContext,
+		"--walrus-binary", walrusPath,
 		"sitemap",
 		objectID,
 	}

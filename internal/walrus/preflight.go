@@ -53,6 +53,24 @@ func CheckSiteBuilderSetup() error {
 // handleSiteBuilderError converts site-builder errors into actionable messages.
 func handleSiteBuilderError(err error, errorOutput string) error {
 	icons := ui.GetIcons()
+
+	// Check for missing walrus binary
+	if strings.Contains(errorOutput, "error while executing the call to the Walrus binary") ||
+	   strings.Contains(errorOutput, "No such file or directory (os error 2)") {
+		return fmt.Errorf("\n%s Walrus CLI not found\n\n"+
+			"The site-builder requires the 'walrus' CLI to be installed and in your PATH.\n\n"+
+			"Install walrus:\n"+
+			"  1. Install suiup (if not installed):\n"+
+			"     curl -sSfL https://raw.githubusercontent.com/MystenLabs/suiup/main/install.sh | sh\n\n"+
+			"  2. Install walrus:\n"+
+			"     suiup install walrus@mainnet\n"+
+			"     suiup default set walrus@mainnet\n\n"+
+			"  3. Verify installation:\n"+
+			"     walrus --version\n\n"+
+			"  Or run: walgo setup-deps\n\n"+
+			"Technical error: %v", icons.Error, err)
+	}
+
 	if strings.Contains(errorOutput, "could not retrieve enough confirmations") {
 		return fmt.Errorf("\n%s Walrus testnet is experiencing network issues\n\n"+
 			"The storage nodes couldn't provide enough confirmations.\n"+

@@ -19,6 +19,13 @@ func DeploySite(ctx context.Context, deployDir string, walrusCfg config.WalrusCo
 		return nil, fmt.Errorf("epochs must be greater than 0, got %d", epochs)
 	}
 
+	// Run preflight checks to verify walrus and sui are available
+	if runPreflight {
+		if err := PreflightCheck(); err != nil {
+			return nil, fmt.Errorf("pre-flight check failed: %w", err)
+		}
+	}
+
 	icons := ui.GetIcons()
 
 	fmt.Printf("%s Analyzing deployment directory...\n", icons.Chart)
@@ -78,9 +85,16 @@ func DeploySite(ctx context.Context, deployDir string, walrusCfg config.WalrusCo
 		return nil, fmt.Errorf("'%s' CLI not found in PATH", siteBuilderCmd)
 	}
 
+	// Find walrus binary path to pass to site-builder
+	walrusPath, err := execLookPath("walrus")
+	if err != nil {
+		return nil, fmt.Errorf("'walrus' CLI not found in PATH. Please install it using:\n  suiup install walrus@mainnet\n  Or run: walgo setup-deps")
+	}
+
 	siteBuilderContext := GetWalrusContext()
 	args := []string{
 		"--context", siteBuilderContext,
+		"--walrus-binary", walrusPath,
 		"publish",
 		deployDir,
 		"--epochs", fmt.Sprintf("%d", epochs),

@@ -22,6 +22,13 @@ func UpdateSite(ctx context.Context, deployDir, objectID string, epochs int) (*S
 		return nil, fmt.Errorf("epochs must be greater than 0, got %d", epochs)
 	}
 
+	// Run preflight checks to verify walrus and sui are available
+	if runPreflight {
+		if err := PreflightCheck(); err != nil {
+			return nil, fmt.Errorf("pre-flight check failed: %w", err)
+		}
+	}
+
 	if err := CheckSiteBuilderSetup(); err != nil {
 		return nil, fmt.Errorf("site-builder setup issue: %w\n\nRun 'walgo setup' to configure site-builder", err)
 	}
@@ -31,9 +38,16 @@ func UpdateSite(ctx context.Context, deployDir, objectID string, epochs int) (*S
 		return nil, fmt.Errorf("'%s' CLI not found. Please install it and ensure it's in your PATH", siteBuilderCmd)
 	}
 
+	// Find walrus binary path to pass to site-builder
+	walrusPath, err := execLookPath("walrus")
+	if err != nil {
+		return nil, fmt.Errorf("'walrus' CLI not found in PATH. Please install it using:\n  suiup install walrus@mainnet\n  Or run: walgo setup-deps")
+	}
+
 	siteBuilderContext := GetWalrusContext()
 	args := []string{
 		"--context", siteBuilderContext,
+		"--walrus-binary", walrusPath,
 		"update",
 		"--epochs", fmt.Sprintf("%d", epochs),
 		deployDir,
