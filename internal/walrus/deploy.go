@@ -19,13 +19,6 @@ func DeploySite(ctx context.Context, deployDir string, walrusCfg config.WalrusCo
 		return nil, fmt.Errorf("epochs must be greater than 0, got %d", epochs)
 	}
 
-	// Run preflight checks to verify walrus and sui are available
-	if runPreflight {
-		if err := PreflightCheck(); err != nil {
-			return nil, fmt.Errorf("pre-flight check failed: %w", err)
-		}
-	}
-
 	icons := ui.GetIcons()
 
 	fmt.Printf("%s Analyzing deployment directory...\n", icons.Chart)

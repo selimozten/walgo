@@ -22,13 +22,6 @@ func UpdateSite(ctx context.Context, deployDir, objectID string, epochs int) (*S
 		return nil, fmt.Errorf("epochs must be greater than 0, got %d", epochs)
 	}
 
-	// Run preflight checks to verify walrus and sui are available
-	if runPreflight {
-		if err := PreflightCheck(); err != nil {
-			return nil, fmt.Errorf("pre-flight check failed: %w", err)
-		}
-	}
-
 	if err := CheckSiteBuilderSetup(); err != nil {
 		return nil, fmt.Errorf("site-builder setup issue: %w\n\nRun 'walgo setup' to configure site-builder", err)
 	}
