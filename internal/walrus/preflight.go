@@ -99,6 +99,10 @@ func handleSiteBuilderError(err error, errorOutput string) error {
 			"Technical error: %v", icons.Error, err)
 	}
 
+	// Default error case - show the actual error output from site-builder
+	if errorOutput != "" {
+		return fmt.Errorf("failed to execute site-builder: %v\n\nError output:\n%s", err, strings.TrimSpace(errorOutput))
+	}
 	return fmt.Errorf("failed to execute site-builder: %v", err)
 }
 
