@@ -42,7 +42,7 @@ func TestDeploySite(t *testing.T) {
 			siteBuilderFound: true,
 			configExists:     true,
 			expectedError:    false,
-			expectedInArgs:   []string{"publish", "/path/to/public", "--epochs", "5"},
+			expectedInArgs:   []string{"--walrus-binary", "publish", "/path/to/public", "--epochs", "5"},
 		},
 		{
 			name:      "Zero epochs - should fail validation",
@@ -107,6 +107,10 @@ func TestDeploySite(t *testing.T) {
 						return "/usr/bin/site-builder", nil
 					}
 					return "", fmt.Errorf("executable file not found in $PATH")
+				}
+				if file == "walrus" {
+					// Mock walrus binary location
+					return "/usr/bin/walrus", nil
 				}
 				return originalLookPath(file)
 			}
@@ -194,7 +198,7 @@ func TestUpdateSite(t *testing.T) {
 			siteBuilderFound: true,
 			configExists:     true,
 			expectedError:    false,
-			expectedInArgs:   []string{"update", "--epochs", "3", "/path/to/public", "0xe674c144119a37a0ed9cef26a962c3fdfbdbfd86a3b3db562ee81d5542a4eccf"},
+			expectedInArgs:   []string{"--walrus-binary", "update", "--epochs", "3", "/path/to/public", "0xe674c144119a37a0ed9cef26a962c3fdfbdbfd86a3b3db562ee81d5542a4eccf"},
 		},
 		{
 			name:             "Zero epochs - should fail validation",
@@ -250,6 +254,10 @@ func TestUpdateSite(t *testing.T) {
 						return "/usr/bin/site-builder", nil
 					}
 					return "", fmt.Errorf("executable file not found in $PATH")
+				}
+				if file == "walrus" {
+					// Mock walrus binary location
+					return "/usr/bin/walrus", nil
 				}
 				return originalLookPath(file)
 			}
@@ -326,7 +334,7 @@ func TestGetSiteStatus(t *testing.T) {
 			siteBuilderFound: true,
 			configExists:     true,
 			expectedError:    false,
-			expectedInArgs:   []string{"sitemap", "0xe674c144119a37a0ed9cef26a962c3fdfbdbfd86a3b3db562ee81d5542a4eccf"},
+			expectedInArgs:   []string{"--walrus-binary", "sitemap", "0xe674c144119a37a0ed9cef26a962c3fdfbdbfd86a3b3db562ee81d5542a4eccf"},
 		},
 		{
 			name:          "Empty object ID",
@@ -368,6 +376,10 @@ func TestGetSiteStatus(t *testing.T) {
 						return "/usr/bin/site-builder", nil
 					}
 					return "", fmt.Errorf("executable file not found in $PATH")
+				}
+				if file == "walrus" {
+					// Mock walrus binary location
+					return "/usr/bin/walrus", nil
 				}
 				return originalLookPath(file)
 			}

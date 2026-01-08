@@ -56,7 +56,7 @@ func handleSiteBuilderError(err error, errorOutput string) error {
 
 	// Check for missing walrus binary
 	if strings.Contains(errorOutput, "error while executing the call to the Walrus binary") ||
-	   strings.Contains(errorOutput, "No such file or directory (os error 2)") {
+		strings.Contains(errorOutput, "No such file or directory (os error 2)") {
 		return fmt.Errorf("\n%s Walrus CLI not found\n\n"+
 			"The site-builder requires the 'walrus' CLI to be installed and in your PATH.\n\n"+
 			"Install walrus:\n"+
