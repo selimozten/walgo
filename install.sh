@@ -1101,12 +1101,86 @@ install_walrus_dependencies() {
             if [ -n "$SUI_MNEMONIC_PHRASE" ]; then
                 print_success "New wallet address created"
             fi
+
+            # Add both testnet and mainnet environments
+            print_info "Configuring both testnet and mainnet environments..."
+
+            # Add mainnet if default was testnet
+            if [ "$default_network" = "testnet" ]; then
+                if command -v sui >/dev/null 2>&1 || [ -f "$HOME/.local/bin/sui" ]; then
+                    local sui_cmd="${HOME}/.local/bin/sui"
+                    if ! command -v sui >/dev/null 2>&1; then
+                        sui_cmd="$HOME/.local/bin/sui"
+                    else
+                        sui_cmd="sui"
+                    fi
+
+                    # Check if mainnet environment already exists
+                    if ! $sui_cmd client envs 2>/dev/null | grep -q "mainnet"; then
+                        if $sui_cmd client new-env --alias mainnet --rpc https://fullnode.mainnet.sui.io:443 >/dev/null 2>&1; then
+                            print_success "Added mainnet environment"
+                        else
+                            print_warning "Failed to add mainnet environment (you can add it later)"
+                        fi
+                    else
+                        print_info "Mainnet environment already exists"
+                    fi
+                fi
+            fi
+
+            # Add testnet if default was mainnet
+            if [ "$default_network" = "mainnet" ]; then
+                if command -v sui >/dev/null 2>&1 || [ -f "$HOME/.local/bin/sui" ]; then
+                    local sui_cmd="${HOME}/.local/bin/sui"
+                    if ! command -v sui >/dev/null 2>&1; then
+                        sui_cmd="$HOME/.local/bin/sui"
+                    else
+                        sui_cmd="sui"
+                    fi
+
+                    # Check if testnet environment already exists
+                    if ! $sui_cmd client envs 2>/dev/null | grep -q "testnet"; then
+                        if $sui_cmd client new-env --alias testnet --rpc https://fullnode.testnet.sui.io:443 >/dev/null 2>&1; then
+                            print_success "Added testnet environment"
+                        else
+                            print_warning "Failed to add testnet environment (you can add it later)"
+                        fi
+                    else
+                        print_info "Testnet environment already exists"
+                    fi
+                fi
+            fi
         else
             print_warning "Sui client initialization may have failed or timed out"
             print_info "You can configure it manually later with: sui client"
         fi
     else
         print_success "Sui client already configured"
+
+        # Even if already configured, ensure both environments exist
+        print_info "Verifying testnet and mainnet environments..."
+        if command -v sui >/dev/null 2>&1 || [ -f "$HOME/.local/bin/sui" ]; then
+            local sui_cmd="${HOME}/.local/bin/sui"
+            if ! command -v sui >/dev/null 2>&1; then
+                sui_cmd="$HOME/.local/bin/sui"
+            else
+                sui_cmd="sui"
+            fi
+
+            # Add mainnet if missing
+            if ! $sui_cmd client envs 2>/dev/null | grep -q "mainnet"; then
+                if $sui_cmd client new-env --alias mainnet --rpc https://fullnode.mainnet.sui.io:443 >/dev/null 2>&1; then
+                    print_success "Added mainnet environment"
+                fi
+            fi
+
+            # Add testnet if missing
+            if ! $sui_cmd client envs 2>/dev/null | grep -q "testnet"; then
+                if $sui_cmd client new-env --alias testnet --rpc https://fullnode.testnet.sui.io:443 >/dev/null 2>&1; then
+                    print_success "Added testnet environment"
+                fi
+            fi
+        fi
     fi
 
     # Download Walrus configuration

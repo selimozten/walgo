@@ -209,13 +209,31 @@ func BuildSite(sitePath string) error {
 	}
 
 	fmt.Printf("Building Hugo site in %s...\n", sitePath)
+
+	// Check if themes directory exists and has content
+	themesDir := filepath.Join(sitePath, "themes")
+	if _, err := os.Stat(themesDir); os.IsNotExist(err) {
+		fmt.Fprintf(os.Stderr, "Warning: themes/ directory not found. Hugo might fail if a theme is required.\n")
+	} else {
+		// Check if themes directory is empty
+		entries, err := os.ReadDir(themesDir)
+		if err == nil && len(entries) == 0 {
+			fmt.Fprintf(os.Stderr, "Warning: themes/ directory is empty. Hugo might fail if a theme is required.\n")
+		}
+	}
+
 	cmd := exec.Command(hugoPath, "build", "--environment", "production", "--minify", "--gc", "--cleanDestinationDir")
 	cmd.Dir = sitePath
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr
 
 	if err := cmd.Run(); err != nil {
-		return fmt.Errorf("failed to build Hugo site: %v", err)
+		fmt.Fprintf(os.Stderr, "\nHugo build failed. Common issues:\n")
+		fmt.Fprintf(os.Stderr, "  1. Missing theme - check if themes/ directory contains your theme\n")
+		fmt.Fprintf(os.Stderr, "  2. Configuration error - verify hugo.toml/config.toml is valid\n")
+		fmt.Fprintf(os.Stderr, "  3. Content error - check your markdown files for syntax issues\n")
+		fmt.Fprintf(os.Stderr, "\nFor more details, run: hugo build --verbose\n")
+		return fmt.Errorf("failed to build Hugo site: %v (check Hugo output above for details)", err)
 	}
 
 	fmt.Println("Hugo site built successfully.")
@@ -512,44 +530,48 @@ type ThemeInfo struct {
 }
 
 // GetThemeInfo returns theme information for a site type
+// IMPORTANT: DirName must match the theme name in Hugo config files (tomls/*.toml)
+// - blog.toml, portfolio.toml, business.toml use: theme = "ananke"
+// - docs.toml uses: theme = "hugo-book"
 func GetThemeInfo(siteType SiteType) ThemeInfo {
 	switch siteType {
 	case SiteTypeBlog:
 		return ThemeInfo{
 			Name:    "Ananke",
-			DirName: "ananke",
+			DirName: "ananke", // Must match: theme = "ananke" in blog.toml
 			RepoURL: "https://github.com/theNewDynamic/gohugo-theme-ananke.git",
 		}
 	case SiteTypePortfolio:
 		return ThemeInfo{
 			Name:    "Ananke",
-			DirName: "ananke",
+			DirName: "ananke", // Must match: theme = "ananke" in portfolio.toml
 			RepoURL: "https://github.com/theNewDynamic/gohugo-theme-ananke.git",
 		}
 	case SiteTypeDocs:
 		return ThemeInfo{
 			Name:    "Book",
-			DirName: "hugo-book",
+			DirName: "hugo-book", // Must match: theme = "hugo-book" in docs.toml
 			RepoURL: "https://github.com/alex-shpak/hugo-book.git",
 		}
 	case SiteTypeBusiness:
 		return ThemeInfo{
 			Name:    "Ananke",
-			DirName: "ananke",
+			DirName: "ananke", // Must match: theme = "ananke" in business.toml
 			RepoURL: "https://github.com/theNewDynamic/gohugo-theme-ananke.git",
 		}
 	default:
 		// Default to blog theme
 		return ThemeInfo{
 			Name:    "Ananke",
-			DirName: "ananke",
+			DirName: "ananke", // Must match: theme = "ananke" in blog.toml
 			RepoURL: "https://github.com/theNewDynamic/gohugo-theme-ananke.git",
 		}
 	}
 }
 
 // InstallTheme installs a theme to the site's themes directory
-// Uses git clone if available, otherwise downloads and extracts ZIP archive
+// Downloads theme as ZIP archive from GitHub (no Git required)
+// Extracts to themes/{DirName}/ which must match the theme name in Hugo config
 func InstallTheme(sitePath string, siteType SiteType) error {
 	theme := GetThemeInfo(siteType)
 	themesDir := filepath.Join(sitePath, "themes")
@@ -566,19 +588,8 @@ func InstallTheme(sitePath string, siteType SiteType) error {
 		return nil // Theme already installed
 	}
 
-	// Try git clone first if git is available
-	if _, err := exec.LookPath("git"); err == nil {
-		cmd := exec.Command("git", "clone", "--depth", "1", theme.RepoURL, themePath)
-		if err := cmd.Run(); err == nil {
-			return nil // Successfully cloned
-		}
-		// Git clone failed, fall through to HTTP download
-		fmt.Printf("Git clone failed, falling back to HTTP download...\n")
-	} else {
-		fmt.Printf("Git not found, downloading theme via HTTP...\n")
-	}
-
-	// Fallback: Download theme as ZIP from GitHub
+	// Download theme as ZIP from GitHub (direct HTTP download, no Git required)
+	fmt.Printf("Downloading theme %s...\n", theme.Name)
 	return downloadThemeZip(theme, themePath)
 }
 
@@ -588,7 +599,42 @@ func downloadThemeZip(theme ThemeInfo, themePath string) error {
 	// Example: https://github.com/theNewDynamic/gohugo-theme-ananke.git
 	//       -> https://github.com/theNewDynamic/gohugo-theme-ananke/archive/refs/heads/master.zip
 	repoURL := strings.TrimSuffix(theme.RepoURL, ".git")
-	zipURL := repoURL + "/archive/refs/heads/master.zip"
+
+	// Try main branch first, then master (GitHub default branch varies)
+	branches := []string{"main", "master"}
+	var zipURL string
+	var resp *http.Response
+	var err error
+
+	client := &http.Client{Timeout: 2 * time.Minute}
+
+	for _, branch := range branches {
+		zipURL = repoURL + "/archive/refs/heads/" + branch + ".zip"
+		fmt.Printf("Trying to download theme from %s branch...\n", branch)
+
+		req, err := http.NewRequest(http.MethodGet, zipURL, nil)
+		if err != nil {
+			continue
+		}
+		req.Header.Set("User-Agent", "walgo-theme-installer")
+
+		resp, err = client.Do(req)
+		if err != nil {
+			continue
+		}
+
+		if resp.StatusCode == http.StatusOK {
+			// Found the correct branch
+			fmt.Printf("Found theme on %s branch\n", branch)
+			break
+		}
+		resp.Body.Close()
+	}
+
+	if resp == nil || resp.StatusCode != http.StatusOK {
+		return fmt.Errorf("failed to download theme from any branch (tried: %v)", branches)
+	}
+	defer resp.Body.Close()
 
 	// Create temporary file for download
 	tmpFile, err := os.CreateTemp("", "hugo-theme-*.zip")
@@ -598,25 +644,6 @@ func downloadThemeZip(theme ThemeInfo, themePath string) error {
 	tmpName := tmpFile.Name()
 	tmpFile.Close()
 	defer os.Remove(tmpName)
-
-	// Download the ZIP file
-	fmt.Printf("Downloading theme from %s...\n", zipURL)
-	client := &http.Client{Timeout: 2 * time.Minute}
-	req, err := http.NewRequest(http.MethodGet, zipURL, nil)
-	if err != nil {
-		return fmt.Errorf("creating download request: %w", err)
-	}
-	req.Header.Set("User-Agent", "walgo-theme-installer")
-
-	resp, err := client.Do(req)
-	if err != nil {
-		return fmt.Errorf("downloading theme: %w", err)
-	}
-	defer resp.Body.Close()
-
-	if resp.StatusCode != http.StatusOK {
-		return fmt.Errorf("failed to download theme: HTTP %d", resp.StatusCode)
-	}
 
 	// Save to temporary file
 	file, err := os.Create(tmpName)
@@ -631,7 +658,7 @@ func downloadThemeZip(theme ThemeInfo, themePath string) error {
 	file.Close()
 
 	// Extract ZIP archive
-	fmt.Printf("Extracting theme...\n")
+	fmt.Printf("Extracting theme to %s...\n", themePath)
 	r, err := zip.OpenReader(tmpName)
 	if err != nil {
 		return fmt.Errorf("opening theme archive: %w", err)
@@ -641,12 +668,14 @@ func downloadThemeZip(theme ThemeInfo, themePath string) error {
 	// GitHub ZIP archives have a root directory named {repo}-{branch}
 	// We need to extract contents and strip this root directory
 	var rootDir string
+	filesExtracted := 0
 	for _, f := range r.File {
 		if rootDir == "" {
 			// First entry should be the root directory
 			parts := strings.Split(f.Name, "/")
 			if len(parts) > 0 {
 				rootDir = parts[0] + "/"
+				fmt.Printf("Detected archive root directory: %s\n", strings.TrimSuffix(rootDir, "/"))
 			}
 		}
 
@@ -694,10 +723,38 @@ func downloadThemeZip(theme ThemeInfo, themePath string) error {
 
 			outFile.Close()
 			rc.Close()
+			filesExtracted++
 		}
 	}
 
-	fmt.Printf("Theme %s installed successfully\n", theme.Name)
+	if filesExtracted == 0 {
+		return fmt.Errorf("no files were extracted from theme archive - archive may be empty or corrupted")
+	}
+
+	// Verify theme was installed correctly by checking for theme.toml or theme.yaml
+	themeMetaFiles := []string{"theme.toml", "theme.yaml", "theme.yml"}
+	themeValid := false
+	for _, metaFile := range themeMetaFiles {
+		if _, err := os.Stat(filepath.Join(themePath, metaFile)); err == nil {
+			themeValid = true
+			break
+		}
+	}
+
+	if !themeValid {
+		fmt.Printf("Warning: Theme metadata file not found in %s\n", themePath)
+		fmt.Printf("Theme may not work correctly. Extracted files: %d\n", filesExtracted)
+	}
+
+	// Verify the directory exists and is accessible
+	entries, err := os.ReadDir(themePath)
+	if err != nil {
+		return fmt.Errorf("theme extracted but directory is not readable: %w", err)
+	}
+
+	fmt.Printf("Theme %s installed successfully to themes/%s/ (%d files, %d top-level entries)\n",
+		theme.Name, theme.DirName, filesExtracted, len(entries))
+
 	return nil
 }
 

@@ -163,7 +163,8 @@ function Download-File {
 
         return $true
     } catch {
-        Print-Error "Failed to download $label`: $_"
+        $errorMsg = $_.Exception.Message
+        Print-Error "Failed to download $label - $errorMsg"
         Print-Info "Please check your internet connection and try again"
         return $false
     }
@@ -204,7 +205,8 @@ function Expand-ArchiveSafe {
 
         return $true
     } catch {
-        Print-Error "Failed to extract archive: $_"
+        $errorMsg = $_.Exception.Message
+        Print-Error "Failed to extract archive - $errorMsg"
         Print-Info "The archive file may be corrupted. Please try again."
         return $false
     }
@@ -257,7 +259,8 @@ function Get-LatestRelease {
     try {
         return Invoke-RestMethod -Uri "https://api.github.com/repos/$Repository/releases/latest" -UseBasicParsing
     } catch {
-        Print-Error "Failed to fetch latest release for $Repository: $_"
+        $errorMsg = $_.Exception.Message
+        Print-Error "Failed to fetch latest release for $Repository - $errorMsg"
         return $null
     }
 }
@@ -307,7 +310,8 @@ function Install-WalgoBinary {
         Copy-Item -Path $binary.FullName -Destination $script:WalgoBinaryPath -Force -ErrorAction Stop
         Print-Success "Installed $BINARY_NAME to $script:WalgoBinaryPath"
     } catch {
-        Print-Error "Failed to copy binary to $script:WalgoBinaryPath: $_"
+        $errorMsg = $_.Exception.Message
+        Print-Error "Failed to copy binary to $script:WalgoBinaryPath - $errorMsg"
         Print-Info "Check if you have write permissions to the directory"
         exit 1
     }
@@ -361,7 +365,8 @@ function Install-WalgoDesktop {
         Print-Success "Walgo Desktop installed to $destination"
         Print-Info "Launch via: walgo desktop"
     } catch {
-        Print-Warning "Failed to install desktop app: $_"
+        $errorMsg = $_.Exception.Message
+        Print-Warning "Failed to install desktop app - $errorMsg"
         Print-Info "You can try installing it manually later"
     }
 
@@ -428,7 +433,8 @@ function Install-HugoDirect {
         Add-PathEntry -PathValue $script:WalgoToolsDir
         Print-Success "Hugo installed to $destination"
     } catch {
-        Print-Error "Failed to install Hugo: $_"
+        $errorMsg = $_.Exception.Message
+        Print-Error "Failed to install Hugo - $errorMsg"
         Print-Info "Install manually from https://gohugo.io/installation/"
         return $false
     }
@@ -500,7 +506,8 @@ function Install-Suiup {
         Add-PathEntry -PathValue $script:LocalBinDir
         Print-Success "suiup installed to $target"
     } catch {
-        Print-Warning "Failed to install suiup: $_"
+        $errorMsg = $_.Exception.Message
+        Print-Warning "Failed to install suiup - $errorMsg"
         return $null
     }
 
@@ -524,7 +531,8 @@ function Download-WalrusConfigs {
             Print-Warning "Failed to download Walrus client config (file empty or missing)"
         }
     } catch {
-        Print-Warning "Failed to download Walrus client config: $_"
+        $errorMsg = $_.Exception.Message
+        Print-Warning "Failed to download Walrus client config - $errorMsg"
         Print-Info "You can download it manually from: https://docs.wal.app/setup/client_config.yaml"
     }
 
@@ -539,7 +547,8 @@ function Download-WalrusConfigs {
             Print-Warning "Failed to download site-builder config (file empty or missing)"
         }
     } catch {
-        Print-Warning "Failed to download site-builder config: $_"
+        $errorMsg = $_.Exception.Message
+        Print-Warning "Failed to download site-builder config - $errorMsg"
         Print-Info "You can download it manually from: https://raw.githubusercontent.com/MystenLabs/walrus-sites/refs/heads/mainnet/sites-config.yaml"
     }
 }
@@ -553,6 +562,34 @@ function Initialize-SuiClient {
 
     if (Test-Path $suiConfigPath) {
         Print-Success "Sui client already configured"
+
+        # Even if already configured, ensure both environments exist
+        Print-Info "Verifying testnet and mainnet environments..."
+        $suiPath = Join-Path $script:LocalBinDir "sui.exe"
+        if (Test-Path $suiPath) {
+            # Add mainnet if missing
+            try {
+                $envs = & $suiPath client envs 2>$null
+                if ($envs -notmatch "mainnet") {
+                    $null = & $suiPath client new-env --alias mainnet --rpc https://fullnode.mainnet.sui.io:443 2>$null
+                    if ($LASTEXITCODE -eq 0) {
+                        Print-Success "Added mainnet environment"
+                    }
+                }
+            } catch { }
+
+            # Add testnet if missing
+            try {
+                $envs = & $suiPath client envs 2>$null
+                if ($envs -notmatch "testnet") {
+                    $null = & $suiPath client new-env --alias testnet --rpc https://fullnode.testnet.sui.io:443 2>$null
+                    if ($LASTEXITCODE -eq 0) {
+                        Print-Success "Added testnet environment"
+                    }
+                }
+            } catch { }
+        }
+
         return
     }
 
@@ -611,6 +648,52 @@ function Initialize-SuiClient {
                 if ($script:SuiMnemonicPhrase) {
                     Print-Success "New wallet address created"
                 }
+
+                # Add both testnet and mainnet environments
+                Print-Info "Configuring both testnet and mainnet environments..."
+
+                $suiPath = Join-Path $script:LocalBinDir "sui.exe"
+                if (Test-Path $suiPath) {
+                    # Add mainnet if default was testnet
+                    if ($Network -eq "testnet") {
+                        try {
+                            $envs = & $suiPath client envs 2>$null
+                            if ($envs -notmatch "mainnet") {
+                                $null = & $suiPath client new-env --alias mainnet --rpc https://fullnode.mainnet.sui.io:443 2>$null
+                                if ($LASTEXITCODE -eq 0) {
+                                    Print-Success "Added mainnet environment"
+                                } else {
+                                    Print-Warning "Failed to add mainnet environment (you can add it later)"
+                                }
+                            } else {
+                                Print-Info "Mainnet environment already exists"
+                            }
+                        } catch {
+                            $errorMsg = $_.Exception.Message
+                            Print-Warning "Failed to add mainnet environment - $errorMsg"
+                        }
+                    }
+
+                    # Add testnet if default was mainnet
+                    if ($Network -eq "mainnet") {
+                        try {
+                            $envs = & $suiPath client envs 2>$null
+                            if ($envs -notmatch "testnet") {
+                                $null = & $suiPath client new-env --alias testnet --rpc https://fullnode.testnet.sui.io:443 2>$null
+                                if ($LASTEXITCODE -eq 0) {
+                                    Print-Success "Added testnet environment"
+                                } else {
+                                    Print-Warning "Failed to add testnet environment (you can add it later)"
+                                }
+                            } else {
+                                Print-Info "Testnet environment already exists"
+                            }
+                        } catch {
+                            $errorMsg = $_.Exception.Message
+                            Print-Warning "Failed to add testnet environment - $errorMsg"
+                        }
+                    }
+                }
             } else {
                 Print-Warning "Sui client initialization may have failed"
                 Print-Info "You can configure it manually later with: sui client"
@@ -622,7 +705,8 @@ function Initialize-SuiClient {
             Print-Info "You can configure it manually later with: sui client"
         }
     } catch {
-        Print-Warning "Failed to initialize Sui client: $_"
+        $errorMsg = $_.Exception.Message
+        Print-Warning "Failed to initialize Sui client - $errorMsg"
         Print-Info "You can configure it manually later with: sui client"
     }
 }
@@ -669,7 +753,8 @@ function Install-WalrusDependencies {
                 Print-Warning "$($target.Label) installation timed out after 120 seconds"
             }
         } catch {
-            Print-Warning "Failed to install $($target.Label): $_"
+            $errorMsg = $_.Exception.Message
+            Print-Warning "Failed to install $($target.Label) - $errorMsg"
         }
     }
 
