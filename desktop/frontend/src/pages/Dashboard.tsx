@@ -124,11 +124,11 @@ export const Dashboard: React.FC<DashboardProps> = ({
     };
 
     return (
-        <motion.div 
+        <motion.div
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
-            transition={{ 
-                duration: 0.4, 
+            transition={{
+                duration: 0.4,
                 ease: [0.4, 0, 0.2, 1]
             }}
             className="space-y-6"
@@ -139,19 +139,15 @@ export const Dashboard: React.FC<DashboardProps> = ({
                     <h1 className="text-2xl font-bold text-white mb-1">Dashboard</h1>
                     <p className="text-zinc-400 text-sm">Welcome to Walgo Desktop</p>
                 </div>
-                <div className="flex items-center gap-4">
-                    <button
-                        onClick={() => window.location.reload()}
-                        className="p-2 bg-white/5 hover:bg-white/10 border border-white/10 rounded-sm transition-all"
-                        title="Refresh page"
-                    >
-                        <RefreshCw size={16} className="text-zinc-400" />
-                    </button>
-                    <div className="text-right">
-                        <div className="text-xs font-mono text-zinc-500">Walgo Version</div>
-                        <div className="text-lg font-mono text-accent">{version}</div>
-                    </div>
-                </div>
+
+                {/* Refresh Button */}
+                <button
+                    onClick={() => window.location.reload()}
+                    className="p-2.5 bg-white/5 hover:bg-white/10 border border-white/10 hover:border-accent/30 rounded-sm transition-all group"
+                    title="Refresh Dashboard"
+                >
+                    <RefreshCw size={18} className="text-zinc-400 group-hover:text-accent transition-colors" />
+                </button>
             </div>
 
             {/* Wallet Info Section */}

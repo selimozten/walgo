@@ -473,7 +473,10 @@ function App() {
               <h1 className="text-2xl font-display font-bold text-white tracking-wider group-hover:text-accent transition-colors duration-300">
                 WALGO
               </h1>
-              <div className="h-px w-16 bg-gradient-to-r from-transparent via-accent/50 to-transparent group-hover:via-accent transition-all duration-300" />
+              <span className="px-2.5 py-0.5 text-[9px] font-bold bg-gradient-to-r from-yellow-500/20 to-orange-500/20 text-yellow-400 border border-yellow-500/30 rounded-full uppercase tracking-widest shadow-lg shadow-yellow-500/10 animate-pulse">
+                Beta
+              </span>
+              <div className="h-px w-16 bg-gradient-to-r from-transparent via-accent/50 to-transparent group-hover:via-accent transition-all duration-300 mt-1" />
             </div>
           </button>
         </div>
@@ -522,6 +525,18 @@ function App() {
             activeTab={activeTab}
             setActiveTab={setActiveTab}
           />
+        </div>
+
+        {/* Version Info - Bottom of Sidebar */}
+        <div className="px-4 py-3 border-t border-white/10 bg-black/20">
+          <div className="text-center">
+            <div className="text-[10px] font-mono text-zinc-600 uppercase tracking-wider mb-1">
+              Version
+            </div>
+            <div className="text-sm font-mono text-accent font-semibold">
+              {version}
+            </div>
+          </div>
         </div>
       </nav>
 

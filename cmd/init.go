@@ -41,11 +41,27 @@ file tailored for Walrus Sites deployment.`,
 		}
 		sitePath := filepath.Join(cwd, siteName)
 
+		// Check if directory already exists before creating
+		dirExistedBefore := false
+		if _, err := os.Stat(sitePath); err == nil {
+			dirExistedBefore = true
+		}
+
 		// #nosec G301 - site directory needs standard permissions
 		if err := os.MkdirAll(sitePath, 0755); err != nil {
 			fmt.Fprintf(os.Stderr, "%s Error: Failed to create site directory %s: %v\n", icons.Error, sitePath, err)
 			return fmt.Errorf("failed to create site directory: %w", err)
 		}
+
+		// Setup cleanup on failure
+		success := false
+		defer func() {
+			if !success && !dirExistedBefore {
+				// Clean up the directory if we created it and operation failed
+				os.RemoveAll(sitePath)
+			}
+		}()
+
 		if !quiet {
 			fmt.Printf("  %s Created directory: %s\n", icons.Check, sitePath)
 		}
@@ -84,6 +100,7 @@ file tailored for Walrus Sites deployment.`,
 
 		fmt.Printf("   %s Created draft project\n", icons.Check)
 
+		success = true
 		if !quiet {
 			fmt.Println("\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
 			fmt.Printf("%s Site initialized successfully!\n", icons.Success)

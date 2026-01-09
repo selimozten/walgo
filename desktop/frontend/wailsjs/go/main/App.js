@@ -14,6 +14,10 @@ export function BuildSite(arg1) {
   return window['go']['main']['App']['BuildSite'](arg1);
 }
 
+export function CheckDirectoryDepth(arg1) {
+  return window['go']['main']['App']['CheckDirectoryDepth'](arg1);
+}
+
 export function CheckSetupDeps() {
   return window['go']['main']['App']['CheckSetupDeps']();
 }
@@ -32,6 +36,10 @@ export function CleanProviderConfig(arg1) {
 
 export function Close() {
   return window['go']['main']['App']['Close']();
+}
+
+export function CopyFile(arg1, arg2) {
+  return window['go']['main']['App']['CopyFile'](arg1, arg2);
 }
 
 export function CreateAddress(arg1, arg2) {
@@ -80,6 +88,10 @@ export function GetContentStructure(arg1) {
 
 export function GetDefaultSitesDir() {
   return window['go']['main']['App']['GetDefaultSitesDir']();
+}
+
+export function GetFolderStats(arg1) {
+  return window['go']['main']['App']['GetFolderStats'](arg1);
 }
 
 export function GetProject(arg1) {
@@ -138,6 +150,10 @@ export function Minimize() {
   return window['go']['main']['App']['Minimize']();
 }
 
+export function MoveFile(arg1, arg2) {
+  return window['go']['main']['App']['MoveFile'](arg1, arg2);
+}
+
 export function NewContent(arg1) {
   return window['go']['main']['App']['NewContent'](arg1);
 }
@@ -164,6 +180,10 @@ export function ReadFile(arg1) {
 
 export function RemoveAICredentials(arg1) {
   return window['go']['main']['App']['RemoveAICredentials'](arg1);
+}
+
+export function RenameFile(arg1, arg2) {
+  return window['go']['main']['App']['RenameFile'](arg1, arg2);
 }
 
 export function SelectDirectory(arg1) {

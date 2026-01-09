@@ -41,6 +41,7 @@ func deleteProject(nameOrID string) error {
 	fmt.Println("  - Delete the site from Walrus blockchain (on-chain deletion)")
 	fmt.Println("  - Delete the project record from local database")
 	fmt.Println("  - Delete all deployment history")
+	fmt.Printf("  - Delete the site folder: %s\n", proj.SitePath)
 	fmt.Println()
 	fmt.Printf("Object ID to destroy: %s\n", proj.ObjectID)
 
@@ -105,14 +106,14 @@ func deleteProject(nameOrID string) error {
 	}
 
 	fmt.Println()
-	fmt.Printf("%s Step 2/2: Deleting local project record...\n", icons.Garbage)
+	fmt.Printf("%s Step 2/2: Deleting local project record and site folder...\n", icons.Garbage)
 
 	if err := pm.DeleteProject(proj.ID); err != nil {
 		return fmt.Errorf("failed to delete project: %w", err)
 	}
 
 	fmt.Println()
-	fmt.Printf("%s Project deleted successfully\n", icons.Check)
+	fmt.Printf("%s Project deleted successfully (including site folder)\n", icons.Check)
 	fmt.Println()
 
 	return nil

@@ -16,7 +16,7 @@ import (
 
 var (
 	// Version will be set during build time via ldflags
-	Version = "0.3.2"
+	Version = "0.3.3"
 	// GitCommit will be set during build time via ldflags
 	GitCommit = "dev"
 	// BuildDate will be set during build time via ldflags
@@ -54,9 +54,12 @@ var versionCmd = &cobra.Command{
 			return nil
 		}
 
+		icons := ui.GetIcons()
 		fmt.Printf("Walgo v%s\n", Version)
 		fmt.Printf("Commit:  %s\n", GitCommit)
 		fmt.Printf("Built:   %s\n", BuildDate)
+		fmt.Printf("\n%s This is a beta release. Please report issues at:\n", icons.Warning)
+		fmt.Printf("   https://github.com/selimozten/walgo/issues\n")
 
 		if checkUpdates {
 			fmt.Println()

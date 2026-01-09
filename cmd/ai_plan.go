@@ -91,9 +91,24 @@ Example:
 
 		sitePath = filepath.Join(sitePath, siteName)
 
+		// Check if directory already exists before creating
+		dirExistedBefore := false
+		if _, err := os.Stat(sitePath); err == nil {
+			dirExistedBefore = true
+		}
+
 		if err := os.MkdirAll(sitePath, 0755); err != nil {
 			return fmt.Errorf("failed to create site directory: %w", err)
 		}
+
+		// Setup cleanup on failure
+		success := false
+		defer func() {
+			if !success && !dirExistedBefore {
+				// Clean up the directory if we created it and operation failed
+				os.RemoveAll(sitePath)
+			}
+		}()
 
 		walgoConfigPath := filepath.Join(sitePath, config.DefaultConfigFileName)
 		if _, err := os.Stat(walgoConfigPath); os.IsNotExist(err) {
@@ -136,6 +151,7 @@ Example:
 			fmt.Printf("   %d. %s\n", i+1, page.Path)
 		}
 
+		success = true
 		fmt.Printf("\n%s Plan saved to .walgo/plan.json\n", icons.File)
 		fmt.Println("Run 'walgo ai resume' to generate content.")
 		return nil

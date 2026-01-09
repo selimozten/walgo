@@ -95,6 +95,15 @@ Features:
 		}
 		fmt.Printf("%s Created site directory\n", icons.Check)
 
+		// Setup cleanup on failure - we know directory didn't exist before because we checked above
+		success := false
+		defer func() {
+			if !success {
+				// Clean up the directory if operation failed
+				os.RemoveAll(sitePath)
+			}
+		}()
+
 		// Step 2: Initialize Hugo site
 		if err := hugo.InitializeSite(sitePath); err != nil {
 			return fmt.Errorf("failed to initialize Hugo site: %w", err)
@@ -219,6 +228,7 @@ Features:
 		}
 		fmt.Printf("\n%s Created draft project: %s\n", icons.Check, siteName)
 
+		success = true
 		fmt.Println("\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
 		fmt.Printf("%s Site created and imported successfully!\n", icons.Success)
 		fmt.Println("━━━━━━━━━━━━━━━━━━━━━━━━━━━━")

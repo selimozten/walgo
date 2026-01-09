@@ -10,6 +10,8 @@ export function ArchiveProject(arg1:number):Promise<api.ArchiveProjectResult>;
 
 export function BuildSite(arg1:string):Promise<void>;
 
+export function CheckDirectoryDepth(arg1:string):Promise<main.CheckDirectoryDepthResult>;
+
 export function CheckSetupDeps():Promise<api.SetupDepsResult>;
 
 export function CheckToolVersions():Promise<api.CheckToolVersionsResult>;
@@ -19,6 +21,8 @@ export function CleanAIConfig():Promise<void>;
 export function CleanProviderConfig(arg1:string):Promise<void>;
 
 export function Close():Promise<void>;
+
+export function CopyFile(arg1:string,arg2:string):Promise<main.CopyFileResult>;
 
 export function CreateAddress(arg1:string,arg2:string):Promise<api.CreateAddressResult>;
 
@@ -43,6 +47,8 @@ export function GetAddressList():Promise<api.AddressListResult>;
 export function GetContentStructure(arg1:string):Promise<ai.ContentStructure>;
 
 export function GetDefaultSitesDir():Promise<string>;
+
+export function GetFolderStats(arg1:string):Promise<main.FolderStatsResult>;
 
 export function GetProject(arg1:number):Promise<api.Project>;
 
@@ -72,6 +78,8 @@ export function Maximize():Promise<void>;
 
 export function Minimize():Promise<void>;
 
+export function MoveFile(arg1:string,arg2:string):Promise<main.MoveFileResult>;
+
 export function NewContent(arg1:api.NewContentParams):Promise<api.NewContentResult>;
 
 export function OpenInBrowser(arg1:string):Promise<void>;
@@ -85,6 +93,8 @@ export function QuickStart(arg1:api.QuickStartParams):Promise<api.QuickStartResu
 export function ReadFile(arg1:string):Promise<main.ReadFileResult>;
 
 export function RemoveAICredentials(arg1:string):Promise<void>;
+
+export function RenameFile(arg1:string,arg2:string):Promise<main.RenameFileResult>;
 
 export function SelectDirectory(arg1:string):Promise<string>;
 

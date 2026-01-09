@@ -948,6 +948,42 @@ export namespace api {
 
 export namespace main {
 	
+	export class CheckDirectoryDepthResult {
+	    success: boolean;
+	    depth: number;
+	    tooDeep: boolean;
+	    error: string;
+	
+	    static createFrom(source: any = {}) {
+	        return new CheckDirectoryDepthResult(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.success = source["success"];
+	        this.depth = source["depth"];
+	        this.tooDeep = source["tooDeep"];
+	        this.error = source["error"];
+	    }
+	}
+	export class CopyFileResult {
+	    success: boolean;
+	    error: string;
+	    srcPath: string;
+	    dstPath: string;
+	
+	    static createFrom(source: any = {}) {
+	        return new CopyFileResult(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.success = source["success"];
+	        this.error = source["error"];
+	        this.srcPath = source["srcPath"];
+	        this.dstPath = source["dstPath"];
+	    }
+	}
 	export class CreateDirectoryResult {
 	    success: boolean;
 	    path: string;
@@ -1012,6 +1048,26 @@ export namespace main {
 	        this.isDir = source["isDir"];
 	        this.size = source["size"];
 	        this.modified = source["modified"];
+	    }
+	}
+	export class FolderStatsResult {
+	    success: boolean;
+	    fileCount: number;
+	    folderCount: number;
+	    totalSize: number;
+	    error: string;
+	
+	    static createFrom(source: any = {}) {
+	        return new FolderStatsResult(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.success = source["success"];
+	        this.fileCount = source["fileCount"];
+	        this.folderCount = source["folderCount"];
+	        this.totalSize = source["totalSize"];
+	        this.error = source["error"];
 	    }
 	}
 	export class GenerateContentParams {
@@ -1132,6 +1188,24 @@ export namespace main {
 		    return a;
 		}
 	}
+	export class MoveFileResult {
+	    success: boolean;
+	    error: string;
+	    oldPath: string;
+	    newPath: string;
+	
+	    static createFrom(source: any = {}) {
+	        return new MoveFileResult(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.success = source["success"];
+	        this.error = source["error"];
+	        this.oldPath = source["oldPath"];
+	        this.newPath = source["newPath"];
+	    }
+	}
 	export class ReadFileResult {
 	    success: boolean;
 	    content: string;
@@ -1146,6 +1220,24 @@ export namespace main {
 	        this.success = source["success"];
 	        this.content = source["content"];
 	        this.error = source["error"];
+	    }
+	}
+	export class RenameFileResult {
+	    success: boolean;
+	    error: string;
+	    oldPath: string;
+	    newPath: string;
+	
+	    static createFrom(source: any = {}) {
+	        return new RenameFileResult(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.success = source["success"];
+	        this.error = source["error"];
+	        this.oldPath = source["oldPath"];
+	        this.newPath = source["newPath"];
 	    }
 	}
 	export class WriteFileResult {

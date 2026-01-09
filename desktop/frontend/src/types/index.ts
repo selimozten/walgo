@@ -75,6 +75,8 @@ export interface FileTreeNode {
     name: string;
     path: string;
     isDir: boolean;
+    size?: number;
+    modified?: number;
     children?: FileTreeNode[];
 }
 

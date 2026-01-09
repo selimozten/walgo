@@ -65,10 +65,26 @@ Example:
 		}
 
 		sitePath = filepath.Join(sitePath, siteName)
+
+		// Check if directory already exists before creating
+		dirExistedBefore := false
+		if _, err := os.Stat(sitePath); err == nil {
+			dirExistedBefore = true
+		}
+
 		// Create site directory
 		if err := os.MkdirAll(sitePath, 0755); err != nil {
 			return fmt.Errorf("failed to create site directory: %w", err)
 		}
+
+		// Setup cleanup on failure
+		success := false
+		defer func() {
+			if !success && !dirExistedBefore {
+				// Clean up the directory if we created it and operation failed
+				os.RemoveAll(sitePath)
+			}
+		}()
 
 		// Initialize Hugo site
 		if err := hugo.InitializeSite(sitePath); err != nil {
@@ -135,34 +151,96 @@ Example:
 			fmt.Println("\n  Creating sample content...")
 		}
 
-		contentDir := filepath.Join(sitePath, "content", "posts")
+		contentDir := filepath.Join(sitePath, "content")
 		if err := os.MkdirAll(contentDir, 0755); err != nil {
 			fmt.Fprintf(os.Stderr, "        %s Warning: Could not create content directory: %v\n", icons.Warning, err)
 		} else {
-			welcomePath := filepath.Join(contentDir, "welcome.md")
-			content := `---
-title: "Welcome to Walrus Sites"
+			// Create homepage with detailed content
+			indexPath := filepath.Join(contentDir, "_index.md")
+			indexContent := `---
+title: "` + siteName + `"
 date: 2024-01-01T00:00:00Z
 draft: false
 ---
 
-Welcome to your new decentralized website powered by Walrus!
+# Welcome to ` + siteName + `
 
-This site is hosted on the Walrus decentralized storage network, making it censorship-resistant and always available.
+Your decentralized website powered by **Walrus** - the cutting-edge decentralized storage network built on the Sui blockchain.
+
+## What is Walrus?
+
+Walrus is a decentralized storage and data availability protocol designed for large binary files (blobs). Built on Sui, it provides:
+
+- **Censorship Resistance**: Your content cannot be taken down or restricted
+- **High Availability**: Data is distributed across multiple storage nodes
+- **Cost Effective**: Optimized storage with efficient encoding
+- **Fast Access**: Quick retrieval through CDN-like distribution
+
+## About This Site
+
+This site is hosted entirely on the Walrus network, making it:
+
+✓ **Permanent** - Once published, it's always accessible
+✓ **Distributed** - No single point of failure
+✓ **Verifiable** - All content is cryptographically verified
+✓ **Fast** - Delivered through a global network
+
+## Getting Started
+
+### Edit Your Content
+
+Your site uses Hugo, a fast static site generator. All content is in Markdown format:
+
+- Edit this page: ` + "`content/_index.md`" + `
+- Add new pages to the ` + "`content/`" + ` directory
+- Organize with subdirectories for complex sites
+
+### Preview Locally
+
+Test your changes before deploying:
+
+` + "```bash" + `
+walgo serve
+` + "```" + `
+
+This starts a local server at ` + "`http://localhost:1313`" + `
+
+### Deploy to Walrus
+
+When you're ready to publish:
+
+` + "```bash" + `
+walgo launch
+` + "```" + `
+
+Follow the interactive wizard to:
+1. Configure your deployment
+2. Select network (testnet/mainnet)
+3. Set storage epochs
+4. Publish to Walrus
 
 ## Next Steps
 
-1. Edit this content in ` + "`content/posts/welcome.md`" + `
-2. Add more posts to ` + "`content/posts/`" + `
-3. Customize your theme
-4. Deploy with ` + "`walgo launch`" + `
+1. **Customize Your Theme**: Edit ` + "`hugo.toml`" + ` to change colors, fonts, and layout
+2. **Add More Content**: Create new pages and blog posts
+3. **Explore Hugo**: Learn more at [gohugo.io](https://gohugo.io)
+4. **Join the Community**: Connect with other Walrus builders
 
-Happy building! ` + icons.Rocket + `
+## Resources
+
+- **Walrus Documentation**: [docs.walrus.site](https://docs.walrus.site)
+- **Walgo CLI**: [github.com/selimozten/walgo](https://github.com/selimozten/walgo)
+- **Hugo Docs**: [gohugo.io/documentation](https://gohugo.io/documentation)
+- **Sui Network**: [sui.io](https://sui.io)
+
+---
+
+**Ready to build the decentralized web?** Start editing this file and make it your own! ` + icons.Rocket + `
 `
-			if err := os.WriteFile(welcomePath, []byte(content), 0644); err != nil {
-				fmt.Fprintf(os.Stderr, "        %s Warning: Could not create welcome post: %v\n", icons.Warning, err)
+			if err := os.WriteFile(indexPath, []byte(indexContent), 0644); err != nil {
+				fmt.Fprintf(os.Stderr, "        %s Warning: Could not create homepage: %v\n", icons.Warning, err)
 			} else {
-				fmt.Printf("        %s Sample content created\n", icons.Check)
+				fmt.Printf("        %s Homepage created\n", icons.Check)
 			}
 		}
 
@@ -188,6 +266,7 @@ Happy building! ` + icons.Rocket + `
 		}
 		fmt.Printf("   %s Created draft project\n", icons.Check)
 
+		success = true
 		fmt.Println("\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
 		fmt.Printf("%s Quick start complete!\n", icons.Success)
 		fmt.Println("━━━━━━━━━━━━━━━━━━━━━━━━━━━━")

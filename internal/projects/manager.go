@@ -596,7 +596,19 @@ func (m *Manager) GetProjectStats(projectID int64) (*ProjectStats, error) {
 
 // DeleteProject removes a project and all its deployment records.
 // Uses a transaction to ensure atomic deletion of all related records.
+// Also deletes the site folder from the filesystem if deleteSiteFolder is true.
 func (m *Manager) DeleteProject(id int64) error {
+	return m.DeleteProjectWithOptions(id, true)
+}
+
+// DeleteProjectWithOptions removes a project with options to control site folder deletion.
+func (m *Manager) DeleteProjectWithOptions(id int64, deleteSiteFolder bool) error {
+	// Get project details before deleting (need site path)
+	project, err := m.GetProject(id)
+	if err != nil {
+		return fmt.Errorf("failed to get project details: %w", err)
+	}
+
 	// Start a transaction for atomicity
 	tx, err := m.db.Begin()
 	if err != nil {
@@ -623,6 +635,20 @@ func (m *Manager) DeleteProject(id int64) error {
 	// Commit the transaction
 	if err := tx.Commit(); err != nil {
 		return fmt.Errorf("failed to commit transaction: %w", err)
+	}
+
+	// Delete site folder if requested and path exists
+	if deleteSiteFolder && project.SitePath != "" {
+		// Check if the folder exists
+		if _, err := os.Stat(project.SitePath); err == nil {
+			// Folder exists, delete it
+			if err := os.RemoveAll(project.SitePath); err != nil {
+				// Return a warning but don't fail the overall operation
+				// since the database deletion already succeeded
+				return fmt.Errorf("project deleted from database but failed to delete site folder at %s: %w", project.SitePath, err)
+			}
+		}
+		// If folder doesn't exist, that's fine - it may have been manually deleted
 	}
 
 	return nil

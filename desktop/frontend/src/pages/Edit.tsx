@@ -19,15 +19,22 @@ import {
   ChevronLeft,
   ChevronRight,
   AlertCircle,
+  Search,
+  Trash2,
+  Info,
+  Calendar,
+  HardDrive,
+  Files,
 } from "lucide-react";
 import { LoadingOverlay } from "../components/ui";
-import { TreeNode } from "../components/file-tree";
+import { TreeNode, ContextMenu } from "../components/file-tree";
 import { DeploymentModal, LaunchModal, AIGenerateModal, AIUpdateModal, InstallInstructionsModal } from "../components/modals";
 import type { DeploymentParams, DeploymentResult } from "../components/modals/DeploymentModal";
 import type { LaunchConfig } from "../components/modals/LaunchModal";
 import { itemVariants, buttonVariants, iconButtonVariants } from "../utils/constants";
 import { cn, renderMarkdown } from "../utils";
 import { useEditProject, useDependencyCheck } from "../hooks";
+import { ListFiles } from "../../wailsjs/go/main/App";
 import { Project, SystemHealth } from "../types";
 
 const SAVE_STATUS_DURATION = 5000; // ms - increased for better visibility
@@ -39,7 +46,6 @@ interface EditProps {
   updatingTools?: string[];
   onStatusChange?: (status: { type: 'success' | 'error' | 'info'; message: string }) => void;
   onProjectUpdate?: () => Promise<void>;
-  onInstallDeps?: (tools: string[]) => Promise<void>;
   onRefreshHealth?: () => Promise<void>;
 }
 
@@ -50,7 +56,6 @@ export const Edit: React.FC<EditProps> = ({
   updatingTools = [],
   onProjectUpdate,
   onStatusChange,
-  onInstallDeps,
   onRefreshHealth,
 }) => {
   // Internal state
@@ -65,11 +70,18 @@ export const Edit: React.FC<EditProps> = ({
     saving,
     error,
     expandedFolders,
+    clipboard,
     setFileContent,
+    setExpandedFolders,
     loadProject,
     selectFile,
     saveFile,
     deleteFile,
+    renameFile,
+    moveFile,
+    copyToClipboard,
+    cutToClipboard,
+    pasteFromClipboard,
     toggleFolder,
     reset,
   } = useEditProject();
@@ -89,6 +101,17 @@ export const Edit: React.FC<EditProps> = ({
   const [showAIUpdateModal, setShowAIUpdateModal] = useState(false);
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [showAutoInstallModal, setShowAutoInstallModal] = useState(false);
+  const [contextMenuParentNode, setContextMenuParentNode] = useState<any>(null);
+  const [isRootDragOver, setIsRootDragOver] = useState(false);
+  const [searchQuery, setSearchQuery] = useState('');
+  const previousSearchQuery = React.useRef('');
+  const [showDeleteModal, setShowDeleteModal] = useState(false);
+  const [fileToDelete, setFileToDelete] = useState<any>(null);
+  const [showPropertiesPanel, setShowPropertiesPanel] = useState(false);
+  const [folderStats, setFolderStats] = useState<{ fileCount: number; folderCount: number; totalSize: number } | null>(null);
+  const [loadingStats, setLoadingStats] = useState(false);
+  const [rootContextMenu, setRootContextMenu] = useState<{ x: number; y: number } | null>(null);
+  const [cursorPosition, setCursorPosition] = useState({ line: 1, column: 1 });
 
   // Dependency check
   const depCheck = useDependencyCheck({
@@ -96,6 +119,16 @@ export const Edit: React.FC<EditProps> = ({
     hasUpdates,
     updatingTools
   });
+
+  // Project path utility - compute once and reuse
+  const projectPath = React.useMemo(() => project?.path || project?.sitePath, [project]);
+
+  // Helper to close new item modal and reset state
+  const closeNewItemModal = () => {
+    setShowNewItemModal(false);
+    setNewItemName('');
+    setContextMenuParentNode(null);
+  };
 
   // Load project from localStorage when component mounts or becomes visible
   useEffect(() => {
@@ -130,20 +163,458 @@ export const Edit: React.FC<EditProps> = ({
   };
 
   const handleDeleteFile = async (file: any) => {
-    if (file.isDir) {
-      const confirmed = window.confirm(
-        `Are you sure you want to delete the directory "${file.name}" and all its contents?`
-      );
-      if (!confirmed) return;
-    } else {
-      const confirmed = window.confirm(
-        `Are you sure you want to delete "${file.name}"?`
-      );
-      if (!confirmed) return;
-    }
-
-    await deleteFile(file.path);
+    setFileToDelete(file);
+    setShowDeleteModal(true);
   };
+
+  const confirmDelete = async () => {
+    if (!fileToDelete) return;
+
+    await deleteFile(fileToDelete.path);
+    setShowDeleteModal(false);
+    setFileToDelete(null);
+  };
+
+  const handleNewFileFromContext = (parentNode: any) => {
+    setContextMenuParentNode(parentNode);
+    setNewItemType("file");
+    setShowNewItemModal(true);
+  };
+
+  const handleNewFolderFromContext = (parentNode: any) => {
+    setContextMenuParentNode(parentNode);
+    setNewItemType("folder");
+    setShowNewItemModal(true);
+  };
+
+  const handleRename = async (node: any, newName: string) => {
+    const result = await renameFile(node, newName);
+    if (result.success && onStatusChange) {
+      onStatusChange({
+        type: 'success',
+        message: `Renamed to: ${newName}`
+      });
+    } else if (!result.success && onStatusChange) {
+      onStatusChange({
+        type: 'error',
+        message: result.error || 'Rename failed'
+      });
+    }
+  };
+
+  const handleMove = async (sourcePath: string, targetPath: string, expandTargetFolder?: string) => {
+    // Check if the file being moved is currently open
+    const isMovingOpenedFile = selectedFile && selectedFile.path === sourcePath;
+
+    const result = await moveFile(sourcePath, targetPath);
+    if (result.success) {
+      const fileName = targetPath.substring(targetPath.lastIndexOf('/') + 1);
+      const targetFolder = targetPath.substring(0, targetPath.lastIndexOf('/'));
+
+      // Close the editor if the moved file was open
+      if (isMovingOpenedFile) {
+        selectFile(null as any);
+        setFileContent('');
+      }
+
+      if (onStatusChange) {
+        if (targetFolder === projectPath) {
+          onStatusChange({
+            type: 'success',
+            message: `Moved "${fileName}" to project root`
+          });
+        } else {
+          onStatusChange({
+            type: 'success',
+            message: `Moved successfully`
+          });
+        }
+      }
+
+      // If we need to expand a target folder, do it after files are reloaded
+      if (expandTargetFolder) {
+        setTimeout(() => {
+          toggleFolder(expandTargetFolder);
+        }, 500);
+      }
+    } else if (!result.success && onStatusChange) {
+      onStatusChange({
+        type: 'error',
+        message: result.error || 'Move failed'
+      });
+    }
+  };
+
+  const handlePaste = async (targetFolder: any) => {
+    const result = await pasteFromClipboard(targetFolder);
+    if (result.success && onStatusChange) {
+      const itemType = clipboard?.node.isDir ? 'Folder' : 'File';
+      const operation = clipboard?.operation === 'copy' ? 'copied' : 'moved';
+      onStatusChange({
+        type: 'success',
+        message: `${itemType} ${operation} successfully`
+      });
+    } else if (!result.success && onStatusChange) {
+      onStatusChange({
+        type: 'error',
+        message: result.error || 'Paste failed'
+      });
+    }
+  };
+
+  const handleDuplicate = async (node: any) => {
+    if (!node) return;
+
+    try {
+      const { CopyFile } = await import('../../wailsjs/go/main/App');
+
+      // Get parent directory
+      const parentPath = node.path.substring(0, node.path.lastIndexOf('/'));
+      const targetPath = `${parentPath}/${node.name}`;
+
+      // Backend will auto-increment the name
+      const result = await CopyFile(node.path, targetPath);
+
+      if (result.success) {
+        // Reload project
+        if (project) {
+          await loadProject(project);
+        }
+        if (onStatusChange) {
+          onStatusChange({
+            type: 'success',
+            message: `Duplicated: ${node.name}`
+          });
+        }
+      } else {
+        if (onStatusChange) {
+          onStatusChange({
+            type: 'error',
+            message: result.error || 'Duplicate failed'
+          });
+        }
+      }
+    } catch (err) {
+      if (onStatusChange) {
+        onStatusChange({
+          type: 'error',
+          message: `Duplicate failed: ${err}`
+        });
+      }
+    }
+  };
+
+  const checkDepth = async (node: any): Promise<boolean> => {
+    if (!node || !node.isDir) return false;
+
+    try {
+      const { CheckDirectoryDepth } = await import('../../wailsjs/go/main/App');
+      const result = await CheckDirectoryDepth(node.path);
+      return result.tooDeep || false;
+    } catch (err) {
+      console.error('Failed to check depth:', err);
+      return false;
+    }
+  };
+
+  const handleRootDragOver = (e: React.DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setIsRootDragOver(true);
+    e.dataTransfer.dropEffect = 'move';
+  };
+
+  const handleRootDragLeave = (e: React.DragEvent) => {
+    e.stopPropagation();
+    setIsRootDragOver(false);
+  };
+
+  // Recursive search through all files and folders
+  const searchAllFiles = async (query: string) => {
+    if (!projectPath) return;
+
+    const lowerQuery = query.toLowerCase();
+    const foldersToExpand = new Set<string>();
+
+    // Load all children for a directory
+    const loadAllChildren = async (dirPath: string): Promise<any[]> => {
+      try {
+        const result = await ListFiles(dirPath);
+        if (!result || !result.files) return [];
+
+        const children: any[] = [];
+        for (const file of result.files) {
+          if (file.isDir) {
+            const subChildren = await loadAllChildren(file.path);
+            children.push({
+              ...file,
+              children: subChildren
+            });
+          } else {
+            children.push(file);
+          }
+        }
+
+        // Sort: directories first, then files, both alphabetically
+        return children.sort((a, b) => {
+          if (a.isDir === b.isDir) {
+            return a.name.localeCompare(b.name);
+          }
+          return a.isDir ? -1 : 1;
+        });
+      } catch (err) {
+        console.error('Error loading children:', err);
+        return [];
+      }
+    };
+
+    // Recursively search through directory
+    const searchDirectory = async (dirPath: string): Promise<any[]> => {
+      try {
+        const result = await ListFiles(dirPath);
+        if (!result || !result.files) return [];
+
+        const matches: any[] = [];
+
+        for (const file of result.files) {
+          const nameMatches = file.name.toLowerCase().includes(lowerQuery);
+
+          if (file.isDir) {
+            // Search inside the directory
+            const childMatches = await searchDirectory(file.path);
+
+            if (nameMatches) {
+              // Folder name matches - include it with ALL its children
+              foldersToExpand.add(file.path);
+              const allChildren = await loadAllChildren(file.path);
+              matches.push({
+                ...file,
+                children: allChildren
+              });
+            } else if (childMatches.length > 0) {
+              // Folder doesn't match but has matching children - include as parent
+              foldersToExpand.add(file.path);
+              matches.push({
+                ...file,
+                children: childMatches
+              });
+            }
+          } else {
+            // It's a file
+            if (nameMatches) {
+              matches.push(file);
+            }
+          }
+        }
+
+        return matches;
+      } catch (err) {
+        console.error('Search error in', dirPath, err);
+        return [];
+      }
+    };
+
+    const searchResults = await searchDirectory(projectPath);
+    return { results: searchResults, foldersToExpand };
+  };
+
+  const [searchResults, setSearchResults] = useState<any[]>([]);
+  const [searchFolders, setSearchFolders] = useState<Set<string>>(new Set());
+  const [isSearching, setIsSearching] = useState(false);
+
+  // Debounced search when query changes
+  useEffect(() => {
+    if (!project) return;
+
+    if (searchQuery.trim()) {
+      setIsSearching(true);
+      const timer = setTimeout(async () => {
+        const result = await searchAllFiles(searchQuery);
+        if (result) {
+          setSearchResults(result.results);
+          setSearchFolders(result.foldersToExpand);
+        }
+        setIsSearching(false);
+      }, 300); // Debounce 300ms
+
+      return () => clearTimeout(timer);
+    } else {
+      setSearchResults([]);
+      setSearchFolders(new Set());
+      setIsSearching(false);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [searchQuery, project?.path, project?.sitePath]);
+
+  const filteredFiles = searchQuery.trim() ? searchResults : files;
+  const foldersToExpand = searchQuery.trim() ? searchFolders : new Set<string>();
+
+  // Auto-expand folders containing search results (only when search query actually changes)
+  useEffect(() => {
+    if (searchQuery !== previousSearchQuery.current) {
+      previousSearchQuery.current = searchQuery;
+
+      if (searchQuery && foldersToExpand.size > 0) {
+        setExpandedFolders((prev: Set<string>) => {
+          const newExpanded = new Set(prev);
+          foldersToExpand.forEach(path => newExpanded.add(path));
+          return newExpanded;
+        });
+      }
+    }
+  }, [searchQuery, foldersToExpand, setExpandedFolders]);
+
+  // Load folder stats when properties panel is open and file is selected
+  useEffect(() => {
+    const loadFolderStats = async () => {
+      if (!showPropertiesPanel || !selectedFile || !selectedFile.isDir) {
+        setFolderStats(null);
+        return;
+      }
+
+      setLoadingStats(true);
+      try {
+        const { GetFolderStats } = await import('../../wailsjs/go/main/App');
+        const result = await GetFolderStats(selectedFile.path);
+        if (result.success) {
+          setFolderStats({
+            fileCount: result.fileCount,
+            folderCount: result.folderCount,
+            totalSize: result.totalSize
+          });
+        }
+      } catch (err) {
+        console.error('Failed to load folder stats:', err);
+      } finally {
+        setLoadingStats(false);
+      }
+    };
+
+    loadFolderStats();
+  }, [showPropertiesPanel, selectedFile]);
+
+  // Keyboard shortcuts handler
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      // Check if we're in an input or textarea
+      const target = e.target as HTMLElement;
+      const isInputField = target.tagName === 'INPUT' || target.tagName === 'TEXTAREA';
+
+      // Don't handle shortcuts when typing in input fields (except for Escape)
+      if (isInputField && e.key !== 'Escape') return;
+
+      const isMac = navigator.platform.toUpperCase().indexOf('MAC') >= 0;
+      const cmdOrCtrl = isMac ? e.metaKey : e.ctrlKey;
+
+      // Ctrl/Cmd+C: Copy
+      if (cmdOrCtrl && e.key === 'c' && selectedFile && !isInputField) {
+        e.preventDefault();
+        copyToClipboard(selectedFile);
+        if (onStatusChange) {
+          onStatusChange({
+            type: 'info',
+            message: `Copied: ${selectedFile.name}`
+          });
+        }
+      }
+
+      // Ctrl/Cmd+X: Cut
+      if (cmdOrCtrl && e.key === 'x' && selectedFile && !isInputField) {
+        e.preventDefault();
+        cutToClipboard(selectedFile);
+        if (onStatusChange) {
+          onStatusChange({
+            type: 'info',
+            message: `Cut: ${selectedFile.name}`
+          });
+        }
+      }
+
+      // Ctrl/Cmd+V: Paste
+      if (cmdOrCtrl && e.key === 'v' && clipboard && selectedFile?.isDir && !isInputField) {
+        e.preventDefault();
+        handlePaste(selectedFile);
+      }
+
+      // Ctrl/Cmd+D: Duplicate
+      if (cmdOrCtrl && e.key === 'd' && selectedFile && !isInputField) {
+        e.preventDefault();
+        handleDuplicate(selectedFile);
+      }
+
+      // Delete key: Delete selected file
+      if (e.key === 'Delete' && selectedFile && !isInputField) {
+        e.preventDefault();
+        setFileToDelete(selectedFile);
+        setShowDeleteModal(true);
+      }
+
+      // F2: Rename selected file
+      if (e.key === 'F2' && selectedFile && !isInputField) {
+        e.preventDefault();
+        // Trigger rename on selected file - we'll need to add a ref or state for this
+        // For now, show a status message
+        if (onStatusChange) {
+          onStatusChange({
+            type: 'info',
+            message: 'Right-click the file and select Rename to rename it'
+          });
+        }
+      }
+
+      // Ctrl/Cmd+I: Toggle properties panel
+      if (cmdOrCtrl && e.key === 'i' && !isInputField) {
+        e.preventDefault();
+        setShowPropertiesPanel(prev => !prev);
+      }
+    };
+
+    document.addEventListener('keydown', handleKeyDown);
+    return () => document.removeEventListener('keydown', handleKeyDown);
+  }, [selectedFile, clipboard, copyToClipboard, cutToClipboard, onStatusChange]);
+
+  const handleRootDrop = async (e: React.DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setIsRootDragOver(false);
+
+    if (!projectPath) return;
+
+    try {
+      const data = JSON.parse(e.dataTransfer.getData('application/json'));
+      const sourcePath = data.path;
+
+      const targetPath = `${projectPath}/${data.name}`;
+
+      // Don't move if already at root
+      if (sourcePath === targetPath) {
+        return;
+      }
+
+      // Check if source is already in project root (not nested)
+      const sourceParent = sourcePath.substring(0, sourcePath.lastIndexOf('/'));
+      if (sourceParent === projectPath) {
+        if (onStatusChange) {
+          onStatusChange({
+            type: 'info',
+            message: 'File is already in root folder'
+          });
+        }
+        return;
+      }
+
+      await handleMove(sourcePath, targetPath);
+    } catch (err) {
+      console.error('Root drop failed:', err);
+      if (onStatusChange) {
+        onStatusChange({
+          type: 'error',
+          message: `Move failed: ${err}`
+        });
+      }
+    }
+  };
+
 
   const handleCloseProject = () => {
     reset();
@@ -159,7 +630,6 @@ export const Edit: React.FC<EditProps> = ({
 
   // Server operations
   const handleServeToggle = async () => {
-    const projectPath = project?.path || project?.sitePath;
     if (!projectPath) {
       onStatusChange?.({
         type: 'error',
@@ -237,16 +707,15 @@ export const Edit: React.FC<EditProps> = ({
   };
 
   const handleDeployment = async (params: DeploymentParams): Promise<DeploymentResult> => {
+    if (!projectPath) {
+      return {
+        success: false,
+        error: "Project path not found",
+      };
+    }
+
     try {
       const { LaunchWizard } = await import('../../wailsjs/go/main/App');
-      
-      const projectPath = project?.path || project?.sitePath;
-      if (!projectPath) {
-        return {
-          success: false,
-          error: "Project path not found",
-        };
-      }
 
       // Call the actual LaunchWizard API
       const result = await LaunchWizard({
@@ -338,11 +807,76 @@ export const Edit: React.FC<EditProps> = ({
   };
 
   const validateSlug = (slug: string): boolean => {
-    // Remove .md extension for validation
-    const cleanSlug = slug.replace(/\.md$/, '');
-    // Allow letters, numbers, hyphens, underscores, and forward slashes (for subdirectories)
-    const validSlug = /^[a-zA-Z0-9_\-/]+$/;
-    return validSlug.test(cleanSlug) && cleanSlug.length > 0 && cleanSlug.length < 100;
+    // Allow letters, numbers, hyphens, underscores, dots, and forward slashes (for subdirectories)
+    const validSlug = /^[a-zA-Z0-9_\-\.\/]+$/;
+    return validSlug.test(slug) && slug.length > 0 && slug.length < 100;
+  };
+
+  const formatFileSize = (bytes: number | undefined): string => {
+    if (bytes === undefined || bytes === 0) return '0 B';
+    const k = 1024;
+    const sizes = ['B', 'KB', 'MB', 'GB'];
+    const i = Math.floor(Math.log(bytes) / Math.log(k));
+    return Math.round((bytes / Math.pow(k, i)) * 100) / 100 + ' ' + sizes[i];
+  };
+
+  const formatDate = (timestamp: number | undefined): string => {
+    if (!timestamp) return 'Unknown';
+    const date = new Date(timestamp * 1000);
+    return date.toLocaleDateString() + ' ' + date.toLocaleTimeString();
+  };
+
+  // Editor stats helpers
+  const getLineCount = (text: string): number => {
+    return text.split('\n').length;
+  };
+
+  const getWordCount = (text: string): number => {
+    return text.trim().split(/\s+/).filter(word => word.length > 0).length;
+  };
+
+  const handleTextareaChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
+    const textarea = e.target;
+    const value = textarea.value;
+    setFileContent(value);
+
+    // Update cursor position
+    const textBeforeCursor = value.substring(0, textarea.selectionStart);
+    const lines = textBeforeCursor.split('\n');
+    const lineNumber = lines.length;
+    const columnNumber = lines[lines.length - 1].length + 1;
+
+    setCursorPosition({ line: lineNumber, column: columnNumber });
+  };
+
+  const handleTextareaClick = (e: React.MouseEvent<HTMLTextAreaElement>) => {
+    const textarea = e.target as HTMLTextAreaElement;
+    const textBeforeCursor = textarea.value.substring(0, textarea.selectionStart);
+    const lines = textBeforeCursor.split('\n');
+    const lineNumber = lines.length;
+    const columnNumber = lines[lines.length - 1].length + 1;
+
+    setCursorPosition({ line: lineNumber, column: columnNumber });
+  };
+
+  const handleTextareaKeyUp = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
+    const textarea = e.target as HTMLTextAreaElement;
+    const textBeforeCursor = textarea.value.substring(0, textarea.selectionStart);
+    const lines = textBeforeCursor.split('\n');
+    const lineNumber = lines.length;
+    const columnNumber = lines[lines.length - 1].length + 1;
+
+    setCursorPosition({ line: lineNumber, column: columnNumber });
+  };
+
+  const handleRootContextMenu = (e: React.MouseEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+
+    setRootContextMenu({
+      x: e.clientX,
+      y: e.clientY,
+    });
   };
 
   const handleCreateNewItem = async () => {
@@ -367,7 +901,6 @@ export const Edit: React.FC<EditProps> = ({
       return;
     }
 
-    const projectPath = project?.path || project?.sitePath;
     if (!projectPath) {
       if (onStatusChange) {
         onStatusChange({
@@ -381,17 +914,28 @@ export const Edit: React.FC<EditProps> = ({
     setIsCreating(true);
     try {
       const { CreateFile, CreateDirectory } = await import('../../wailsjs/go/main/App');
-      
+
+      // Determine base path (either from context menu parent or default to project root)
+      let basePath = projectPath;
+      if (contextMenuParentNode && contextMenuParentNode.isDir) {
+        basePath = contextMenuParentNode.path;
+      }
+
       if (newItemType === 'file') {
-        // Ensure .md extension for files
-        const fileName = newItemName.endsWith('.md') ? newItemName : `${newItemName}.md`;
-        const filePath = `${projectPath}/content/${fileName}`;
-        
+        // Use the filename as provided by the user
+        const fileName = newItemName;
+        const filePath = `${basePath}/${fileName}`;
+
         // Extract title from filename (remove path and extension)
-        const title = fileName.split('/').pop()?.replace('.md', '') || 'New Content';
-        
-        // Create file with basic frontmatter
-        const content = `---
+        const title = fileName.split('/').pop()?.replace(/\.[^.]+$/, '') || 'New Content';
+
+        // Check if it's a markdown file
+        const isMarkdown = fileName.toLowerCase().endsWith('.md') || fileName.toLowerCase().endsWith('.markdown');
+
+        // Create file with basic frontmatter only for markdown files
+        let content: string;
+        if (isMarkdown) {
+          content = `---
 title: "${title}"
 date: ${new Date().toISOString()}
 draft: false
@@ -401,12 +945,15 @@ draft: false
 
 Start writing your content here...
 `;
-        
+        } else {
+          // Empty content for non-markdown files
+          content = '';
+        }
+
         const result = await CreateFile(filePath, content);
-        if (result.success) {
+        if (result.success && project) {
           await loadProject(project);
-          setShowNewItemModal(false);
-          setNewItemName('');
+          closeNewItemModal();
           if (onStatusChange) {
             onStatusChange({
               type: 'success',
@@ -423,12 +970,11 @@ Start writing your content here...
         }
       } else {
         // Create folder
-        const folderPath = `${projectPath}/content/${newItemName}`;
+        const folderPath = `${basePath}/${newItemName}`;
         const result = await CreateDirectory(folderPath);
-        if (result.success) {
+        if (result.success && project) {
           await loadProject(project);
-          setShowNewItemModal(false);
-          setNewItemName('');
+          closeNewItemModal();
           if (onStatusChange) {
             onStatusChange({
               type: 'success',
@@ -506,7 +1052,6 @@ Start writing your content here...
                       <div className="absolute right-0 top-full mt-2 w-48 bg-zinc-900 border border-white/10 rounded-sm shadow-lg z-20 overflow-hidden">
                         <button
                           onClick={async () => {
-                            const projectPath = project.path || project.sitePath;
                             if (projectPath) {
                               await loadProject(project);
                               if (onStatusChange) {
@@ -595,30 +1140,102 @@ Start writing your content here...
             </div>
           </div>
 
+          {/* Search Bar */}
+          {project && (
+            <div className="px-3 py-2 border-b border-white/5">
+              <div className="relative">
+                <input
+                  type="text"
+                  placeholder="Search files..."
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                  autoComplete="off"
+                  autoCapitalize="off"
+                  autoCorrect="off"
+                  spellCheck={false}
+                  className="w-full px-3 py-2 pl-9 pr-8 bg-zinc-800/50 border border-white/10 rounded text-xs font-mono text-white placeholder-zinc-500 focus:outline-none focus:border-accent/50 transition-colors"
+                />
+                <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-zinc-500" />
+                {isSearching ? (
+                  <Loader2 size={14} className="absolute right-2 top-1/2 -translate-y-1/2 text-accent animate-spin" />
+                ) : searchQuery ? (
+                  <button
+                    onClick={() => setSearchQuery('')}
+                    className="absolute right-2 top-1/2 -translate-y-1/2 text-zinc-500 hover:text-white transition-colors"
+                  >
+                    <X size={14} />
+                  </button>
+                ) : null}
+              </div>
+            </div>
+          )}
+
           {/* File List - Scrollable, takes remaining space */}
-          <div className="flex-1 overflow-y-auto overflow-x-hidden p-2 min-h-0">
+          <div
+            className={cn(
+              "flex-1 overflow-y-auto overflow-x-hidden p-2 min-h-0 transition-colors",
+              isRootDragOver && "bg-accent/10 border-2 border-accent/50 border-dashed"
+            )}
+            onDragOver={handleRootDragOver}
+            onDragLeave={handleRootDragLeave}
+            onDrop={handleRootDrop}
+            onContextMenu={handleRootContextMenu}
+          >
             {project ? (
-              files.length > 0 ? (
-                files.map((node: any) => (
-                  <TreeNode
-                    key={node.path}
-                    node={node}
-                    level={0}
-                    expandedFolders={expandedFolders}
-                    toggleFolder={toggleFolder}
-                    selectFile={selectFile}
-                    deleteSelectedFile={handleDeleteFile}
-                    selectedFile={selectedFile}
-                  />
-                ))
+              filteredFiles.length > 0 ? (
+                <>
+                  {filteredFiles.map((node: any) => (
+                    <TreeNode
+                      key={node.path}
+                      node={node}
+                      level={0}
+                      expandedFolders={expandedFolders}
+                      toggleFolder={toggleFolder}
+                      selectFile={selectFile}
+                      deleteSelectedFile={handleDeleteFile}
+                      selectedFile={selectedFile}
+                      onRename={handleRename}
+                      onMove={handleMove}
+                      onCopy={copyToClipboard}
+                      onCut={cutToClipboard}
+                      onPaste={handlePaste}
+                      onDuplicate={handleDuplicate}
+                      onNewFile={handleNewFileFromContext}
+                      onNewFolder={handleNewFolderFromContext}
+                      clipboard={clipboard}
+                      checkDepth={checkDepth}
+                    />
+                  ))}
+                </>
               ) : (
-                <div className="text-center py-8 text-zinc-500 text-xs font-mono">
-                  <FolderOpen size={32} className="mx-auto mb-2 opacity-30" />
-                  <p>No files in this directory</p>
-                  {(project.path || project.sitePath) && (
-                    <p className="text-[10px] text-zinc-600 mt-2 px-4 break-all">
-                      Path: {project.path || project.sitePath}
-                    </p>
+                <div
+                  className="text-center py-8 text-zinc-500 text-xs font-mono h-full flex flex-col items-center justify-center"
+                  onContextMenu={handleRootContextMenu}
+                >
+                  {searchQuery ? (
+                    <>
+                      <Search size={32} className="mx-auto mb-2 opacity-30" />
+                      <p>No files found matching "{searchQuery}"</p>
+                      <button
+                        onClick={() => setSearchQuery('')}
+                        className="mt-3 text-accent hover:text-accent/80 transition-colors"
+                      >
+                        Clear search
+                      </button>
+                    </>
+                  ) : (
+                    <>
+                      <FolderOpen size={32} className="mx-auto mb-2 opacity-30" />
+                      <p>No files in this directory</p>
+                      {projectPath && (
+                        <p className="text-[10px] text-zinc-600 mt-2 px-4 break-all">
+                          Path: {projectPath}
+                        </p>
+                      )}
+                      <p className="text-[10px] text-zinc-500 mt-4">
+                        Right-click to create files/folders
+                      </p>
+                    </>
                   )}
                 </div>
               )
@@ -629,6 +1246,43 @@ Start writing your content here...
               </div>
             )}
           </div>
+
+          {/* Root Context Menu */}
+          {rootContextMenu && project && (
+            <ContextMenu
+              x={rootContextMenu.x}
+              y={rootContextMenu.y}
+              node={{
+                name: project.name || 'Project',
+                path: projectPath || '',
+                isDir: true,
+              }}
+              onClose={() => setRootContextMenu(null)}
+              onNewFile={(node) => {
+                setContextMenuParentNode(node);
+                setNewItemType('file');
+                setShowNewItemModal(true);
+                setRootContextMenu(null);
+              }}
+              onNewFolder={(node) => {
+                setContextMenuParentNode(node);
+                setNewItemType('folder');
+                setShowNewItemModal(true);
+                setRootContextMenu(null);
+              }}
+              hasClipboard={!!clipboard}
+              onPaste={() => {
+                if (projectPath) {
+                  handlePaste({
+                    name: project.name || 'Project',
+                    path: projectPath,
+                    isDir: true,
+                  });
+                }
+                setRootContextMenu(null);
+              }}
+            />
+          )}
 
           {/* Action Buttons - Fixed at bottom */}
           {project && (
@@ -759,55 +1413,81 @@ Start writing your content here...
 
       {/* Right Panel - Editor and Preview */}
       <div
-        className="flex-1 flex flex-col relative min-h-0 bg-zinc-900/20 border border-white/10 rounded-sm overflow-hidden transition-all duration-300 ease-in-out"
+        className="flex-1 flex flex-col relative min-h-0 bg-gradient-to-br from-zinc-900/95 via-zinc-900/90 to-black/95 border border-white/10 rounded-sm overflow-hidden transition-all duration-300 ease-in-out group shadow-2xl"
         style={{ height: "100%" }}
       >
+          {/* Card corner decorations */}
+          <div className="absolute top-0 left-0 w-3 h-3 border-t-2 border-l-2 border-accent/30 z-20 rounded-tl-sm" />
+          <div className="absolute top-0 right-0 w-3 h-3 border-t-2 border-r-2 border-accent/30 z-20 rounded-tr-sm" />
+          <div className="absolute bottom-0 left-0 w-3 h-3 border-b-2 border-l-2 border-accent/30 z-20 rounded-bl-sm" />
+          <div className="absolute bottom-0 right-0 w-3 h-3 border-b-2 border-r-2 border-accent/30 z-20 rounded-br-sm" />
+
           {selectedFile ? (
             <>
-              {/* Toolbar */}
-              <div className="p-3 border-b border-white/5 bg-black/20 flex items-center justify-between flex-shrink-0">
-                <div className="flex items-center gap-2">
-                  <FileText size={16} className="text-zinc-500" />
-                  <span className="text-xs font-mono text-zinc-300 truncate max-w-[200px]">
-                    {selectedFile.name}
-                  </span>
+              {/* Enhanced Toolbar */}
+              <div className="px-4 py-3 border-b border-white/10 bg-gradient-to-r from-black/40 via-zinc-900/40 to-black/40 flex items-center justify-between flex-shrink-0 backdrop-blur-sm relative">
+                {/* Subtle glow effect */}
+                <div className="absolute inset-0 bg-gradient-to-r from-transparent via-accent/5 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-500" />
+
+                <div className="flex items-center gap-3 relative z-10">
+                  <div className="p-1.5 bg-accent/10 border border-accent/20 rounded">
+                    <FileText size={14} className="text-accent" />
+                  </div>
+                  <div className="flex flex-col">
+                    <span className="text-xs font-mono text-white font-semibold">
+                      {selectedFile.name}
+                    </span>
+                    <span className="text-[10px] font-mono text-zinc-500 truncate max-w-[300px]">
+                      {selectedFile.path}
+                    </span>
+                  </div>
                 </div>
-                <div className="flex items-center gap-2">
-                  <div className="w-px h-6 bg-white/10 mx-1"></div>
+
+                <div className="flex items-center gap-2 relative z-10">
+                  <div className="w-px h-6 bg-gradient-to-b from-transparent via-white/20 to-transparent mx-1"></div>
                   <button
                     onClick={() => setViewMode("editor")}
                     className={cn(
-                      "px-3 py-1.5 rounded-sm text-xs font-mono transition-all",
+                      "px-3 py-1.5 rounded text-xs font-mono transition-all relative overflow-hidden",
                       viewMode === "editor"
-                        ? "bg-accent/10 text-accent border border-accent/30"
-                        : "bg-white/5 text-zinc-400 hover:text-white"
+                        ? "bg-accent/20 text-accent border border-accent/40 shadow-lg shadow-accent/20"
+                        : "bg-white/5 text-zinc-400 hover:text-white hover:bg-white/10 border border-transparent"
                     )}
                   >
-                    Editor
+                    {viewMode === "editor" && (
+                      <div className="absolute inset-0 bg-gradient-to-r from-accent/10 via-accent/5 to-accent/10 animate-pulse" />
+                    )}
+                    <span className="relative">Editor</span>
                   </button>
                   {selectedFile?.name.endsWith(".md") && (
                     <>
                       <button
                         onClick={() => setViewMode("split")}
                         className={cn(
-                          "px-3 py-1.5 rounded-sm text-xs font-mono transition-all",
+                          "px-3 py-1.5 rounded text-xs font-mono transition-all relative overflow-hidden",
                           viewMode === "split"
-                            ? "bg-accent/10 text-accent border border-accent/30"
-                            : "bg-white/5 text-zinc-400 hover:text-white"
+                            ? "bg-accent/20 text-accent border border-accent/40 shadow-lg shadow-accent/20"
+                            : "bg-white/5 text-zinc-400 hover:text-white hover:bg-white/10 border border-transparent"
                         )}
                       >
-                        Split
+                        {viewMode === "split" && (
+                          <div className="absolute inset-0 bg-gradient-to-r from-accent/10 via-accent/5 to-accent/10 animate-pulse" />
+                        )}
+                        <span className="relative">Split</span>
                       </button>
                       <button
                         onClick={() => setViewMode("preview")}
                         className={cn(
-                          "px-3 py-1.5 rounded-sm text-xs font-mono transition-all",
+                          "px-3 py-1.5 rounded text-xs font-mono transition-all relative overflow-hidden",
                           viewMode === "preview"
-                            ? "bg-accent/10 text-accent border border-accent/30"
-                            : "bg-white/5 text-zinc-400 hover:text-white"
+                            ? "bg-accent/20 text-accent border border-accent/40 shadow-lg shadow-accent/20"
+                            : "bg-white/5 text-zinc-400 hover:text-white hover:bg-white/10 border border-transparent"
                         )}
                       >
-                        Preview
+                        {viewMode === "preview" && (
+                          <div className="absolute inset-0 bg-gradient-to-r from-accent/10 via-accent/5 to-accent/10 animate-pulse" />
+                        )}
+                        <span className="relative">Preview</span>
                       </button>
                     </>
                   )}
@@ -815,120 +1495,198 @@ Start writing your content here...
               </div>
 
               {/* Content Area */}
-              <div className="flex flex-1 min-h-0 overflow-hidden">
-                {/* Editor */}
-                {(viewMode === "editor" || viewMode === "split") && (
-                  <div
-                    className={cn(
-                      "flex flex-col bg-black/40 relative",
-                      viewMode === "split"
-                        ? "w-1/2 border-r border-white/5"
-                        : "w-full"
-                    )}
-                  >
-                    {loading && <LoadingOverlay message="Loading file..." />}
-                    <textarea
-                      value={fileContent}
-                      onChange={(e) => setFileContent(e.target.value)}
-                      className="flex-1 w-full p-4 bg-transparent text-xs font-mono text-zinc-300 resize-none focus:outline-none scrollbar-thin scrollbar-thumb-zinc-800 scrollbar-track-transparent"
-                      placeholder="Start typing..."
-                      autoComplete="off"
-                      autoCapitalize="off"
-                      autoCorrect="off"
-                      spellCheck={false}
-                      disabled={loading}
-                      style={{ minHeight: 0 }}
-                    />
-                    <div className="p-2 border-t border-white/5 bg-black/30 flex items-center justify-between flex-shrink-0 min-h-[50px]">
-                      <span className="text-[10px] font-mono text-zinc-600">
-                        {fileContent.length} characters
-                      </span>
-                      <div className="flex items-center gap-2">
-                        {selectedFile && (selectedFile.path.toLowerCase().endsWith('.md') || selectedFile.path.toLowerCase().endsWith('.markdown')) && (
-                          <button
-                            onClick={() => {
-                              if (aiConfigured) {
-                                setShowAIUpdateModal(true);
-                              } else if (onStatusChange) {
-                                onStatusChange({
-                                  type: 'error',
-                                  message: 'AI not configured: Please configure AI in Settings to use AI features.'
-                                });
-                              }
-                            }}
-                            disabled={!aiConfigured}
-                            className={cn(
-                              "px-4 py-1.5 rounded-sm text-xs font-mono flex items-center gap-2 transition-all border",
-                              aiConfigured
-                                ? "bg-purple-500/10 hover:bg-purple-500/20 text-purple-400 border-purple-500/30"
-                                : "bg-zinc-800 text-zinc-600 border-zinc-700 cursor-not-allowed opacity-50"
-                            )}
-                          >
-                            <Sparkles size={14} />
-                            AI Update
-                          </button>
-                        )}
-                        <button
-                          onClick={handleSave}
-                          disabled={saving}
-                          className="px-4 py-1.5 bg-accent/10 hover:bg-accent/20 text-accent border border-accent/30 rounded-sm text-xs font-mono flex items-center gap-2 transition-all disabled:opacity-50"
-                        >
-                          {saving ? (
-                            <Loader2 size={14} className="animate-spin" />
-                          ) : (
-                            <Save size={14} />
-                          )}
-                          {savingStatus || "Save"}
-                        </button>
+              <div className="flex flex-col flex-1 min-h-0 overflow-hidden">
+                {/* Editor and Preview Container */}
+                <div className="flex flex-1 min-h-0 overflow-hidden">
+                  {/* Enhanced Editor */}
+                  {(viewMode === "editor" || viewMode === "split") && (
+                    <div
+                      className={cn(
+                        "flex flex-col relative bg-gradient-to-br from-black/60 via-zinc-900/50 to-black/60 overflow-hidden",
+                        viewMode === "split"
+                          ? "w-1/2 border-r border-white/10"
+                          : "w-full"
+                      )}
+                    >
+                      {loading && <LoadingOverlay message="Loading file..." />}
+
+                      {/* Editor with enhanced styling */}
+                      <div className="flex-1 relative overflow-hidden">
+                        {/* Subtle background pattern */}
+                        <div className="absolute inset-0 opacity-5 pointer-events-none" style={{
+                          backgroundImage: 'repeating-linear-gradient(0deg, transparent, transparent 20px, rgba(255,255,255,0.03) 20px, rgba(255,255,255,0.03) 21px)'
+                        }} />
+
+                        <textarea
+                          value={fileContent}
+                          onChange={handleTextareaChange}
+                          onClick={handleTextareaClick}
+                          onKeyUp={handleTextareaKeyUp}
+                          className="relative z-10 flex-1 w-full h-full p-6 bg-transparent text-sm font-mono text-zinc-200 leading-relaxed resize-none focus:outline-none focus:ring-2 focus:ring-accent/20 focus:ring-inset scrollbar-thin scrollbar-thumb-zinc-700 hover:scrollbar-thumb-zinc-600 scrollbar-track-transparent transition-all"
+                          placeholder="Start writing your content..."
+                          autoComplete="off"
+                          autoCapitalize="off"
+                          autoCorrect="off"
+                          spellCheck={false}
+                          disabled={loading}
+                          style={{
+                            minHeight: 0,
+                            letterSpacing: '0.01em',
+                            tabSize: 2,
+                          }}
+                        />
                       </div>
                     </div>
-                  </div>
-                )}
+                  )}
 
-                {/* Preview */}
+                {/* Enhanced Preview */}
                 {(viewMode === "preview" || viewMode === "split") && (
                   <div
                     className={cn(
-                      "overflow-y-auto bg-black/40 min-h-0 h-full relative",
+                      "overflow-y-auto bg-gradient-to-br from-black/60 via-zinc-900/40 to-black/60 min-h-0 h-full relative scrollbar-thin scrollbar-thumb-zinc-700 hover:scrollbar-thumb-zinc-600 scrollbar-track-transparent",
                       viewMode === "split" ? "w-1/2" : "w-full"
                     )}
                   >
                     {loading && <LoadingOverlay message="Loading preview..." />}
-                    <div className="p-6 prose prose-invert prose-sm max-w-none">
+
+                    {/* Preview label */}
+                    <div className="sticky top-0 z-10 px-6 py-2 bg-zinc-900/80 backdrop-blur-sm border-b border-white/5">
+                      <span className="text-[10px] font-mono text-zinc-500 uppercase tracking-wider">
+                        Preview
+                      </span>
+                    </div>
+
+                    <div className="p-8 prose prose-invert prose-sm max-w-none">
                       {selectedFile.name.endsWith(".md") ? (
                         <div
+                          className="prose-headings:text-white prose-p:text-zinc-300 prose-a:text-accent prose-a:no-underline hover:prose-a:underline prose-strong:text-white prose-code:text-accent prose-code:bg-accent/10 prose-code:px-1.5 prose-code:py-0.5 prose-code:rounded prose-pre:bg-black/60 prose-pre:border prose-pre:border-white/10"
                           dangerouslySetInnerHTML={{
                             __html: renderMarkdown(fileContent),
                           }}
                         />
                       ) : (
-                        <pre className="text-xs text-zinc-300 font-mono whitespace-pre-wrap">
+                        <pre className="text-sm text-zinc-300 font-mono whitespace-pre-wrap leading-relaxed bg-black/40 p-6 rounded border border-white/10">
                           {fileContent}
                         </pre>
                       )}
                     </div>
                   </div>
                 )}
+                </div>
+
+                {/* Enhanced Status Bar - Outside editor/preview, always at bottom */}
+                <div className="px-4 py-2.5 border-t border-white/10 bg-gradient-to-r from-black/60 via-zinc-900/50 to-black/60 backdrop-blur-sm flex items-center justify-between flex-shrink-0">
+                  <div className="flex items-center gap-4">
+                    <div className="flex items-center gap-2">
+                      <div className="w-1.5 h-1.5 rounded-full bg-green-400 animate-pulse shadow-lg shadow-green-400/50" />
+                      <span className="text-[10px] font-mono text-zinc-500 uppercase tracking-wider">
+                        Ln {cursorPosition.line}, Col {cursorPosition.column}
+                      </span>
+                    </div>
+                    <div className="w-px h-4 bg-white/10" />
+                    <span className="text-[10px] font-mono text-zinc-500">
+                      {getLineCount(fileContent)} lines
+                    </span>
+                    <div className="w-px h-4 bg-white/10" />
+                    <span className="text-[10px] font-mono text-zinc-500">
+                      {getWordCount(fileContent)} words
+                    </span>
+                    <div className="w-px h-4 bg-white/10" />
+                    <span className="text-[10px] font-mono text-zinc-500">
+                      {fileContent.length} chars
+                    </span>
+                    <div className="w-px h-4 bg-white/10" />
+                    <span className="text-[10px] font-mono text-zinc-500 uppercase tracking-wider">
+                      UTF-8
+                    </span>
+                  </div>
+
+                  <div className="flex items-center gap-2">
+                    {selectedFile && (selectedFile.path.toLowerCase().endsWith('.md') || selectedFile.path.toLowerCase().endsWith('.markdown')) && (
+                      <button
+                        onClick={() => {
+                          if (aiConfigured) {
+                            setShowAIUpdateModal(true);
+                          } else if (onStatusChange) {
+                            onStatusChange({
+                              type: 'error',
+                              message: 'AI not configured: Please configure AI in Settings to use AI features.'
+                            });
+                          }
+                        }}
+                        disabled={!aiConfigured}
+                        className={cn(
+                          "px-4 py-1.5 rounded text-xs font-mono flex items-center gap-2 transition-all border relative overflow-hidden group/btn",
+                          aiConfigured
+                            ? "bg-purple-500/10 hover:bg-purple-500/20 text-purple-400 border-purple-500/30 hover:border-purple-400/50 hover:shadow-lg hover:shadow-purple-500/20"
+                            : "bg-zinc-800 text-zinc-600 border-zinc-700 cursor-not-allowed opacity-50"
+                        )}
+                      >
+                        {aiConfigured && (
+                          <div className="absolute inset-0 bg-gradient-to-r from-purple-500/0 via-purple-500/10 to-purple-500/0 translate-x-[-100%] group-hover/btn:translate-x-[100%] transition-transform duration-1000" />
+                        )}
+                        <Sparkles size={14} className="relative z-10" />
+                        <span className="relative z-10">AI Update</span>
+                      </button>
+                    )}
+                    <button
+                      onClick={handleSave}
+                      disabled={saving}
+                      className={cn(
+                        "px-4 py-1.5 rounded text-xs font-mono flex items-center gap-2 transition-all border relative overflow-hidden group/btn",
+                        saving
+                          ? "bg-accent/20 text-accent border-accent/40 opacity-70"
+                          : "bg-accent/10 hover:bg-accent/20 text-accent border-accent/30 hover:border-accent/50 hover:shadow-lg hover:shadow-accent/20"
+                      )}
+                    >
+                      {!saving && (
+                        <div className="absolute inset-0 bg-gradient-to-r from-accent/0 via-accent/10 to-accent/0 translate-x-[-100%] group-hover/btn:translate-x-[100%] transition-transform duration-1000" />
+                      )}
+                      {saving ? (
+                        <Loader2 size={14} className="animate-spin relative z-10" />
+                      ) : (
+                        <Save size={14} className="relative z-10" />
+                      )}
+                      <span className="relative z-10">{savingStatus || "Save"}</span>
+                    </button>
+                  </div>
+                </div>
               </div>
             </>
           ) : (
-            <div className="flex-1 flex items-center justify-center">
-              <div className="text-center">
+            <div className="flex-1 flex items-center justify-center relative overflow-hidden">
+              {/* Animated background gradient */}
+              <div className="absolute inset-0 bg-gradient-to-br from-accent/5 via-transparent to-purple-500/5 opacity-50" />
+              <div className="absolute inset-0" style={{
+                backgroundImage: 'radial-gradient(circle at 50% 50%, rgba(99, 102, 241, 0.1) 0%, transparent 50%)',
+                backgroundSize: '100px 100px'
+              }} />
+
+              <div className="text-center relative z-10">
                 {error ? (
                   <>
-                    <AlertCircle size={48} className="mx-auto mb-4 text-red-400" />
-                    <p className="text-sm text-red-400 font-mono mb-2">
+                    <div className="relative inline-block mb-6">
+                      <div className="absolute inset-0 bg-red-400/20 blur-2xl rounded-full" />
+                      <AlertCircle size={56} className="relative text-red-400 animate-pulse" />
+                    </div>
+                    <p className="text-base text-red-400 font-mono mb-3 font-semibold">
                       Error loading project
                     </p>
-                    <p className="text-xs text-zinc-500 font-mono">
+                    <p className="text-xs text-zinc-500 font-mono max-w-md px-4">
                       {error}
                     </p>
                   </>
                 ) : (
                   <>
-                    <FileText size={48} className="mx-auto mb-4 text-zinc-600" />
-                    <p className="text-sm text-zinc-500 font-mono">
-                      Select a file to edit
+                    <div className="relative inline-block mb-6">
+                      <div className="absolute inset-0 bg-accent/20 blur-3xl rounded-full animate-pulse" />
+                      <FileText size={56} className="relative text-zinc-600" />
+                    </div>
+                    <p className="text-base text-zinc-400 font-mono mb-2">
+                      No file selected
+                    </p>
+                    <p className="text-xs text-zinc-600 font-mono">
+                      Select a file from the sidebar to start editing
                     </p>
                   </>
                 )}
@@ -961,10 +1719,7 @@ Start writing your content here...
                 )}
               </h2>
               <button
-                onClick={() => {
-                  setShowNewItemModal(false);
-                  setNewItemName('');
-                }}
+                onClick={closeNewItemModal}
                 className="p-1 hover:bg-white/10 rounded-sm transition-colors"
               >
                 <X size={18} className="text-zinc-400" />
@@ -985,7 +1740,7 @@ Start writing your content here...
                       handleCreateNewItem();
                     }
                   }}
-                  placeholder={newItemType === 'file' ? 'my-new-post' : 'my-folder'}
+                  placeholder={newItemType === 'file' ? 'my-new-post.md' : 'my-folder'}
                   autoComplete="off"
                   autoCapitalize="off"
                   autoCorrect="off"
@@ -995,8 +1750,8 @@ Start writing your content here...
                 />
                 {newItemType === 'file' ? (
                   <div className="text-xs text-zinc-500 font-mono mt-2 space-y-1">
-                    <p>• .md extension will be added automatically</p>
-                    <p>• Use slashes for subdirectories: posts/my-post</p>
+                    <p>• Include file extension: my-file.md, style.css, config.json</p>
+                    <p>• Use slashes for subdirectories: posts/my-post.md</p>
                   </div>
                 ) : (
                   <p className="text-xs text-zinc-500 font-mono mt-2">
@@ -1007,10 +1762,7 @@ Start writing your content here...
 
               <div className="flex gap-3">
                 <motion.button
-                  onClick={() => {
-                    setShowNewItemModal(false);
-                    setNewItemName('');
-                  }}
+                  onClick={closeNewItemModal}
                   disabled={isCreating}
                   variants={buttonVariants}
                   whileHover="hover"
@@ -1058,7 +1810,7 @@ Start writing your content here...
         isOpen={showDeploymentModal}
         isUpdate={isDeployed}
         projectName={launchConfig?.projectName || project?.name || ""}
-        sitePath={project?.path || project?.sitePath}
+        sitePath={projectPath}
         network={project?.network}
         currentObjectId={project?.objectId}
         deployedWallet={project?.wallet}
@@ -1073,7 +1825,7 @@ Start writing your content here...
       <AIGenerateModal
         isOpen={showAIGenerateModal}
         onClose={() => setShowAIGenerateModal(false)}
-        sitePath={project?.path || project?.sitePath || ""}
+        sitePath={projectPath || ""}
         onSuccess={(filePath) => {
           // Optionally select the generated file
           if (onStatusChange) {
@@ -1090,7 +1842,7 @@ Start writing your content here...
       <AIUpdateModal
         isOpen={showAIUpdateModal}
         onClose={() => setShowAIUpdateModal(false)}
-        sitePath={project?.path || project?.sitePath || ""}
+        sitePath={projectPath || ""}
         filePath={selectedFile?.path || ""}
         currentContent={fileContent}
         onSuccess={async () => {
@@ -1115,6 +1867,184 @@ Start writing your content here...
           }
         }}
       />
+
+      {/* Delete Confirmation Modal */}
+      {showDeleteModal && fileToDelete && (
+        <div className="fixed inset-0 bg-black/80 flex items-center justify-center z-50 p-4">
+          <motion.div
+            initial={{ opacity: 0, scale: 0.95 }}
+            animate={{ opacity: 1, scale: 1 }}
+            exit={{ opacity: 0, scale: 0.95 }}
+            className="bg-zinc-900 border border-red-500/30 rounded-sm p-6 max-w-md w-full"
+          >
+            <div className="flex items-center justify-between mb-6">
+              <h2 className="text-lg font-display text-white flex items-center gap-2">
+                <AlertCircle size={20} className="text-red-400" />
+                Confirm Delete
+              </h2>
+              <button
+                onClick={() => {
+                  setShowDeleteModal(false);
+                  setFileToDelete(null);
+                }}
+                className="p-1 hover:bg-white/10 rounded-sm transition-colors"
+              >
+                <X size={18} className="text-zinc-400" />
+              </button>
+            </div>
+
+            <div className="space-y-4">
+              <p className="text-sm text-zinc-300 font-mono">
+                {fileToDelete.isDir ? (
+                  <>
+                    Are you sure you want to delete the directory <span className="text-red-400 font-semibold">"{fileToDelete.name}"</span> and all its contents?
+                  </>
+                ) : (
+                  <>
+                    Are you sure you want to delete <span className="text-red-400 font-semibold">"{fileToDelete.name}"</span>?
+                  </>
+                )}
+              </p>
+
+              <p className="text-xs text-zinc-500 font-mono">
+                This action cannot be undone.
+              </p>
+
+              <div className="flex gap-3 mt-6">
+                <motion.button
+                  onClick={() => {
+                    setShowDeleteModal(false);
+                    setFileToDelete(null);
+                  }}
+                  variants={buttonVariants}
+                  whileHover="hover"
+                  whileTap="tap"
+                  className="flex-1 px-4 py-2 bg-white/5 hover:bg-white/10 text-zinc-400 hover:text-white rounded-sm text-sm font-mono transition-all"
+                >
+                  Cancel
+                </motion.button>
+                <motion.button
+                  onClick={confirmDelete}
+                  variants={buttonVariants}
+                  whileHover="hover"
+                  whileTap="tap"
+                  className="flex-1 px-4 py-2 bg-red-500/10 hover:bg-red-500/20 text-red-400 border border-red-500/30 rounded-sm text-sm font-mono transition-all flex items-center justify-center gap-2"
+                >
+                  <Trash2 size={14} />
+                  Delete
+                </motion.button>
+              </div>
+            </div>
+          </motion.div>
+        </div>
+      )}
+
+      {/* Properties Panel */}
+      <AnimatePresence>
+        {showPropertiesPanel && selectedFile && (
+          <motion.div
+            initial={{ x: '100%' }}
+            animate={{ x: 0 }}
+            exit={{ x: '100%' }}
+            transition={{ type: 'spring', damping: 25, stiffness: 200 }}
+            className="fixed right-0 top-0 bottom-0 w-80 bg-zinc-900/95 backdrop-blur-sm border-l border-white/10 z-40 shadow-2xl"
+          >
+            {/* Header */}
+            <div className="p-4 border-b border-white/10 bg-black/20">
+              <div className="flex items-center justify-between mb-2">
+                <h3 className="text-sm font-display text-white flex items-center gap-2">
+                  <Info size={16} className="text-accent" />
+                  Properties
+                </h3>
+                <button
+                  onClick={() => setShowPropertiesPanel(false)}
+                  className="p-1 hover:bg-white/10 rounded-sm transition-colors"
+                >
+                  <X size={16} className="text-zinc-400" />
+                </button>
+              </div>
+              <p className="text-xs text-zinc-500 font-mono">Press Ctrl/⌘+I to toggle</p>
+            </div>
+
+            {/* Content */}
+            <div className="p-4 space-y-6 overflow-y-auto max-h-[calc(100vh-80px)]">
+              {/* File/Folder Icon and Name */}
+              <div className="flex items-start gap-3">
+                {selectedFile.isDir ? (
+                  <Folder size={40} className="text-accent flex-shrink-0" />
+                ) : (
+                  <FileText size={40} className="text-blue-400 flex-shrink-0" />
+                )}
+                <div className="flex-1 min-w-0">
+                  <p className="text-sm font-semibold text-white break-all">{selectedFile.name}</p>
+                  <p className="text-xs text-zinc-500 font-mono mt-1">{selectedFile.isDir ? 'Folder' : 'File'}</p>
+                </div>
+              </div>
+
+              {/* Divider */}
+              <div className="h-px bg-white/10" />
+
+              {/* Properties */}
+              <div className="space-y-4">
+                {/* Size */}
+                <div className="flex items-start gap-3">
+                  <HardDrive size={16} className="text-zinc-500 flex-shrink-0 mt-0.5" />
+                  <div className="flex-1">
+                    <p className="text-xs text-zinc-500 font-mono mb-1">Size</p>
+                    <p className="text-sm text-white font-mono">
+                      {selectedFile.isDir ? (
+                        loadingStats ? (
+                          <span className="flex items-center gap-2">
+                            <Loader2 size={12} className="animate-spin" />
+                            Calculating...
+                          </span>
+                        ) : folderStats ? (
+                          formatFileSize(folderStats.totalSize)
+                        ) : (
+                          'Unknown'
+                        )
+                      ) : (
+                        formatFileSize(selectedFile.size)
+                      )}
+                    </p>
+                  </div>
+                </div>
+
+                {/* Folder Stats */}
+                {selectedFile.isDir && folderStats && (
+                  <div className="flex items-start gap-3">
+                    <Files size={16} className="text-zinc-500 flex-shrink-0 mt-0.5" />
+                    <div className="flex-1">
+                      <p className="text-xs text-zinc-500 font-mono mb-1">Contents</p>
+                      <p className="text-sm text-white font-mono">
+                        {folderStats.fileCount} file{folderStats.fileCount !== 1 ? 's' : ''}, {folderStats.folderCount} folder{folderStats.folderCount !== 1 ? 's' : ''}
+                      </p>
+                    </div>
+                  </div>
+                )}
+
+                {/* Modified Date */}
+                <div className="flex items-start gap-3">
+                  <Calendar size={16} className="text-zinc-500 flex-shrink-0 mt-0.5" />
+                  <div className="flex-1">
+                    <p className="text-xs text-zinc-500 font-mono mb-1">Modified</p>
+                    <p className="text-sm text-white font-mono">{formatDate(selectedFile.modified)}</p>
+                  </div>
+                </div>
+
+                {/* Path */}
+                <div className="flex items-start gap-3">
+                  <FolderOpen size={16} className="text-zinc-500 flex-shrink-0 mt-0.5" />
+                  <div className="flex-1">
+                    <p className="text-xs text-zinc-500 font-mono mb-1">Location</p>
+                    <p className="text-xs text-zinc-400 font-mono break-all">{selectedFile.path}</p>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
     </div>
   );
 };

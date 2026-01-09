@@ -298,6 +298,12 @@ func InitSite(parentDir string, siteName string) InitSiteResult {
 		}
 	}
 
+	// Check if directory already exists before creating
+	dirExistedBefore := false
+	if _, err := os.Stat(sitePath); err == nil {
+		dirExistedBefore = true
+	}
+
 	// Create site directory
 	if err := os.MkdirAll(sitePath, 0755); err != nil {
 		return InitSiteResult{
@@ -305,6 +311,15 @@ func InitSite(parentDir string, siteName string) InitSiteResult {
 			Error:   fmt.Sprintf("failed to create site directory: %v", err),
 		}
 	}
+
+	// Setup cleanup on failure
+	success := false
+	defer func() {
+		if !success && !dirExistedBefore {
+			// Clean up the directory if we created it and operation failed
+			os.RemoveAll(sitePath)
+		}
+	}()
 
 	// Initialize Hugo site
 	if err := hugo.InitializeSite(sitePath); err != nil {
@@ -337,6 +352,7 @@ func InitSite(parentDir string, siteName string) InitSiteResult {
 		}
 	}
 
+	success = true
 	return InitSiteResult{
 		Success:  true,
 		SitePath: sitePath,
@@ -459,7 +475,7 @@ type VersionResult struct {
 // GetVersion returns current version information
 func GetVersion() VersionResult {
 	return VersionResult{
-		Version:   "0.3.2",
+		Version:   "0.3.3",
 		GitCommit: "dev",
 		BuildDate: "unknown",
 	}
@@ -596,9 +612,24 @@ func QuickStart(params QuickStartParams) QuickStartResult {
 		return QuickStartResult{Error: fmt.Sprintf("invalid site path: %v", err)}
 	}
 
+	// Check if directory already exists before creating
+	dirExistedBefore := false
+	if _, err := os.Stat(sitePath); err == nil {
+		dirExistedBefore = true
+	}
+
 	if err := os.MkdirAll(sitePath, 0755); err != nil {
 		return QuickStartResult{Error: fmt.Sprintf("failed to create site directory: %v", err)}
 	}
+
+	// Setup cleanup on failure
+	success := false
+	defer func() {
+		if !success && !dirExistedBefore {
+			// Clean up the directory if we created it and operation failed
+			os.RemoveAll(sitePath)
+		}
+	}()
 
 	// Initialize Hugo site
 	if err := hugo.InitializeSite(sitePath); err != nil {
@@ -631,34 +662,95 @@ func QuickStart(params QuickStartParams) QuickStartResult {
 	}
 
 	// Create sample content
-	contentDir := filepath.Join(sitePath, "content", "posts")
+	contentDir := filepath.Join(sitePath, "content")
 	if err := os.MkdirAll(contentDir, 0755); err != nil {
 		return QuickStartResult{Error: fmt.Sprintf("failed to create content directory: %v", err)}
 	}
 
-	// Create welcome.md sample post
-	welcomePath := filepath.Join(contentDir, "welcome.md")
-	welcomeContent := `---
-title: "Welcome to Walrus Sites"
+	// Create detailed homepage
+	indexPath := filepath.Join(contentDir, "_index.md")
+	indexContent := `---
+title: "` + originalSiteName + `"
 date: 2024-01-01T00:00:00Z
 draft: false
 ---
 
-Welcome to your new decentralized website powered by Walrus!
+# Welcome to ` + originalSiteName + `
 
-This site is hosted on the Walrus decentralized storage network, making it censorship-resistant and always available.
+Your decentralized website powered by **Walrus** - the cutting-edge decentralized storage network built on the Sui blockchain.
+
+## What is Walrus?
+
+Walrus is a decentralized storage and data availability protocol designed for large binary files (blobs). Built on Sui, it provides:
+
+- **Censorship Resistance**: Your content cannot be taken down or restricted
+- **High Availability**: Data is distributed across multiple storage nodes
+- **Cost Effective**: Optimized storage with efficient encoding
+- **Fast Access**: Quick retrieval through CDN-like distribution
+
+## About This Site
+
+This site is hosted entirely on the Walrus network, making it:
+
+✓ **Permanent** - Once published, it's always accessible
+✓ **Distributed** - No single point of failure
+✓ **Verifiable** - All content is cryptographically verified
+✓ **Fast** - Delivered through a global network
+
+## Getting Started
+
+### Edit Your Content
+
+Your site uses Hugo, a fast static site generator. All content is in Markdown format:
+
+- Edit this page: ` + "`content/_index.md`" + `
+- Add new pages to the ` + "`content/`" + ` directory
+- Organize with subdirectories for complex sites
+
+### Preview Locally
+
+Test your changes before deploying:
+
+` + "```bash" + `
+walgo serve
+` + "```" + `
+
+This starts a local server at ` + "`http://localhost:1313`" + `
+
+### Deploy to Walrus
+
+When you're ready to publish:
+
+` + "```bash" + `
+walgo launch
+` + "```" + `
+
+Follow the interactive wizard to:
+1. Configure your deployment
+2. Select network (testnet/mainnet)
+3. Set storage epochs
+4. Publish to Walrus
 
 ## Next Steps
 
-1. Edit this content in ` + "`content/posts/welcome.md`" + `
-2. Add more posts to ` + "`content/posts/`" + `
-3. Customize your theme
-4. Deploy with ` + "`walgo launch`" + `
+1. **Customize Your Theme**: Edit ` + "`hugo.toml`" + ` to change colors, fonts, and layout
+2. **Add More Content**: Create new pages and blog posts
+3. **Explore Hugo**: Learn more at [gohugo.io](https://gohugo.io)
+4. **Join the Community**: Connect with other Walrus builders
 
-Happy building! 🚀
+## Resources
+
+- **Walrus Documentation**: [docs.walrus.site](https://docs.walrus.site)
+- **Walgo CLI**: [github.com/selimozten/walgo](https://github.com/selimozten/walgo)
+- **Hugo Docs**: [gohugo.io/documentation](https://gohugo.io/documentation)
+- **Sui Network**: [sui.io](https://sui.io)
+
+---
+
+**Ready to build the decentralized web?** Start editing this file and make it your own! 🚀
 `
-	if err := os.WriteFile(welcomePath, []byte(welcomeContent), 0644); err != nil {
-		return QuickStartResult{Error: fmt.Sprintf("failed to create welcome post: %v", err)}
+	if err := os.WriteFile(indexPath, []byte(indexContent), 0644); err != nil {
+		return QuickStartResult{Error: fmt.Sprintf("failed to create homepage: %v", err)}
 	}
 
 	if err := BuildSite(sitePath); err != nil {
@@ -670,6 +762,7 @@ Happy building! 🚀
 		return QuickStartResult{Error: fmt.Sprintf("failed to save draft project: %v", err)}
 	}
 
+	success = true
 	return QuickStartResult{
 		Success:  true,
 		SitePath: sitePath,
@@ -921,7 +1014,7 @@ func DeleteProject(params DeleteProjectParams) DeleteProjectResult {
 		}
 	}
 
-	// Delete from local database
+	// Delete from local database and site folder
 	if err := pm.DeleteProject(params.ProjectID); err != nil {
 		result.Error = fmt.Sprintf("failed to delete project: %v", err)
 		return result
@@ -929,9 +1022,9 @@ func DeleteProject(params DeleteProjectParams) DeleteProjectResult {
 
 	result.Success = true
 	if result.OnChainDestroyed {
-		result.Message = "Project deleted successfully (including on-chain destruction)"
+		result.Message = "Project deleted successfully (including on-chain destruction and site folder)"
 	} else {
-		result.Message = "Project deleted successfully from local database"
+		result.Message = "Project deleted successfully (including site folder)"
 	}
 
 	return result
@@ -1185,6 +1278,15 @@ func ImportObsidian(params ImportObsidianParams) ImportObsidianResult {
 		return ImportObsidianResult{Error: fmt.Sprintf("failed to create site directory: %v", err)}
 	}
 
+	// Setup cleanup on failure - we know directory didn't exist before because we checked above
+	success := false
+	defer func() {
+		if !success {
+			// Clean up the directory if operation failed
+			os.RemoveAll(sitePath)
+		}
+	}()
+
 	// Step 2: Initialize Hugo site
 	if err := hugo.InitializeSite(sitePath); err != nil {
 		return ImportObsidianResult{Error: fmt.Sprintf("failed to initialize Hugo site: %v", err)}
@@ -1239,6 +1341,7 @@ func ImportObsidian(params ImportObsidianParams) ImportObsidianResult {
 		return ImportObsidianResult{Error: fmt.Sprintf("failed to create draft project: %v", err)}
 	}
 
+	success = true
 	return ImportObsidianResult{
 		Success:       true,
 		FilesImported: stats.FilesProcessed,
@@ -1775,11 +1878,26 @@ func AICreateSiteWithProgress(params AICreateSiteParams, progressHandler Progres
 		return result
 	}
 
+	// Check if directory already exists before creating
+	dirExistedBefore := false
+	if _, err := os.Stat(sitePath); err == nil {
+		dirExistedBefore = true
+	}
+
 	// Create the site directory if it doesn't exist
 	if err := os.MkdirAll(sitePath, 0755); err != nil {
 		result.Error = fmt.Sprintf("failed to create site directory: %v", err)
 		return result
 	}
+
+	// Setup cleanup on failure
+	success := false
+	defer func() {
+		if !success && !dirExistedBefore {
+			// Clean up the directory if we created it and operation failed
+			os.RemoveAll(sitePath)
+		}
+	}()
 
 	client, _, _, err := ai.LoadClient(0)
 	if err != nil {
@@ -2001,6 +2119,7 @@ func AICreateSiteWithProgress(params AICreateSiteParams, progressHandler Progres
 		return result
 	}
 
+	success = true
 	return result
 }
 

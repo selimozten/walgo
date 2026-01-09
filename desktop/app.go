@@ -779,6 +779,76 @@ func (a *App) ListFiles(dirPath string) ListFilesResult {
 	return result
 }
 
+// FolderStatsResult holds statistics for a folder
+type FolderStatsResult struct {
+	Success    bool  `json:"success"`
+	FileCount  int   `json:"fileCount"`
+	FolderCount int  `json:"folderCount"`
+	TotalSize  int64 `json:"totalSize"`
+	Error      string `json:"error"`
+}
+
+// GetFolderStats recursively gets statistics for a folder
+func (a *App) GetFolderStats(dirPath string) FolderStatsResult {
+	result := FolderStatsResult{
+		Success: false,
+	}
+
+	// Validate directory exists
+	info, err := os.Stat(dirPath)
+	if err != nil {
+		result.Error = fmt.Sprintf("Directory not accessible: %v", err)
+		return result
+	}
+
+	if !info.IsDir() {
+		result.Error = "Path is not a directory"
+		return result
+	}
+
+	// Recursively count files and calculate size
+	fileCount, folderCount, totalSize := countFilesRecursive(dirPath)
+	result.FileCount = fileCount
+	result.FolderCount = folderCount
+	result.TotalSize = totalSize
+	result.Success = true
+	return result
+}
+
+// countFilesRecursive recursively counts files, folders, and total size
+func countFilesRecursive(dirPath string) (fileCount int, folderCount int, totalSize int64) {
+	entries, err := os.ReadDir(dirPath)
+	if err != nil {
+		return 0, 0, 0
+	}
+
+	for _, entry := range entries {
+		// Skip hidden files and directories
+		if strings.HasPrefix(entry.Name(), ".") {
+			continue
+		}
+
+		fullPath := filepath.Join(dirPath, entry.Name())
+		fileInfo, err := entry.Info()
+		if err != nil {
+			continue
+		}
+
+		if entry.IsDir() {
+			folderCount++
+			fc, dc, ts := countFilesRecursive(fullPath)
+			fileCount += fc
+			folderCount += dc
+			totalSize += ts
+		} else {
+			fileCount++
+			totalSize += fileInfo.Size()
+		}
+	}
+
+	return fileCount, folderCount, totalSize
+}
+
 // ReadFileResult holds the result of reading a file
 type ReadFileResult struct {
 	Success bool   `json:"success"`
@@ -896,21 +966,19 @@ func (a *App) CreateFile(filePath string, content string) CreateFileResult {
 		Path:    filePath,
 	}
 
-	// Check if file already exists
-	if _, err := os.Stat(filePath); err == nil {
-		result.Error = "File already exists"
-		return result
-	}
+	// If file exists, find a unique name by adding (1), (2), etc.
+	uniquePath := findUniquePath(filePath)
+	result.Path = uniquePath
 
 	// Create directory if it doesn't exist
-	dir := filepath.Dir(filePath)
+	dir := filepath.Dir(uniquePath)
 	if err := os.MkdirAll(dir, 0755); err != nil {
 		result.Error = fmt.Sprintf("Failed to create directory: %v", err)
 		return result
 	}
 
 	// Create and write file
-	if err := os.WriteFile(filePath, []byte(content), 0644); err != nil {
+	if err := os.WriteFile(uniquePath, []byte(content), 0644); err != nil {
 		result.Error = fmt.Sprintf("Failed to create file: %v", err)
 		return result
 	}
@@ -933,22 +1001,385 @@ func (a *App) CreateDirectory(dirPath string) CreateDirectoryResult {
 		Path:    dirPath,
 	}
 
-	// Check if directory already exists
-	if info, err := os.Stat(dirPath); err == nil {
-		if info.IsDir() {
-			result.Error = "Directory already exists"
-			return result
-		}
-		result.Error = "Path exists and is not a directory"
-		return result
-	}
+	// If directory exists, find a unique name by adding (1), (2), etc.
+	uniquePath := findUniquePath(dirPath)
+	result.Path = uniquePath
 
 	// Create directory
-	if err := os.MkdirAll(dirPath, 0755); err != nil {
+	if err := os.MkdirAll(uniquePath, 0755); err != nil {
 		result.Error = fmt.Sprintf("Failed to create directory: %v", err)
 		return result
 	}
 
 	result.Success = true
 	return result
+}
+
+// MoveFileResult holds the result of a move operation
+type MoveFileResult struct {
+	Success bool   `json:"success"`
+	Error   string `json:"error"`
+	OldPath string `json:"oldPath"`
+	NewPath string `json:"newPath"`
+}
+
+// MoveFile moves a file or directory from oldPath to newPath
+func (a *App) MoveFile(oldPath string, newPath string) MoveFileResult {
+	result := MoveFileResult{
+		Success: false,
+		OldPath: oldPath,
+		NewPath: newPath,
+	}
+
+	// Check if source exists
+	if _, err := os.Stat(oldPath); err != nil {
+		result.Error = fmt.Sprintf("Source not found: %v", err)
+		return result
+	}
+
+	// Check if destination already exists
+	if _, err := os.Stat(newPath); err == nil {
+		result.Error = "Destination already exists"
+		return result
+	}
+
+	// Create destination directory if needed
+	destDir := filepath.Dir(newPath)
+	if err := os.MkdirAll(destDir, 0755); err != nil {
+		result.Error = fmt.Sprintf("Failed to create destination directory: %v", err)
+		return result
+	}
+
+	// Move/rename the file or directory
+	if err := os.Rename(oldPath, newPath); err != nil {
+		result.Error = fmt.Sprintf("Failed to move: %v", err)
+		return result
+	}
+
+	result.Success = true
+	return result
+}
+
+// RenameFileResult holds the result of a rename operation
+type RenameFileResult struct {
+	Success bool   `json:"success"`
+	Error   string `json:"error"`
+	OldPath string `json:"oldPath"`
+	NewPath string `json:"newPath"`
+}
+
+// RenameFile renames a file or directory
+func (a *App) RenameFile(oldPath string, newName string) RenameFileResult {
+	result := RenameFileResult{
+		Success: false,
+		OldPath: oldPath,
+	}
+
+	// Calculate new path
+	dir := filepath.Dir(oldPath)
+	newPath := filepath.Join(dir, newName)
+	result.NewPath = newPath
+
+	// Check if source exists
+	if _, err := os.Stat(oldPath); err != nil {
+		result.Error = fmt.Sprintf("Source not found: %v", err)
+		return result
+	}
+
+	// Check if destination already exists
+	if _, err := os.Stat(newPath); err == nil {
+		result.Error = "A file or directory with this name already exists"
+		return result
+	}
+
+	// Rename the file or directory
+	if err := os.Rename(oldPath, newPath); err != nil {
+		result.Error = fmt.Sprintf("Failed to rename: %v", err)
+		return result
+	}
+
+	result.Success = true
+	return result
+}
+
+// CopyFileResult holds the result of a copy operation
+type CopyFileResult struct {
+	Success bool   `json:"success"`
+	Error   string `json:"error"`
+	SrcPath string `json:"srcPath"`
+	DstPath string `json:"dstPath"`
+}
+
+// CopyFile copies a file from srcPath to dstPath
+func (a *App) CopyFile(srcPath string, dstPath string) CopyFileResult {
+	result := CopyFileResult{
+		Success: false,
+		SrcPath: srcPath,
+		DstPath: dstPath,
+	}
+
+	// Check if source exists
+	srcInfo, err := os.Stat(srcPath)
+	if err != nil {
+		result.Error = fmt.Sprintf("Source not found: %v", err)
+		return result
+	}
+
+	// If destination exists, find a unique name by adding (1), (2), etc.
+	uniqueDstPath := findUniquePath(dstPath)
+	result.DstPath = uniqueDstPath
+
+	// Handle directory copy recursively
+	if srcInfo.IsDir() {
+		if err := copyDir(srcPath, uniqueDstPath); err != nil {
+			result.Error = fmt.Sprintf("Failed to copy directory: %v", err)
+			return result
+		}
+		result.Success = true
+		return result
+	}
+
+	// Handle file copy
+	// Create destination directory if needed
+	destDir := filepath.Dir(uniqueDstPath)
+	if err := os.MkdirAll(destDir, 0755); err != nil {
+		result.Error = fmt.Sprintf("Failed to create destination directory: %v", err)
+		return result
+	}
+
+	// Read source file
+	data, err := os.ReadFile(srcPath)
+	if err != nil {
+		result.Error = fmt.Sprintf("Failed to read source: %v", err)
+		return result
+	}
+
+	// Write to destination
+	if err := os.WriteFile(uniqueDstPath, data, srcInfo.Mode()); err != nil {
+		result.Error = fmt.Sprintf("Failed to write destination: %v", err)
+		return result
+	}
+
+	result.Success = true
+	return result
+}
+
+// getDirectoryDepth calculates the depth of a directory tree
+func getDirectoryDepth(path string) (int, error) {
+	return getDirectoryDepthRecursive(path, 0)
+}
+
+// getDirectoryDepthRecursive recursively calculates directory depth
+func getDirectoryDepthRecursive(path string, currentDepth int) (int, error) {
+	const maxCheckDepth = 100
+	if currentDepth > maxCheckDepth {
+		return currentDepth, nil // Return early if too deep
+	}
+
+	entries, err := os.ReadDir(path)
+	if err != nil {
+		return currentDepth, err
+	}
+
+	maxDepth := currentDepth
+	for _, entry := range entries {
+		if entry.IsDir() {
+			entryPath := filepath.Join(path, entry.Name())
+
+			// Check for symlinks
+			entryInfo, err := os.Lstat(entryPath)
+			if err != nil {
+				continue
+			}
+			if entryInfo.Mode()&os.ModeSymlink != 0 {
+				continue
+			}
+
+			depth, err := getDirectoryDepthRecursive(entryPath, currentDepth+1)
+			if err != nil {
+				continue
+			}
+			if depth > maxDepth {
+				maxDepth = depth
+			}
+		}
+	}
+
+	return maxDepth, nil
+}
+
+// CheckDirectoryDepthResult holds the result of directory depth check
+type CheckDirectoryDepthResult struct {
+	Success bool   `json:"success"`
+	Depth   int    `json:"depth"`
+	TooDeep bool   `json:"tooDeep"`
+	Error   string `json:"error"`
+}
+
+// CheckDirectoryDepth checks if a directory is too deep for operations
+func (a *App) CheckDirectoryDepth(path string) CheckDirectoryDepthResult {
+	result := CheckDirectoryDepthResult{
+		Success: false,
+	}
+
+	info, err := os.Stat(path)
+	if err != nil {
+		result.Error = fmt.Sprintf("Path not found: %v", err)
+		return result
+	}
+
+	if !info.IsDir() {
+		// Files are fine, depth is 0
+		result.Success = true
+		result.Depth = 0
+		result.TooDeep = false
+		return result
+	}
+
+	depth, err := getDirectoryDepth(path)
+	if err != nil {
+		result.Error = fmt.Sprintf("Failed to check depth: %v", err)
+		return result
+	}
+
+	const maxSafeDepth = 50 // Lower threshold to prevent operations before they cause issues
+	result.Success = true
+	result.Depth = depth
+	result.TooDeep = depth > maxSafeDepth
+
+	return result
+}
+
+// copyDir recursively copies a directory tree
+func copyDir(src string, dst string) error {
+	return copyDirWithDepth(src, dst, 0)
+}
+
+// copyDirWithDepth recursively copies a directory tree with depth limit
+func copyDirWithDepth(src string, dst string, depth int) error {
+	// Prevent infinite recursion
+	const maxDepth = 100
+	if depth > maxDepth {
+		return fmt.Errorf("maximum directory depth exceeded (possible circular reference)")
+	}
+
+	// Get absolute paths to prevent circular copies
+	absSrc, err := filepath.Abs(src)
+	if err != nil {
+		return err
+	}
+	absDst, err := filepath.Abs(dst)
+	if err != nil {
+		return err
+	}
+
+	// Check if destination is inside source (would create circular copy)
+	if strings.HasPrefix(absDst, absSrc+string(filepath.Separator)) {
+		return fmt.Errorf("cannot copy directory into itself")
+	}
+
+	// Check if paths are the same
+	if absSrc == absDst {
+		return fmt.Errorf("source and destination are the same")
+	}
+
+	// Get source directory info
+	srcInfo, err := os.Stat(absSrc)
+	if err != nil {
+		return err
+	}
+
+	// Create destination directory
+	if err := os.MkdirAll(absDst, srcInfo.Mode()); err != nil {
+		return err
+	}
+
+	// Read source directory
+	entries, err := os.ReadDir(absSrc)
+	if err != nil {
+		return err
+	}
+
+	// Copy each entry
+	for _, entry := range entries {
+		srcPath := filepath.Join(absSrc, entry.Name())
+		dstPath := filepath.Join(absDst, entry.Name())
+
+		// Get entry info to check for symlinks
+		entryInfo, err := os.Lstat(srcPath) // Use Lstat to not follow symlinks
+		if err != nil {
+			continue // Skip entries we can't read
+		}
+
+		// Skip symlinks to prevent circular references
+		if entryInfo.Mode()&os.ModeSymlink != 0 {
+			continue
+		}
+
+		if entry.IsDir() {
+			// Recursively copy subdirectory with incremented depth
+			if err := copyDirWithDepth(srcPath, dstPath, depth+1); err != nil {
+				return err
+			}
+		} else {
+			// Copy file
+			if err := copyFile(srcPath, dstPath); err != nil {
+				return err
+			}
+		}
+	}
+
+	return nil
+}
+
+// copyFile copies a single file
+func copyFile(src string, dst string) error {
+	srcInfo, err := os.Stat(src)
+	if err != nil {
+		return err
+	}
+
+	data, err := os.ReadFile(src)
+	if err != nil {
+		return err
+	}
+
+	return os.WriteFile(dst, data, srcInfo.Mode())
+}
+
+// findUniquePath finds a unique path by adding (1), (2), etc. if the path exists
+func findUniquePath(path string) string {
+	// If path doesn't exist, use it as-is
+	if _, err := os.Stat(path); os.IsNotExist(err) {
+		return path
+	}
+
+	// Extract directory, base name, and extension
+	dir := filepath.Dir(path)
+	base := filepath.Base(path)
+	ext := filepath.Ext(base)
+	nameWithoutExt := strings.TrimSuffix(base, ext)
+
+	// Try adding (1), (2), (3), etc.
+	counter := 1
+	for {
+		var newName string
+		if ext != "" {
+			newName = fmt.Sprintf("%s (%d)%s", nameWithoutExt, counter, ext)
+		} else {
+			newName = fmt.Sprintf("%s (%d)", nameWithoutExt, counter)
+		}
+		newPath := filepath.Join(dir, newName)
+
+		// Check if this path exists
+		if _, err := os.Stat(newPath); os.IsNotExist(err) {
+			return newPath
+		}
+
+		counter++
+		// Safety limit to avoid infinite loop
+		if counter > 1000 {
+			return path
+		}
+	}
 }
