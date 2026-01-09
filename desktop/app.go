@@ -781,11 +781,11 @@ func (a *App) ListFiles(dirPath string) ListFilesResult {
 
 // FolderStatsResult holds statistics for a folder
 type FolderStatsResult struct {
-	Success    bool  `json:"success"`
-	FileCount  int   `json:"fileCount"`
-	FolderCount int  `json:"folderCount"`
-	TotalSize  int64 `json:"totalSize"`
-	Error      string `json:"error"`
+	Success     bool   `json:"success"`
+	FileCount   int    `json:"fileCount"`
+	FolderCount int    `json:"folderCount"`
+	TotalSize   int64  `json:"totalSize"`
+	Error       string `json:"error"`
 }
 
 // GetFolderStats recursively gets statistics for a folder
