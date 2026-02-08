@@ -336,14 +336,17 @@ export const DeploymentModal: React.FC<DeploymentModalProps> = ({
         setLogs(prev => [...prev, "", "✅ Deployment completed successfully!", ""]);
         setStep("success");
       } else {
-        setLogs(prev => [...prev, "", `❌ Deployment failed: ${result.error || "Unknown error"}`, ""]);
-        setTimeout(() => setStep("config"), 3000);
+        // Split error on newlines so each line renders as a separate log entry
+        const errorLines = (result.error || "Unknown error").split('\n');
+        setLogs(prev => [...prev, "", `❌ Deployment failed`, ...errorLines, ""]);
+        setTimeout(() => setStep("config"), 5000);
       }
     } catch (err) {
       const error = err instanceof Error ? err.message : "Unknown error";
-      setLogs(prev => [...prev, "", `❌ Error: ${error}`, ""]);
+      const errorLines = error.split('\n');
+      setLogs(prev => [...prev, "", `❌ Error:`, ...errorLines, ""]);
       setDeploymentResult({ success: false, error });
-      setTimeout(() => setStep("config"), 3000);
+      setTimeout(() => setStep("config"), 5000);
     }
   };
 
