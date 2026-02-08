@@ -11,7 +11,7 @@ import (
 )
 
 // UpdateSite handles updating an existing site on Walrus.
-// It executes the `site-builder update` command.
+// It executes the `site-builder deploy` command which auto-detects updates via ws-resources.json.
 // The context can be used to cancel or timeout the operation.
 func UpdateSite(ctx context.Context, deployDir, objectID string, epochs int) (*SiteBuilderOutput, error) {
 	if err := validateObjectID(objectID); err != nil {
@@ -41,10 +41,9 @@ func UpdateSite(ctx context.Context, deployDir, objectID string, epochs int) (*S
 	args := []string{
 		"--context", siteBuilderContext,
 		"--walrus-binary", walrusPath,
-		"update",
+		"deploy",
 		"--epochs", fmt.Sprintf("%d", epochs),
 		deployDir,
-		objectID,
 	}
 
 	icons := ui.GetIcons()
@@ -79,7 +78,18 @@ func UpdateSite(ctx context.Context, deployDir, objectID string, epochs int) (*S
 
 	stdoutStr, stderrStr, err := runCommandWithTimeout(ctx, builderPath, args, true)
 	if err != nil {
-		return nil, handleSiteBuilderError(err, stderrStr)
+		combinedErr := stderrStr
+		if combinedErr == "" && stdoutStr != "" {
+			combinedErr = stdoutStr
+		}
+		fmt.Fprintf(os.Stderr, "\n%s Debug: command=%s args=%v\n", icons.Wrench, builderPath, args)
+		if stdoutStr != "" {
+			fmt.Fprintf(os.Stderr, "%s Debug stdout: %s\n", icons.Wrench, stdoutStr)
+		}
+		if stderrStr != "" {
+			fmt.Fprintf(os.Stderr, "%s Debug stderr: %s\n", icons.Wrench, stderrStr)
+		}
+		return nil, handleSiteBuilderError(err, combinedErr)
 	}
 
 	fmt.Printf("\n%s Site update command executed successfully.\n", icons.Success)

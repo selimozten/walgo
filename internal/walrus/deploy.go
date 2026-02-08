@@ -12,7 +12,7 @@ import (
 )
 
 // DeploySite manages the site deployment to Walrus decentralized storage.
-// Executes the `site-builder publish` command for new deployments.
+// Executes the `site-builder deploy` command which auto-detects new vs update.
 // Context parameter enables cancellation and timeout control for the operation.
 func DeploySite(ctx context.Context, deployDir string, walrusCfg config.WalrusConfig, epochs int) (*SiteBuilderOutput, error) {
 	if epochs <= 0 {
@@ -88,7 +88,7 @@ func DeploySite(ctx context.Context, deployDir string, walrusCfg config.WalrusCo
 	args := []string{
 		"--context", siteBuilderContext,
 		"--walrus-binary", walrusPath,
-		"publish",
+		"deploy",
 		deployDir,
 		"--epochs", fmt.Sprintf("%d", epochs),
 	}
@@ -107,7 +107,19 @@ func DeploySite(ctx context.Context, deployDir string, walrusCfg config.WalrusCo
 
 	stdoutStr, stderrStr, err := runCommandWithTimeout(ctx, builderPath, args, true)
 	if err != nil {
-		return nil, handleSiteBuilderError(err, stderrStr)
+		// Include full debug info: stdout may contain Rust panic output on Windows
+		combinedErr := stderrStr
+		if combinedErr == "" && stdoutStr != "" {
+			combinedErr = stdoutStr
+		}
+		fmt.Fprintf(os.Stderr, "\n%s Debug: command=%s args=%v\n", icons.Wrench, builderPath, args)
+		if stdoutStr != "" {
+			fmt.Fprintf(os.Stderr, "%s Debug stdout: %s\n", icons.Wrench, stdoutStr)
+		}
+		if stderrStr != "" {
+			fmt.Fprintf(os.Stderr, "%s Debug stderr: %s\n", icons.Wrench, stderrStr)
+		}
+		return nil, handleSiteBuilderError(err, combinedErr)
 	}
 
 	fmt.Printf("\n%s Site deployment command executed successfully.\n", icons.Success)
