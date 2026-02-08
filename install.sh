@@ -1134,6 +1134,15 @@ install_walrus_dependencies() {
             SUI_MNEMONIC_PHRASE=$(echo "$sui_output" | grep -E '([a-z]+ ){11,23}[a-z]+' | head -1 | sed 's/^[[:space:]]*//' | sed 's/[[:space:]]*$//')
         fi
 
+        # If extraction still failed, show raw output so user can find their recovery phrase
+        if [ -z "$SUI_MNEMONIC_PHRASE" ] && [ -n "$sui_output" ]; then
+            print_warning "Could not automatically extract recovery phrase."
+            print_warning "Please look for your recovery phrase in the output below:"
+            echo ""
+            echo "$sui_output"
+            echo ""
+        fi
+
         if [ -f "$HOME/.sui/sui_config/client.yaml" ]; then
             print_success "Sui client configured successfully"
             if [ -n "$SUI_MNEMONIC_PHRASE" ]; then

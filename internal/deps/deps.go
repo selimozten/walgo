@@ -14,6 +14,8 @@ import (
 	"runtime"
 	"strings"
 	"time"
+
+	"github.com/selimozten/walgo/internal/executil"
 )
 
 const (
@@ -235,9 +237,9 @@ func installSuiupPosix() error {
 
 	var cmd *exec.Cmd
 	if _, err := exec.LookPath("curl"); err == nil {
-		cmd = exec.Command("sh", "-c", fmt.Sprintf("curl -sSfL %s | sh", installScript))
+		cmd = executil.Command("sh", "-c", fmt.Sprintf("curl -sSfL %s | sh", installScript))
 	} else if _, err := exec.LookPath("wget"); err == nil {
-		cmd = exec.Command("sh", "-c", fmt.Sprintf("wget -qO- %s | sh", installScript))
+		cmd = executil.Command("sh", "-c", fmt.Sprintf("wget -qO- %s | sh", installScript))
 	} else {
 		return fmt.Errorf("neither curl nor wget found. Please install one of them")
 	}
@@ -297,7 +299,7 @@ func CheckTool(name string) *ToolStatus {
 	status.Path = path
 
 	// Try to get version
-	cmd := exec.Command(path, "--version")
+	cmd := executil.Command(path, "--version")
 	output, err := cmd.CombinedOutput()
 	if err == nil {
 		// Extract first line of version output
@@ -414,7 +416,7 @@ func GetToolVersion(name string) (string, error) {
 	}
 
 	// Get version
-	cmd := exec.Command(path, "--version")
+	cmd := executil.Command(path, "--version")
 
 	output, err := cmd.CombinedOutput()
 	if err != nil {
@@ -434,7 +436,7 @@ func CheckHugoExtended() (bool, bool, string, error) {
 	}
 
 	// Get Hugo version
-	cmd := exec.Command(path, "version")
+	cmd := executil.Command(path, "version")
 	output, err := cmd.CombinedOutput()
 	if err != nil {
 		return true, false, "", fmt.Errorf("failed to get hugo version: %w", err)
@@ -495,7 +497,7 @@ func RunSuiup(args ...string) (string, error) {
 		}
 	}
 
-	cmd := exec.Command(suiupPath, args...)
+	cmd := executil.Command(suiupPath, args...)
 	output, err := cmd.CombinedOutput()
 	if err != nil {
 		return string(output), fmt.Errorf("suiup command failed: %w\nOutput: %s", err, string(output))
@@ -540,7 +542,7 @@ func InstallTool(tool, network string) error {
 	ensureLocalBinOnPath(localBin)
 
 	// Step 1: Install the tool
-	installCmd := exec.Command(suiupPath, "install", fmt.Sprintf("%s@%s", tool, version))
+	installCmd := executil.Command(suiupPath, "install", fmt.Sprintf("%s@%s", tool, version))
 
 	output, err := installCmd.CombinedOutput()
 	if err != nil {
@@ -549,7 +551,7 @@ func InstallTool(tool, network string) error {
 
 	// Step 2: Set as default (creates symlink in ~/.local/bin/)
 	// This is critical - without this, the binary won't be accessible
-	defaultCmd := exec.Command(suiupPath, "default", "set", fmt.Sprintf("%s@%s", tool, version))
+	defaultCmd := executil.Command(suiupPath, "default", "set", fmt.Sprintf("%s@%s", tool, version))
 
 	defaultOutput, err := defaultCmd.CombinedOutput()
 	if err != nil {
@@ -568,7 +570,7 @@ func InstallTool(tool, network string) error {
 	}
 	if toolPath == "" {
 		// Retry default set
-		retryCmd := exec.Command(suiupPath, "default", "set", fmt.Sprintf("%s@%s", tool, version))
+		retryCmd := executil.Command(suiupPath, "default", "set", fmt.Sprintf("%s@%s", tool, version))
 		_, _ = retryCmd.CombinedOutput() // Ignore error
 
 		for _, candidate := range execCandidates(tool) {

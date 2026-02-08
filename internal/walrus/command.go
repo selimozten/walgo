@@ -10,19 +10,20 @@ import (
 	"sync/atomic"
 
 	"github.com/selimozten/walgo/internal/deps"
+	"github.com/selimozten/walgo/internal/executil"
 )
 
 // Test hooks for dependency injection.
 var (
 	execLookPath = deps.LookPath
-	execCommand  = exec.Command
+	execCommand  = executil.Command
 	verboseFlag  atomic.Bool // Thread-safe verbose mode flag
 	osStat       = os.Stat
 )
 
 // execCommandContext is a test hook for creating context-aware commands.
 var execCommandContext = func(ctx context.Context, name string, args ...string) *exec.Cmd {
-	return exec.CommandContext(ctx, name, args...)
+	return executil.CommandContext(ctx, name, args...)
 }
 
 // SetVerbose enables or disables verbose output mode.

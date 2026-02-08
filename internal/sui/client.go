@@ -4,10 +4,10 @@ package sui
 import (
 	"encoding/json"
 	"fmt"
-	"os/exec"
 	"strings"
 
 	"github.com/selimozten/walgo/internal/deps"
+	"github.com/selimozten/walgo/internal/executil"
 )
 
 // getSuiPath returns the path to the sui binary
@@ -23,7 +23,7 @@ func runCommand(args ...string) (string, error) {
 		return "", fmt.Errorf("sui CLI not found: %w", err)
 	}
 
-	cmd := exec.Command(suiPath, args...)
+	cmd := executil.Command(suiPath, args...)
 	output, err := cmd.CombinedOutput()
 	if err != nil {
 		return string(output), fmt.Errorf("sui command failed: %w\nOutput: %s", err, string(output))
@@ -345,7 +345,7 @@ func ImportAddressWithInput(method ImportMethod, keyScheme, input string) (strin
 
 	// Correct command format: sui keytool import "<input>" <keyScheme>
 	// Input is passed as argument, not via stdin
-	cmd := exec.Command(suiPath, "keytool", "import", input, keyScheme, "--json")
+	cmd := executil.Command(suiPath, "keytool", "import", input, keyScheme, "--json")
 
 	output, err := cmd.CombinedOutput()
 	if err != nil {

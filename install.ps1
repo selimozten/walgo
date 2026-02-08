@@ -883,26 +883,13 @@ function Initialize-SuiClient {
     try {
         # Prepare input for sui client initialization
         $fullNodeUrl = "https://fullnode.$Network.sui.io:443"
-        $inputs = @(
-            "y",           # Connect to Sui Full Node
-            $fullNodeUrl,  # Full node URL
-            $Network,      # Environment alias
-            "0"            # Key scheme (ed25519)
-        )
+        $inputString = "y`n$fullNodeUrl`n$Network`n0`n"
 
-        # Run sui client with timeout and capture output
-        $job = Start-Job -ScriptBlock {
-            param($suiPath, $inputs)
-            $inputString = $inputs -join "`n"
-            $output = $inputString | & $suiPath client 2>&1
-            return $output -join "`n"
-        } -ArgumentList $suiPath, $inputs
+        # Run sui client directly in foreground with piped input.
+        # Start-Job doesn't handle interactive stdin correctly on Windows.
+        $suiOutput = $inputString | & $suiPath client 2>&1 | Out-String
 
-        $completed = Wait-Job $job -Timeout 30
-        if ($completed) {
-            $suiOutput = Receive-Job $job
-            Remove-Job $job -Force
-
+        if ($suiOutput) {
             # Extract recovery phrase from JSON output
             if ($suiOutput -match '"recoveryPhrase"\s*:\s*"([^"]*)"') {
                 $script:SuiMnemonicPhrase = $matches[1]
@@ -921,62 +908,66 @@ function Initialize-SuiClient {
                 }
             }
 
-            if (Test-Path $suiConfigPath) {
-                Print-Success "Sui client configured successfully"
-                if ($script:SuiMnemonicPhrase) {
-                    Print-Success "New wallet address created"
-                }
+            # If extraction still failed, show raw output so user can find their recovery phrase
+            if (-not $script:SuiMnemonicPhrase) {
+                Print-Warning "Could not automatically extract recovery phrase."
+                Print-Warning "Please look for your recovery phrase in the output below:"
+                Write-Host ""
+                Write-Host $suiOutput
+                Write-Host ""
+            }
+        }
 
-                # Add both testnet and mainnet environments
-                Print-Info "Configuring both testnet and mainnet environments..."
+        if (Test-Path $suiConfigPath) {
+            Print-Success "Sui client configured successfully"
+            if ($script:SuiMnemonicPhrase) {
+                Print-Success "New wallet address created"
+            }
 
-                # Add mainnet if default was testnet
-                if ($Network -eq "testnet") {
-                    try {
-                        $envs = & $suiPath client envs 2>$null
-                        if ($envs -notmatch "mainnet") {
-                            $null = & $suiPath client new-env --alias mainnet --rpc https://fullnode.mainnet.sui.io:443 2>$null
-                            if ($LASTEXITCODE -eq 0) {
-                                Print-Success "Added mainnet environment"
-                            } else {
-                                Print-Warning "Failed to add mainnet environment (you can add it later)"
-                            }
+            # Add both testnet and mainnet environments
+            Print-Info "Configuring both testnet and mainnet environments..."
+
+            # Add mainnet if default was testnet
+            if ($Network -eq "testnet") {
+                try {
+                    $envs = & $suiPath client envs 2>$null
+                    if ($envs -notmatch "mainnet") {
+                        $null = & $suiPath client new-env --alias mainnet --rpc https://fullnode.mainnet.sui.io:443 2>$null
+                        if ($LASTEXITCODE -eq 0) {
+                            Print-Success "Added mainnet environment"
                         } else {
-                            Print-Info "Mainnet environment already exists"
+                            Print-Warning "Failed to add mainnet environment (you can add it later)"
                         }
-                    } catch {
-                        $errorMsg = $_.Exception.Message
-                        Print-Warning "Failed to add mainnet environment - $errorMsg"
+                    } else {
+                        Print-Info "Mainnet environment already exists"
                     }
+                } catch {
+                    $errorMsg = $_.Exception.Message
+                    Print-Warning "Failed to add mainnet environment - $errorMsg"
                 }
+            }
 
-                # Add testnet if default was mainnet
-                if ($Network -eq "mainnet") {
-                    try {
-                        $envs = & $suiPath client envs 2>$null
-                        if ($envs -notmatch "testnet") {
-                            $null = & $suiPath client new-env --alias testnet --rpc https://fullnode.testnet.sui.io:443 2>$null
-                            if ($LASTEXITCODE -eq 0) {
-                                Print-Success "Added testnet environment"
-                            } else {
-                                Print-Warning "Failed to add testnet environment (you can add it later)"
-                            }
+            # Add testnet if default was mainnet
+            if ($Network -eq "mainnet") {
+                try {
+                    $envs = & $suiPath client envs 2>$null
+                    if ($envs -notmatch "testnet") {
+                        $null = & $suiPath client new-env --alias testnet --rpc https://fullnode.testnet.sui.io:443 2>$null
+                        if ($LASTEXITCODE -eq 0) {
+                            Print-Success "Added testnet environment"
                         } else {
-                            Print-Info "Testnet environment already exists"
+                            Print-Warning "Failed to add testnet environment (you can add it later)"
                         }
-                    } catch {
-                        $errorMsg = $_.Exception.Message
-                        Print-Warning "Failed to add testnet environment - $errorMsg"
+                    } else {
+                        Print-Info "Testnet environment already exists"
                     }
+                } catch {
+                    $errorMsg = $_.Exception.Message
+                    Print-Warning "Failed to add testnet environment - $errorMsg"
                 }
-            } else {
-                Print-Warning "Sui client initialization may have failed"
-                Print-Info "You can configure it manually later with: sui client"
             }
         } else {
-            Stop-Job $job
-            Remove-Job $job -Force
-            Print-Warning "Sui client initialization timed out after 30 seconds"
+            Print-Warning "Sui client initialization may have failed"
             Print-Info "You can configure it manually later with: sui client"
         }
     } catch {

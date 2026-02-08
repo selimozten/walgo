@@ -415,7 +415,7 @@ function App() {
 
   return (
     <AIProgressProvider>
-    <div className="min-h-screen flex font-sans overflow-hidden relative bg-black">
+    <div className="h-screen flex font-sans overflow-hidden relative bg-black">
       {/* Background noise texture */}
       <div className="bg-noise" />
 

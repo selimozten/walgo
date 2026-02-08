@@ -7,7 +7,6 @@ import (
 	"io"
 	"net/http"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"sort"
 	"strings"
@@ -17,6 +16,7 @@ import (
 	"github.com/selimozten/walgo/internal/compress"
 	"github.com/selimozten/walgo/internal/config"
 	"github.com/selimozten/walgo/internal/deps"
+	"github.com/selimozten/walgo/internal/executil"
 	"github.com/selimozten/walgo/internal/optimizer"
 	"github.com/selimozten/walgo/internal/projects"
 	"gopkg.in/yaml.v3"
@@ -114,7 +114,7 @@ func InitializeSite(sitePath string) error {
 		return fmt.Errorf("hugo is not installed or not found in PATH")
 	}
 
-	cmd := exec.Command(hugoPath, "new", "site", ".", "--format", "toml")
+	cmd := executil.Command(hugoPath, "new", "site", ".", "--format", "toml")
 	cmd.Dir = sitePath
 	output, err := cmd.CombinedOutput()
 	if err != nil {
@@ -220,7 +220,7 @@ func BuildSite(sitePath string) error {
 		}
 	}
 
-	cmd := exec.Command(hugoPath, "build", "--environment", "production", "--minify", "--gc", "--cleanDestinationDir")
+	cmd := executil.Command(hugoPath, "build", "--environment", "production", "--minify", "--gc", "--cleanDestinationDir")
 	cmd.Dir = sitePath
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr
@@ -366,7 +366,7 @@ func ServeSite(sitePath string) error {
 	}
 
 	fmt.Printf("Starting Hugo development server...\n")
-	cmd := exec.Command(hugoPath, "server", "--environment", "development", "--bind", "0.0.0.0",
+	cmd := executil.Command(hugoPath, "server", "--environment", "development", "--bind", "0.0.0.0",
 		"--port", "1313", "--buildDrafts", "--buildFuture", "--disableFastRender", "--noHTTPCache")
 	cmd.Dir = sitePath
 	cmd.Stdout = os.Stdout
@@ -388,7 +388,7 @@ func CreateContent(sitePath, contentPath string) error {
 		return fmt.Errorf("hugo is not installed or not found in PATH")
 	}
 
-	cmd := exec.Command(hugoPath, "new", contentPath)
+	cmd := executil.Command(hugoPath, "new", contentPath)
 	cmd.Dir = sitePath
 	output, err := cmd.CombinedOutput()
 	if err != nil {
@@ -525,7 +525,7 @@ func InstallTheme(sitePath string, siteType SiteType) error {
 	}
 
 	fmt.Printf("Creating theme %s...\n", theme.Name)
-	cmd := exec.Command(hugoPath, "new", "theme", theme.DirName)
+	cmd := executil.Command(hugoPath, "new", "theme", theme.DirName)
 	cmd.Dir = sitePath
 	output, err := cmd.CombinedOutput()
 	if err != nil {
@@ -748,7 +748,7 @@ func CreateTheme(sitePath, themeName string) error {
 		return fmt.Errorf("hugo is not installed or not found in PATH")
 	}
 
-	cmd := exec.Command(hugoPath, "new", "theme", themeName)
+	cmd := executil.Command(hugoPath, "new", "theme", themeName)
 	cmd.Dir = sitePath
 	output, err := cmd.CombinedOutput()
 	if err != nil {
