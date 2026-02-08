@@ -26,9 +26,12 @@ func uninstallCLIBinary() error {
 		fmt.Printf("Resolved to: %s\n", binaryPath)
 	}
 
-	needSudo := !isWritable(binaryPath)
-
-	if needSudo {
+	if runtime.GOOS == "windows" {
+		fmt.Println("Removing binary...")
+		if err := os.Remove(binaryPath); err != nil {
+			return fmt.Errorf("failed to remove binary (is walgo still running?): %w", err)
+		}
+	} else if !isWritable(binaryPath) {
 		fmt.Println("Removing binary (requires sudo)...")
 		cmd := exec.Command("sudo", "rm", "-f", binaryPath)
 		cmd.Stdout = os.Stdout

@@ -1001,36 +1001,19 @@ function Install-WalrusDependencies {
     foreach ($target in $targets) {
         Print-Info "Installing $($target.Label)..."
         try {
-            # Run with 120 second timeout
-            # Return both output and exit code from the job since $LASTEXITCODE
-            # in the parent session does not reflect the job's exit code.
-            $job = Start-Job -ScriptBlock {
-                param($suiupPath, $spec)
-                $out = & $suiupPath install $spec 2>&1
-                return @{ Output = ($out -join "`n"); ExitCode = $LASTEXITCODE }
-            } -ArgumentList $suiupPath, $($target.Spec)
-
-            $completed = Wait-Job $job -Timeout 120
-            if ($completed) {
-                $result = Receive-Job $job
-                Remove-Job $job -Force
-
-                $jobExitCode = $result.ExitCode
-                $output = $result.Output
-
-                if ($jobExitCode -eq 0 -or $output -notmatch "error|failed") {
-                    Print-Success "$($target.Label) installed"
-                } else {
-                    Print-Warning "$($target.Label) installation may have issues: $output"
-                }
+            # Run directly in foreground so progress bars are visible to user.
+            # Sui binary is ~230 MB and can take 10+ minutes on slow connections.
+            & $suiupPath install $($target.Spec)
+            if ($LASTEXITCODE -eq 0) {
+                Print-Success "$($target.Label) installed"
             } else {
-                Stop-Job $job
-                Remove-Job $job -Force
-                Print-Warning "$($target.Label) installation timed out after 120 seconds"
+                Print-Warning "$($target.Label) installation may have failed (exit code: $LASTEXITCODE)"
+                Print-Info "  Install manually later: suiup install $($target.Spec)"
             }
         } catch {
             $errorMsg = $_.Exception.Message
             Print-Warning "Failed to install $($target.Label) - $errorMsg"
+            Print-Info "  Install manually later: suiup install $($target.Spec)"
         }
     }
 
