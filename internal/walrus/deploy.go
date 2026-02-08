@@ -116,10 +116,6 @@ func DeploySite(ctx context.Context, deployDir string, walrusCfg config.WalrusCo
 		if stderrStr != "" {
 			debugInfo += fmt.Sprintf("\nStderr: %s", strings.TrimSpace(stderrStr))
 		}
-		combinedErr := stderrStr
-		if combinedErr == "" {
-			combinedErr = stdoutStr
-		}
 		return nil, fmt.Errorf("deployment failed: %w%s", err, debugInfo)
 	}
 

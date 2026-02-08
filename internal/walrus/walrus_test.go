@@ -519,7 +519,7 @@ func TestConfigValidation(t *testing.T) {
 			// We expect the command to fail at execution (not validation)
 			if err == nil {
 				t.Errorf("Expected error due to mocked execution failure")
-			} else if !strings.Contains(err.Error(), "failed to execute") {
+			} else if !strings.Contains(err.Error(), "deployment failed") {
 				t.Errorf("Unexpected error for valid config: %v", err)
 			}
 		})
