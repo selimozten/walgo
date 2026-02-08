@@ -78,18 +78,15 @@ func UpdateSite(ctx context.Context, deployDir, objectID string, epochs int) (*S
 
 	stdoutStr, stderrStr, err := runCommandWithTimeout(ctx, builderPath, args, true)
 	if err != nil {
-		combinedErr := stderrStr
-		if combinedErr == "" && stdoutStr != "" {
-			combinedErr = stdoutStr
-		}
-		fmt.Fprintf(os.Stderr, "\n%s Debug: command=%s args=%v\n", icons.Wrench, builderPath, args)
+		debugInfo := fmt.Sprintf("\n\nCommand: %s %s\nBuilder: %s\nWalrus: %s\nContext: %s",
+			builderPath, strings.Join(args, " "), builderPath, walrusPath, siteBuilderContext)
 		if stdoutStr != "" {
-			fmt.Fprintf(os.Stderr, "%s Debug stdout: %s\n", icons.Wrench, stdoutStr)
+			debugInfo += fmt.Sprintf("\nStdout: %s", strings.TrimSpace(stdoutStr))
 		}
 		if stderrStr != "" {
-			fmt.Fprintf(os.Stderr, "%s Debug stderr: %s\n", icons.Wrench, stderrStr)
+			debugInfo += fmt.Sprintf("\nStderr: %s", strings.TrimSpace(stderrStr))
 		}
-		return nil, handleSiteBuilderError(err, combinedErr)
+		return nil, fmt.Errorf("update failed: %w%s", err, debugInfo)
 	}
 
 	fmt.Printf("\n%s Site update command executed successfully.\n", icons.Success)

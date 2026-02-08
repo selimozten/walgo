@@ -107,19 +107,20 @@ func DeploySite(ctx context.Context, deployDir string, walrusCfg config.WalrusCo
 
 	stdoutStr, stderrStr, err := runCommandWithTimeout(ctx, builderPath, args, true)
 	if err != nil {
-		// Include full debug info: stdout may contain Rust panic output on Windows
-		combinedErr := stderrStr
-		if combinedErr == "" && stdoutStr != "" {
-			combinedErr = stdoutStr
-		}
-		fmt.Fprintf(os.Stderr, "\n%s Debug: command=%s args=%v\n", icons.Wrench, builderPath, args)
+		// Build detailed error with full command and output for debugging
+		debugInfo := fmt.Sprintf("\n\nCommand: %s %s\nBuilder: %s\nWalrus: %s\nContext: %s",
+			builderPath, strings.Join(args, " "), builderPath, walrusPath, siteBuilderContext)
 		if stdoutStr != "" {
-			fmt.Fprintf(os.Stderr, "%s Debug stdout: %s\n", icons.Wrench, stdoutStr)
+			debugInfo += fmt.Sprintf("\nStdout: %s", strings.TrimSpace(stdoutStr))
 		}
 		if stderrStr != "" {
-			fmt.Fprintf(os.Stderr, "%s Debug stderr: %s\n", icons.Wrench, stderrStr)
+			debugInfo += fmt.Sprintf("\nStderr: %s", strings.TrimSpace(stderrStr))
 		}
-		return nil, handleSiteBuilderError(err, combinedErr)
+		combinedErr := stderrStr
+		if combinedErr == "" {
+			combinedErr = stdoutStr
+		}
+		return nil, fmt.Errorf("deployment failed: %w%s", err, debugInfo)
 	}
 
 	fmt.Printf("\n%s Site deployment command executed successfully.\n", icons.Success)
