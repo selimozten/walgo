@@ -86,7 +86,8 @@ $script:IsAdmin = $false
 $script:WalgoInstallRoot = $null
 $script:WalgoBinaryPath = $null
 $script:WalgoToolsDir = Join-Path $env:USERPROFILE ".walgo\bin"
-$script:SuiBinDir = Join-Path $env:USERPROFILE ".sui\bin"  # Suiup's actual install location
+$script:SuiBinDir = Join-Path $env:USERPROFILE ".sui\bin"
+$script:SuiupBinDir = Join-Path $env:LOCALAPPDATA "bin"           # suiup's default shim directory on Windows
 $script:LocalBinDir = Join-Path $env:USERPROFILE ".local\bin"
 $script:DesktopInstallDir = Join-Path $env:LOCALAPPDATA "Programs\Walgo"
 
@@ -170,7 +171,11 @@ function Download-File {
             New-Item -ItemType Directory -Force -Path $destDir | Out-Null
         }
 
+        # Suppress PowerShell progress bar to prevent console line overwrite artifacts
+        $oldProgress = $ProgressPreference
+        $ProgressPreference = 'SilentlyContinue'
         Invoke-WebRequest -Uri $Url -OutFile $Destination -UseBasicParsing -ErrorAction Stop
+        $ProgressPreference = $oldProgress
 
         # Verify file was created and has content
         if (-not (Test-Path $Destination)) {
@@ -187,6 +192,7 @@ function Download-File {
 
         return $true
     } catch {
+        $ProgressPreference = $oldProgress
         $errorMsg = $_.Exception.Message
         Print-Error "Failed to download $label - $errorMsg"
         Print-Info "Please check your internet connection and try again"
@@ -377,6 +383,7 @@ function Initialize-Environment {
 
     Ensure-Directory $script:WalgoInstallRoot
     Ensure-Directory $script:WalgoToolsDir
+    Ensure-Directory $script:SuiupBinDir
     Ensure-Directory $script:SuiBinDir
     Ensure-Directory $script:LocalBinDir
     Ensure-Directory $script:DesktopInstallDir
@@ -709,7 +716,8 @@ function Install-Suiup {
 
         # Add all potential binary directories to PATH
         Add-PathEntry -PathValue $script:WalgoToolsDir
-        Add-PathEntry -PathValue $script:SuiBinDir      # ~/.sui/bin - suiup's default on Windows
+        Add-PathEntry -PathValue $script:SuiupBinDir    # %LOCALAPPDATA%\bin - suiup's default shim dir on Windows
+        Add-PathEntry -PathValue $script:SuiBinDir      # ~/.sui/bin - legacy location
         Add-PathEntry -PathValue $script:LocalBinDir    # ~/.local/bin - fallback
 
         Print-Success "suiup installed to $target"
@@ -728,8 +736,9 @@ function Get-SuiupBinDir {
     param([string]$SuiupPath)
 
     # Try to detect where suiup installs binaries
-    # Check in order: ~/.sui/bin, ~/.local/bin
+    # Check in order: %LOCALAPPDATA%\bin (suiup default on Windows), ~/.sui/bin, ~/.local/bin
     $possiblePaths = @(
+        $script:SuiupBinDir,
         $script:SuiBinDir,
         $script:LocalBinDir
     )
@@ -809,6 +818,7 @@ function Initialize-SuiClient {
     $suiPath = $null
     $possibleSuiPaths = @(
         (Join-Path $BinDir "sui.exe"),
+        (Join-Path $script:SuiupBinDir "sui.exe"),
         (Join-Path $script:SuiBinDir "sui.exe"),
         (Join-Path $script:LocalBinDir "sui.exe")
     )
@@ -1052,6 +1062,7 @@ function Install-WalrusDependencies {
 
         $searchPaths = @(
             (Join-Path $binDir $binary.Exe),
+            (Join-Path $script:SuiupBinDir $binary.Exe),
             (Join-Path $script:SuiBinDir $binary.Exe),
             (Join-Path $script:LocalBinDir $binary.Exe)
         )
