@@ -136,13 +136,13 @@ func TestDeploySite(t *testing.T) {
 			if tt.expectedError && err == nil {
 				t.Errorf("DeploySite() expected error but got none")
 			}
-			if !tt.expectedError && err != nil && !strings.Contains(err.Error(), "failed to execute") {
-				// Allow "failed to execute" errors since we can't mock the actual execution
+			if !tt.expectedError && err != nil && !strings.Contains(err.Error(), "deployment failed") {
+				// Allow "deployment failed" errors since we can't mock the actual execution
 				t.Errorf("DeploySite() unexpected error: %v", err)
 			}
 
 			// For successful cases, output should not be nil
-			if !tt.expectedError && err != nil && strings.Contains(err.Error(), "failed to execute") {
+			if !tt.expectedError && err != nil && strings.Contains(err.Error(), "deployment failed") {
 				// This is expected for mocked execution
 				if output != nil {
 					t.Errorf("DeploySite() should return nil output on execution failure")
@@ -278,12 +278,12 @@ func TestUpdateSite(t *testing.T) {
 			if tt.expectedError && err == nil {
 				t.Errorf("UpdateSite() expected error but got none")
 			}
-			if !tt.expectedError && err != nil && !strings.Contains(err.Error(), "failed to execute") {
+			if !tt.expectedError && err != nil && !strings.Contains(err.Error(), "update failed") {
 				t.Errorf("UpdateSite() unexpected error: %v", err)
 			}
 
 			// For successful cases, output should not be nil
-			if !tt.expectedError && err != nil && strings.Contains(err.Error(), "failed to execute") {
+			if !tt.expectedError && err != nil && strings.Contains(err.Error(), "update failed") {
 				// This is expected for mocked execution
 				if output != nil {
 					t.Errorf("UpdateSite() should return nil output on execution failure")
