@@ -27,9 +27,16 @@ func uninstallCLIBinary() error {
 	}
 
 	if runtime.GOOS == "windows" {
+		// On Windows, a running exe cannot delete itself. Try direct removal
+		// first (works if run from a different binary), fall back to spawning
+		// a detached cmd.exe that deletes the file after walgo exits.
 		fmt.Println("Removing binary...")
 		if err := os.Remove(binaryPath); err != nil {
-			return fmt.Errorf("failed to remove binary (is walgo still running?): %w", err)
+			fmt.Println("Binary is locked (running). Scheduling removal after exit...")
+			if err := windowsDeleteBinary(binaryPath); err != nil {
+				return fmt.Errorf("failed to remove binary: %w", err)
+			}
+			return nil
 		}
 	} else if !isWritable(binaryPath) {
 		fmt.Println("Removing binary (requires sudo)...")
