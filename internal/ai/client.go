@@ -90,121 +90,28 @@ func NewClientWithTimeout(provider, apiKey, baseURL, model string, timeout time.
 
 // Chat sends a chat completion request to the AI provider with automatic retry logic.
 func (c *Client) Chat(messages []Message) (string, error) {
-	reqBody := ChatRequest{
-		Model:    c.Model,
-		Messages: messages,
-		Stream:   false,
-	}
-
-	jsonData, err := json.Marshal(reqBody)
-	if err != nil {
-		return "", fmt.Errorf("failed to marshal request: %w", err)
-	}
-
-	endpoint := fmt.Sprintf("%s/chat/completions", c.BaseURL)
-
-	var lastErr error
-	for attempt := 1; attempt <= MaxRetries; attempt++ {
-		result, err := c.doRequest(endpoint, jsonData)
-		if err == nil {
-			return result, nil
-		}
-
-		lastErr = err
-
-		// Check if error is retryable
-		if !isRetryableError(err) {
-			return "", err
-		}
-
-		// Wait before retry (exponential backoff)
-		if attempt < MaxRetries {
-			backoff := time.Duration(attempt*attempt) * time.Second
-			time.Sleep(backoff)
-		}
-	}
-
-	return "", fmt.Errorf("request failed after %d attempts: %w", MaxRetries, lastErr)
+	return c.ChatWithContext(context.Background(), messages)
 }
 
-// doRequest executes a single HTTP request to the AI provider.
-func (c *Client) doRequest(endpoint string, jsonData []byte) (string, error) {
-	req, err := http.NewRequest("POST", endpoint, bytes.NewBuffer(jsonData))
-	if err != nil {
-		return "", fmt.Errorf("failed to create request: %w", err)
-	}
-
-	req.Header.Set("Content-Type", "application/json")
-	req.Header.Set("Authorization", fmt.Sprintf("Bearer %s", c.APIKey))
-
-	// OpenRouter-specific headers
-	if c.Provider == "openrouter" {
-		req.Header.Set("HTTP-Referer", "https://github.com/selimozten/walgo")
-		req.Header.Set("X-Title", "Walgo AI Content Generator")
-	}
-
-	resp, err := c.client.Do(req)
-	if err != nil {
-		// Check for timeout
-		if strings.Contains(err.Error(), "timeout") || strings.Contains(err.Error(), "deadline exceeded") {
-			return "", fmt.Errorf("request timed out after %v - try increasing timeout or check your network", c.Timeout)
-		}
-		return "", fmt.Errorf("failed to make request: %w", err)
-	}
-	defer resp.Body.Close()
-
-	body, err := io.ReadAll(resp.Body)
-	if err != nil {
-		return "", fmt.Errorf("failed to read response: %w", err)
-	}
-
-	// Handle different status codes
-	switch resp.StatusCode {
-	case http.StatusOK:
-		// Success, continue parsing
-	case http.StatusTooManyRequests:
-		return "", fmt.Errorf("rate limited - please wait and try again: %s", string(body))
-	case http.StatusUnauthorized:
-		return "", fmt.Errorf("invalid API key - run 'walgo ai configure' to update credentials")
-	case http.StatusBadRequest:
-		return "", fmt.Errorf("bad request (check model name): %s", string(body))
-	case http.StatusServiceUnavailable, http.StatusBadGateway, http.StatusGatewayTimeout:
-		return "", fmt.Errorf("service temporarily unavailable (retryable): %s", string(body))
-	default:
-		return "", fmt.Errorf("API request failed with status %d: %s", resp.StatusCode, string(body))
-	}
-
-	var chatResp ChatResponse
-	if err := json.Unmarshal(body, &chatResp); err != nil {
-		return "", fmt.Errorf("failed to parse response: %w", err)
-	}
-
-	if len(chatResp.Choices) == 0 {
-		return "", fmt.Errorf("no response from AI - the model may have rejected the request")
-	}
-
-	return chatResp.Choices[0].Message.Content, nil
+// retryablePatterns contains error substrings that indicate a transient failure.
+var retryablePatterns = []string{
+	"timeout",
+	"deadline exceeded",
+	"connection refused",
+	"connection reset",
+	"temporarily unavailable",
+	"rate limited",
+	"502", "503", "504",
 }
 
 // isRetryableError determines whether an error should trigger a retry attempt.
 func isRetryableError(err error) bool {
-	errStr := err.Error()
-	retryablePatterns := []string{
-		"timeout",
-		"deadline exceeded",
-		"connection refused",
-		"connection reset",
-		"temporarily unavailable",
-		"rate limited",
-		"502", "503", "504",
-	}
-
+	errStr := strings.ToLower(err.Error())
 	for _, pattern := range retryablePatterns {
-		if strings.Contains(strings.ToLower(errStr), pattern) {
+		if strings.Contains(errStr, pattern) {
 			return true
 		}
 	}
-
 	return false
 }
 
@@ -244,6 +151,13 @@ func (c *Client) GenerateContentWithContext(ctx context.Context, systemPrompt, u
 
 // ChatWithContext sends a chat completion request with context support for cancellation.
 func (c *Client) ChatWithContext(ctx context.Context, messages []Message) (string, error) {
+	if c.APIKey == "" {
+		return "", fmt.Errorf("API key is not configured — run 'walgo ai config' to set up your AI provider")
+	}
+	if c.BaseURL == "" {
+		return "", fmt.Errorf("API base URL is not configured for provider %q", c.Provider)
+	}
+
 	reqBody := ChatRequest{
 		Model:    c.Model,
 		Messages: messages,

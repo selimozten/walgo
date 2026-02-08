@@ -7,10 +7,27 @@ import (
 	"testing"
 
 	"github.com/spf13/cobra"
+	"github.com/spf13/pflag"
+	"github.com/spf13/viper"
 )
 
-// executeCommand is a helper function for testing cobra commands
+// resetCommandFlags resets all flag state in the command tree to prevent
+// test pollution from prior executeCommand calls.
+func resetCommandFlags(cmd *cobra.Command) {
+	cmd.Flags().VisitAll(func(f *pflag.Flag) {
+		_ = f.Value.Set(f.DefValue)
+		f.Changed = false
+	})
+	for _, child := range cmd.Commands() {
+		resetCommandFlags(child)
+	}
+}
+
+// executeCommand is a helper function for testing cobra commands.
+// It resets viper and cobra flag state before each call to prevent test pollution.
 func executeCommand(root *cobra.Command, args ...string) (output string, err error) {
+	viper.Reset()
+	resetCommandFlags(root)
 	buf := new(bytes.Buffer)
 	root.SetOut(buf)
 	root.SetErr(buf)

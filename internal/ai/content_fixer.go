@@ -5,20 +5,43 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
+	"strconv"
 	"strings"
 )
 
+// yamlDatePattern matches ISO 8601 dates commonly used in Hugo frontmatter.
+// Examples: 2023-10-27, 2023-10-27T09:00:00Z, 2023-10-27T09:00:00+02:00
+var yamlDatePattern = regexp.MustCompile(`^\d{4}-\d{2}-\d{2}(T\d{2}:\d{2}(:\d{2})?([Zz]|[+-]\d{2}:\d{2})?)?$`)
+
+// isYAMLDate returns true if the string looks like a YAML-safe date value.
+func isYAMLDate(s string) bool {
+	return yamlDatePattern.MatchString(s)
+}
+
 // ContentFixer validates and fixes Hugo content for theme-specific requirements.
 type ContentFixer struct {
-	sitePath string
-	siteType SiteType
+	sitePath  string
+	siteType  SiteType
+	themeName string // Theme name for dynamic frontmatter analysis
 }
 
 // NewContentFixer initializes and returns a new ContentFixer instance.
+// Deprecated: Use NewContentFixerWithTheme for dynamic theme support.
 func NewContentFixer(sitePath string, siteType SiteType) *ContentFixer {
 	return &ContentFixer{
-		sitePath: sitePath,
-		siteType: siteType,
+		sitePath:  sitePath,
+		siteType:  siteType,
+		themeName: "", // Will fall back to generic fixes
+	}
+}
+
+// NewContentFixerWithTheme initializes a ContentFixer with dynamic theme support.
+// The themeName is used for dynamic frontmatter analysis based on the actual theme.
+func NewContentFixerWithTheme(sitePath string, siteType SiteType, themeName string) *ContentFixer {
+	return &ContentFixer{
+		sitePath:  sitePath,
+		siteType:  siteType,
+		themeName: themeName,
 	}
 }
 
@@ -54,6 +77,11 @@ func (cf *ContentFixer) fixFile(path string) error {
 		return nil
 	}
 
+	// Validate fixed content still has valid frontmatter structure
+	if err := validateFrontmatterStructure(fixed); err != nil {
+		return fmt.Errorf("post-fix validation failed for %s: %w (skipping write)", path, err)
+	}
+
 	if err := os.WriteFile(path, []byte(fixed), 0644); err != nil {
 		return fmt.Errorf("writing file %s: %w", path, err)
 	}
@@ -61,24 +89,65 @@ func (cf *ContentFixer) fixFile(path string) error {
 	return nil
 }
 
+// validateFrontmatterStructure checks that content has properly delimited frontmatter.
+func validateFrontmatterStructure(content string) error {
+	trimmed := strings.TrimSpace(content)
+	if trimmed == "" {
+		return nil // Empty content is valid
+	}
+
+	// YAML frontmatter: must start and end with ---
+	if strings.HasPrefix(trimmed, "---") {
+		rest := trimmed[3:]
+		endIdx := strings.Index(rest, "\n---")
+		if endIdx == -1 {
+			return fmt.Errorf("YAML frontmatter has opening '---' but no closing '---'")
+		}
+		return nil
+	}
+
+	// TOML frontmatter: must start and end with +++
+	if strings.HasPrefix(trimmed, "+++") {
+		rest := trimmed[3:]
+		endIdx := strings.Index(rest, "\n+++")
+		if endIdx == -1 {
+			return fmt.Errorf("TOML frontmatter has opening '+++' but no closing '+++'")
+		}
+		return nil
+	}
+
+	// JSON frontmatter: must start with {
+	if strings.HasPrefix(trimmed, "{") {
+		return nil // JSON validation is more complex; basic check is sufficient
+	}
+
+	// No frontmatter is also valid (content without metadata)
+	return nil
+}
+
 // fixContent fixes content based on site type and file path.
 func (cf *ContentFixer) fixContent(path, content string) (string, bool) {
+	// If we have a theme name, use dynamic frontmatter fixing
+	if cf.themeName != "" {
+		return cf.fixContentDynamic(path, content)
+	}
+
+	// Fall back to legacy site-type based fixing
 	switch cf.siteType {
-	case SiteTypeBusiness:
-		return cf.fixBusinessContent(path, content)
 	case SiteTypeBlog:
 		return cf.fixBlogContent(path, content)
-	case SiteTypePortfolio:
-		return cf.fixPortfolioContent(path, content)
 	case SiteTypeDocs:
 		return cf.fixDocsContent(path, content)
+	case SiteTypeWhitepaper:
+		return cf.fixWhitepaperContent(path, content)
 	default:
 		return content, false
 	}
 }
 
-// fixBusinessContent fixes Ananke theme specific issues for business sites.
-func (cf *ContentFixer) fixBusinessContent(path, content string) (string, bool) {
+// fixContentDynamic fixes content using dynamic theme analysis.
+// This replaces the static theme-specific fix functions.
+func (cf *ContentFixer) fixContentDynamic(path, content string) (string, bool) {
 	relPath := strings.TrimPrefix(path, cf.sitePath)
 	relPath = strings.TrimPrefix(relPath, "/content/")
 	relPath = strings.TrimPrefix(relPath, "content/")
@@ -86,54 +155,56 @@ func (cf *ContentFixer) fixBusinessContent(path, content string) (string, bool) 
 	changed := false
 	result := content
 
+	// Generic fixes that apply to all themes
+
 	// Fix YAML quotes (apostrophes in single-quoted strings)
 	result, c := fixYAMLQuotes(result)
 	if c {
 		changed = true
 	}
 
-	// Fix invalid frontmatter start (e.g., starts with "markdown" instead of "---")
+	// Fix invalid frontmatter start
 	result, c = fixFrontmatterStart(result)
 	if c {
 		changed = true
 	}
 
-	// Remove duplicate H1 (Ananke generates H1 from title)
+	// Remove duplicate H1 (most themes generate H1 from title)
 	result, c = removeDuplicateH1(result)
 	if c {
 		changed = true
 	}
 
-	// Add required frontmatter based on file type
-	switch {
-	case relPath == "_index.md":
-		result, c = ensureAnankeFrontmatter(result, "home")
-		if c {
-			changed = true
-		}
-	case relPath == "about.md":
-		result, c = ensureAnankeFrontmatter(result, "page")
-		if c {
-			changed = true
-		}
-	case relPath == "contact.md":
-		result, c = ensureAnankeFrontmatter(result, "page")
-		if c {
-			changed = true
-		}
-	case relPath == "services/_index.md":
-		result, c = ensureAnankeFrontmatter(result, "section")
-		if c {
-			changed = true
-		}
-	case strings.HasPrefix(relPath, "services/") && relPath != "services/_index.md":
-		result, c = ensureAnankeServiceFrontmatter(result)
-		if c {
-			changed = true
-		}
+	// Determine the section from the path for dynamic frontmatter
+	section := determineSectionFromPath(relPath)
+
+	// Use dynamic frontmatter fixing based on theme analysis
+	result, c = EnsureDynamicFrontmatter(result, cf.sitePath, cf.themeName, section)
+	if c {
+		changed = true
 	}
 
 	return result, changed
+}
+
+// determineSectionFromPath extracts the content section from a relative path.
+func determineSectionFromPath(relPath string) string {
+	// Handle root level files
+	if !strings.Contains(relPath, "/") {
+		if relPath == "_index.md" {
+			return "home"
+		}
+		// Root level pages like about.md, contact.md
+		return "pages"
+	}
+
+	// Extract section from path (first directory)
+	parts := strings.Split(relPath, "/")
+	if len(parts) > 0 {
+		return parts[0]
+	}
+
+	return "default"
 }
 
 // fixYAMLQuotes fixes YAML frontmatter values that need proper quoting.
@@ -196,7 +267,12 @@ func fixYAMLQuotes(content string) (string, bool) {
 			continue
 		}
 		// Check if it's a number
-		if _, err := fmt.Sscanf(rest, "%f", new(float64)); err == nil {
+		if _, err := strconv.ParseFloat(rest, 64); err == nil {
+			newLines = append(newLines, line)
+			continue
+		}
+		// Skip ISO 8601 dates (e.g., 2023-10-27T09:00:00Z)
+		if isYAMLDate(rest) {
 			newLines = append(newLines, line)
 			continue
 		}
@@ -266,14 +342,7 @@ func fixYAMLQuotes(content string) (string, bool) {
 			escapedValue = strings.ReplaceAll(escapedValue, "\"", "\\\"")
 
 			// Get original indentation
-			indent := ""
-			for _, ch := range line {
-				if ch == ' ' || ch == '\t' {
-					indent += string(ch)
-				} else {
-					break
-				}
-			}
+			indent := line[:len(line)-len(strings.TrimLeft(line, " \t"))]
 			newLine := fmt.Sprintf("%s%s: \"%s\"", indent, key, escapedValue)
 			newLines = append(newLines, newLine)
 			changed = true
@@ -434,42 +503,18 @@ func removeDuplicateH1(content string) (string, bool) {
 	return content, false
 }
 
-// ensureAnankeServiceFrontmatter ensures Ananke service page frontmatter fields exist.
-func ensureAnankeServiceFrontmatter(content string) (string, bool) {
-	changed := false
-
-	// First ensure base Ananke fields
-	content, c := ensureAnankeFrontmatter(content, "service")
-	if c {
-		changed = true
-	}
-
-	// Ensure date exists
-	if !strings.Contains(content, "date:") {
-		content = addFrontmatterField(content, "date", "2024-01-01T00:00:00Z")
-		changed = true
-	}
-
-	// Ensure draft: false
-	if strings.Contains(content, "draft: true") || strings.Contains(content, "draft:true") {
-		content = strings.Replace(content, "draft: true", "draft: false", 1)
-		content = strings.Replace(content, "draft:true", "draft: false", 1)
-		changed = true
-	}
-	if !strings.Contains(content, "draft:") {
-		content = addFrontmatterField(content, "draft", "false")
-		changed = true
-	}
-
-	return content, changed
-}
-
 // extractFrontmatterField extracts a field value from frontmatter.
 func extractFrontmatterField(content, field string) string {
-	pattern := regexp.MustCompile(fmt.Sprintf(`(?m)^%s:\s*['"]?([^'"\n]+)['"]?`, field))
+	// Match quoted values (double or single) or unquoted values
+	pattern := regexp.MustCompile(fmt.Sprintf(`(?m)^%s:\s*(?:"([^"\n]*)"|'([^'\n]*)'|([^\n]*))`, field))
 	matches := pattern.FindStringSubmatch(content)
 	if len(matches) > 1 {
-		return strings.TrimSpace(matches[1])
+		// Return the first non-empty capture group
+		for _, m := range matches[1:] {
+			if m != "" {
+				return strings.TrimSpace(m)
+			}
+		}
 	}
 	return ""
 }
@@ -489,7 +534,7 @@ func addFrontmatterField(content, field, value string) string {
 	var newField string
 	if value == "true" || value == "false" {
 		newField = fmt.Sprintf("%s: %s\n", field, value)
-	} else if _, err := fmt.Sscanf(value, "%d", new(int)); err == nil {
+	} else if _, err := strconv.Atoi(value); err == nil {
 		newField = fmt.Sprintf("%s: %s\n", field, value)
 	} else {
 		newField = fmt.Sprintf("%s: '%s'\n", field, value)
@@ -697,291 +742,6 @@ func ValidateBlogContent(sitePath string) []string {
 	return issues
 }
 
-// =============================================================================
-// PORTFOLIO (Ananke Theme) Content Fixer and Validator
-// =============================================================================
-
-// fixPortfolioContent fixes Ananke theme specific issues for portfolio sites.
-func (cf *ContentFixer) fixPortfolioContent(path, content string) (string, bool) {
-	relPath := strings.TrimPrefix(path, cf.sitePath)
-	relPath = strings.TrimPrefix(relPath, "/content/")
-	relPath = strings.TrimPrefix(relPath, "content/")
-
-	changed := false
-	result := content
-
-	// Fix YAML quotes (apostrophes in single-quoted strings)
-	result, c := fixYAMLQuotes(result)
-	if c {
-		changed = true
-	}
-
-	// Fix invalid frontmatter start
-	result, c = fixFrontmatterStart(result)
-	if c {
-		changed = true
-	}
-
-	// Remove duplicate H1 (Ananke generates H1 from title)
-	result, c = removeDuplicateH1(result)
-	if c {
-		changed = true
-	}
-
-	// Add required frontmatter based on file type
-	switch {
-	case relPath == "_index.md":
-		result, c = ensureAnankeFrontmatter(result, "home")
-		if c {
-			changed = true
-		}
-	case relPath == "about.md":
-		result, c = ensureAnankeFrontmatter(result, "page")
-		if c {
-			changed = true
-		}
-	case relPath == "contact.md":
-		result, c = ensureAnankeFrontmatter(result, "page")
-		if c {
-			changed = true
-		}
-	case relPath == "projects/_index.md":
-		result, c = ensureAnankeFrontmatter(result, "section")
-		if c {
-			changed = true
-		}
-	case strings.HasPrefix(relPath, "projects/") && relPath != "projects/_index.md":
-		result, c = ensureAnankeProjectFrontmatter(result)
-		if c {
-			changed = true
-		}
-	}
-
-	return result, changed
-}
-
-// ensureAnankeProjectFrontmatter ensures Ananke project page frontmatter fields exist.
-func ensureAnankeProjectFrontmatter(content string) (string, bool) {
-	changed := false
-
-	// First ensure base Ananke fields
-	content, c := ensureAnankeFrontmatter(content, "project")
-	if c {
-		changed = true
-	}
-
-	// Ensure date exists
-	if !strings.Contains(content, "date:") {
-		content = addFrontmatterField(content, "date", "2024-01-01T00:00:00Z")
-		changed = true
-	}
-
-	// Ensure draft: false
-	if strings.Contains(content, "draft: true") || strings.Contains(content, "draft:true") {
-		content = strings.Replace(content, "draft: true", "draft: false", 1)
-		content = strings.Replace(content, "draft:true", "draft: false", 1)
-		changed = true
-	}
-	if !strings.Contains(content, "draft:") {
-		content = addFrontmatterField(content, "draft", "false")
-		changed = true
-	}
-
-	return content, changed
-}
-
-// ValidatePortfolioContent validates content for Ananke theme requirements.
-// Returns a list of issues found.
-func ValidatePortfolioContent(sitePath string) []string {
-	var issues []string
-	contentDir := filepath.Join(sitePath, "content")
-
-	// Required files for portfolio
-	requiredFiles := []string{
-		"_index.md",
-		"about.md",
-		"contact.md",
-		"projects/_index.md",
-	}
-
-	for _, file := range requiredFiles {
-		path := filepath.Join(contentDir, file)
-		if _, err := os.Stat(path); os.IsNotExist(err) {
-			issues = append(issues, fmt.Sprintf("Missing required file: content/%s", file))
-		}
-	}
-
-	// Check for at least one project
-	projectsDir := filepath.Join(contentDir, "projects")
-	if _, err := os.Stat(projectsDir); err == nil {
-		entries, _ := os.ReadDir(projectsDir)
-		projectCount := 0
-		for _, entry := range entries {
-			if entry.Name() != "_index.md" && filepath.Ext(entry.Name()) == ".md" {
-				projectCount++
-			}
-		}
-		if projectCount == 0 {
-			issues = append(issues, "No projects found in content/projects/")
-		}
-	} else {
-		issues = append(issues, "Missing projects directory: content/projects/")
-	}
-
-	// Validate frontmatter in key files
-	keyFiles := map[string][]string{
-		"_index.md":          {"title", "description"},
-		"about.md":           {"title", "description"},
-		"projects/_index.md": {"title"},
-	}
-
-	for file, fields := range keyFiles {
-		path := filepath.Join(contentDir, file)
-		content, err := os.ReadFile(path)
-		if err != nil {
-			continue
-		}
-
-		for _, field := range fields {
-			if !strings.Contains(string(content), field+":") {
-				issues = append(issues, fmt.Sprintf("Missing '%s' in %s", field, file))
-			}
-		}
-	}
-
-	// Validate projects have required fields
-	if _, err := os.Stat(projectsDir); err == nil {
-		_ = filepath.Walk(projectsDir, func(path string, info os.FileInfo, err error) error {
-			if err != nil || info.IsDir() || filepath.Ext(path) != ".md" {
-				return nil
-			}
-			if info.Name() == "_index.md" {
-				return nil
-			}
-			content, err := os.ReadFile(path)
-			if err != nil {
-				return nil
-			}
-			contentStr := string(content)
-			relPath := strings.TrimPrefix(path, contentDir+"/")
-
-			if !strings.Contains(contentStr, "title:") {
-				issues = append(issues, fmt.Sprintf("Missing 'title' in %s", relPath))
-			}
-			if !strings.Contains(contentStr, "description:") {
-				issues = append(issues, fmt.Sprintf("Missing 'description' in %s", relPath))
-			}
-			if strings.Contains(contentStr, "draft: true") {
-				issues = append(issues, fmt.Sprintf("Project is draft: %s", relPath))
-			}
-
-			return nil
-		})
-	}
-
-	return issues
-}
-
-// =============================================================================
-// BUSINESS (Ananke Theme) Validator
-// =============================================================================
-
-// ValidateBusinessContent validates content for Ananke theme requirements.
-// Returns a list of issues found.
-func ValidateBusinessContent(sitePath string) []string {
-	var issues []string
-	contentDir := filepath.Join(sitePath, "content")
-
-	// Required files
-	requiredFiles := []string{
-		"_index.md",
-		"about.md",
-		"contact.md",
-		"services/_index.md",
-	}
-
-	for _, file := range requiredFiles {
-		path := filepath.Join(contentDir, file)
-		if _, err := os.Stat(path); os.IsNotExist(err) {
-			issues = append(issues, fmt.Sprintf("Missing required file: content/%s", file))
-		}
-	}
-
-	// Check for at least one service
-	servicesDir := filepath.Join(contentDir, "services")
-	if _, err := os.Stat(servicesDir); err == nil {
-		entries, _ := os.ReadDir(servicesDir)
-		serviceCount := 0
-		for _, entry := range entries {
-			if entry.Name() != "_index.md" && filepath.Ext(entry.Name()) == ".md" {
-				serviceCount++
-			}
-		}
-		if serviceCount == 0 {
-			issues = append(issues, "No services found in content/services/")
-		}
-	} else {
-		issues = append(issues, "Missing services directory: content/services/")
-	}
-
-	// Validate frontmatter in key files
-	keyFiles := map[string][]string{
-		"_index.md":          {"title", "description"},
-		"about.md":           {"title", "description"},
-		"contact.md":         {"title"},
-		"services/_index.md": {"title", "description"},
-	}
-
-	for file, fields := range keyFiles {
-		path := filepath.Join(contentDir, file)
-		content, err := os.ReadFile(path)
-		if err != nil {
-			continue
-		}
-
-		for _, field := range fields {
-			if !strings.Contains(string(content), field+":") {
-				issues = append(issues, fmt.Sprintf("Missing '%s' in %s", field, file))
-			}
-		}
-	}
-
-	// Validate services have required fields
-	if _, err := os.Stat(servicesDir); err == nil {
-		_ = filepath.Walk(servicesDir, func(path string, info os.FileInfo, err error) error {
-			if err != nil || info.IsDir() || filepath.Ext(path) != ".md" {
-				return nil
-			}
-			if info.Name() == "_index.md" {
-				return nil
-			}
-			content, err := os.ReadFile(path)
-			if err != nil {
-				return nil
-			}
-			contentStr := string(content)
-			relPath := strings.TrimPrefix(path, contentDir+"/")
-
-			if !strings.Contains(contentStr, "title:") {
-				issues = append(issues, fmt.Sprintf("Missing 'title' in %s", relPath))
-			}
-			if !strings.Contains(contentStr, "description:") {
-				issues = append(issues, fmt.Sprintf("Missing 'description' in %s", relPath))
-			}
-			if !strings.Contains(contentStr, "date:") {
-				issues = append(issues, fmt.Sprintf("Missing 'date' in %s", relPath))
-			}
-			if strings.Contains(contentStr, "draft: true") {
-				issues = append(issues, fmt.Sprintf("Service is draft: %s", relPath))
-			}
-
-			return nil
-		})
-	}
-
-	return issues
-}
-
 // fixDocsContent fixes hugo-book theme specific issues.
 func (cf *ContentFixer) fixDocsContent(path, content string) (string, bool) {
 	relPath := strings.TrimPrefix(path, cf.sitePath)
@@ -1112,6 +872,168 @@ func ValidateDocsContent(sitePath string) []string {
 				issues = append(issues, fmt.Sprintf("Missing '%s' in %s", field, file))
 			}
 		}
+	}
+
+	return issues
+}
+
+// =============================================================================
+// WHITEPAPER (walgo-whitepaper Theme) Content Fixer and Validator
+// =============================================================================
+
+// fixWhitepaperContent fixes walgo-whitepaper theme specific issues.
+func (cf *ContentFixer) fixWhitepaperContent(path, content string) (string, bool) {
+	relPath := strings.TrimPrefix(path, cf.sitePath)
+	relPath = strings.TrimPrefix(relPath, "/content/")
+	relPath = strings.TrimPrefix(relPath, "content/")
+
+	changed := false
+	result := content
+
+	// Fix YAML quotes first
+	result, c := fixYAMLQuotes(result)
+	if c {
+		changed = true
+	}
+
+	// Fix invalid frontmatter start
+	result, c = fixFrontmatterStart(result)
+	if c {
+		changed = true
+	}
+
+	// Remove duplicate H1 (theme generates H1 from title)
+	result, c = removeDuplicateH1(result)
+	if c {
+		changed = true
+	}
+
+	// Apply whitepaper-specific frontmatter fixes based on path
+	switch {
+	case relPath == "_index.md":
+		// Root homepage — just needs title
+		result, c = ensureWhitepaperFrontmatter(result, "home")
+		if c {
+			changed = true
+		}
+	case relPath == "whitepaper/_index.md":
+		// Section index
+		result, c = ensureWhitepaperFrontmatter(result, "section")
+		if c {
+			changed = true
+		}
+	case strings.HasPrefix(relPath, "whitepaper/"):
+		// Individual whitepaper sections — need weight + draft: false
+		result, c = ensureWhitepaperFrontmatter(result, "section-page")
+		if c {
+			changed = true
+		}
+	case strings.HasPrefix(relPath, "appendix/"):
+		// Appendix pages — same requirements as section pages
+		result, c = ensureWhitepaperFrontmatter(result, "section-page")
+		if c {
+			changed = true
+		}
+	}
+
+	return result, changed
+}
+
+// ensureWhitepaperFrontmatter ensures walgo-whitepaper theme frontmatter fields exist.
+func ensureWhitepaperFrontmatter(content, pageType string) (string, bool) {
+	changed := false
+
+	// Ensure title exists
+	if !strings.Contains(content, "title:") {
+		content = addFrontmatterField(content, "title", "Untitled")
+		changed = true
+	}
+
+	// Ensure draft: false
+	if strings.Contains(content, "draft: true") || strings.Contains(content, "draft:true") {
+		content = strings.Replace(content, "draft: true", "draft: false", 1)
+		content = strings.Replace(content, "draft:true", "draft: false", 1)
+		changed = true
+	}
+	if !strings.Contains(content, "draft:") {
+		content = addFrontmatterField(content, "draft", "false")
+		changed = true
+	}
+
+	// Section pages need weight for ordering
+	if pageType == "section-page" {
+		if !strings.Contains(content, "weight:") {
+			content = addFrontmatterField(content, "weight", "10")
+			changed = true
+		}
+	}
+
+	return content, changed
+}
+
+// ValidateWhitepaperContent validates content for walgo-whitepaper theme requirements.
+// Returns a list of issues found.
+func ValidateWhitepaperContent(sitePath string) []string {
+	var issues []string
+	contentDir := filepath.Join(sitePath, "content")
+
+	// Required files
+	requiredFiles := []string{
+		"_index.md",
+		"whitepaper/_index.md",
+	}
+
+	for _, file := range requiredFiles {
+		path := filepath.Join(contentDir, file)
+		if _, err := os.Stat(path); os.IsNotExist(err) {
+			issues = append(issues, fmt.Sprintf("Missing required file: content/%s", file))
+		}
+	}
+
+	// Check for at least 2 whitepaper sections
+	wpDir := filepath.Join(contentDir, "whitepaper")
+	if _, err := os.Stat(wpDir); err == nil {
+		entries, _ := os.ReadDir(wpDir)
+		sectionCount := 0
+		for _, entry := range entries {
+			if entry.Name() != "_index.md" && filepath.Ext(entry.Name()) == ".md" {
+				sectionCount++
+			}
+		}
+		if sectionCount < 2 {
+			issues = append(issues, fmt.Sprintf("Whitepaper needs at least 2 sections, found %d", sectionCount))
+		}
+
+		// Validate each section has weight and draft: false
+		_ = filepath.Walk(wpDir, func(path string, info os.FileInfo, err error) error {
+			if err != nil || info.IsDir() || filepath.Ext(path) != ".md" {
+				return nil
+			}
+			if info.Name() == "_index.md" {
+				return nil // Skip section index
+			}
+
+			fileContent, err := os.ReadFile(path)
+			if err != nil {
+				return nil
+			}
+			contentStr := string(fileContent)
+			relPath := strings.TrimPrefix(path, contentDir+"/")
+
+			if !strings.Contains(contentStr, "title:") {
+				issues = append(issues, fmt.Sprintf("Missing 'title' in %s", relPath))
+			}
+			if !strings.Contains(contentStr, "weight:") {
+				issues = append(issues, fmt.Sprintf("Missing 'weight' in %s", relPath))
+			}
+			if strings.Contains(contentStr, "draft: true") {
+				issues = append(issues, fmt.Sprintf("Section is draft: %s", relPath))
+			}
+
+			return nil
+		})
+	} else {
+		issues = append(issues, "Missing whitepaper directory: content/whitepaper/")
 	}
 
 	return issues

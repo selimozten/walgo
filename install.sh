@@ -594,9 +594,13 @@ install_desktop_linux() {
     fi
 
     local install_dir="${HOME}/.local/bin"
+    local applications_dir="${HOME}/.local/share/applications"
+    local icons_dir="${HOME}/.local/share/icons"
 
-    # Create directory
+    # Create directories
     mkdir -p "$install_dir"
+    mkdir -p "$applications_dir"
+    mkdir -p "$icons_dir"
 
     # Copy binary
     cp "$binary" "$install_dir/Walgo"
@@ -604,7 +608,41 @@ install_desktop_linux() {
 
     if [ -f "$install_dir/Walgo" ]; then
         print_success "Walgo Desktop installed to $install_dir"
-        print_info "Run with: walgo desktop"
+
+        # Create .desktop file for application menu
+        cat > "$applications_dir/walgo.desktop" << EOF
+[Desktop Entry]
+Name=Walgo
+Comment=Ship static sites to Walrus decentralized storage
+Exec=${install_dir}/Walgo
+Icon=walgo
+Terminal=false
+Type=Application
+Categories=Development;WebDevelopment;
+Keywords=walrus;web3;decentralized;static;site;
+StartupWMClass=Walgo
+EOF
+        chmod +x "$applications_dir/walgo.desktop"
+        print_success "Desktop entry created in application menu"
+
+        # Create desktop shortcut if Desktop folder exists
+        local desktop_dir="${HOME}/Desktop"
+        if [ -d "$desktop_dir" ]; then
+            cp "$applications_dir/walgo.desktop" "$desktop_dir/Walgo.desktop"
+            chmod +x "$desktop_dir/Walgo.desktop"
+            # Mark as trusted on GNOME
+            if command -v gio >/dev/null 2>&1; then
+                gio set "$desktop_dir/Walgo.desktop" metadata::trusted true 2>/dev/null || true
+            fi
+            print_success "Desktop shortcut created"
+        fi
+
+        # Update desktop database if available
+        if command -v update-desktop-database >/dev/null 2>&1; then
+            update-desktop-database "$applications_dir" 2>/dev/null || true
+        fi
+
+        print_info "Run with: walgo desktop (or find Walgo in your application menu)"
     else
         print_warning "Failed to copy desktop app"
     fi

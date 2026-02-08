@@ -195,12 +195,9 @@ func GetProjectDetails() (*ProjectDetails, error) {
 		// Check if project name already exists
 		pm, err := projects.NewManager()
 		if err == nil {
-			defer func() {
-				_ = pm.Close()
-			}()
-
-			exists, err := pm.ProjectNameExists(name)
-			if err == nil && exists {
+			exists, checkErr := pm.ProjectNameExists(name)
+			_ = pm.Close()
+			if checkErr == nil && exists {
 				fmt.Printf("\n%s Project name '%s' already exists in your projects.\n", icons.Warning, name)
 				fmt.Printf("%s Please choose a different name.\n", icons.Lightbulb)
 				fmt.Println()

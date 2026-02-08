@@ -59,6 +59,11 @@ func TestPlanner_Plan_Success(t *testing.T) {
 				PageType: "page",
 			},
 			{
+				ID:       "posts-index",
+				Path:     "content/posts/_index.md",
+				PageType: "section",
+			},
+			{
 				ID:       "post1",
 				Path:     "content/posts/welcome/index.md",
 				PageType: "post",
@@ -66,6 +71,16 @@ func TestPlanner_Plan_Success(t *testing.T) {
 			{
 				ID:       "post2",
 				Path:     "content/posts/getting-started/index.md",
+				PageType: "post",
+			},
+			{
+				ID:       "post3",
+				Path:     "content/posts/latest-insights/index.md",
+				PageType: "post",
+			},
+			{
+				ID:       "post4",
+				Path:     "content/posts/case-study/index.md",
 				PageType: "post",
 			},
 		},
@@ -119,8 +134,8 @@ func TestPlanner_Plan_Success(t *testing.T) {
 	if plan.SiteType != SiteTypeBlog {
 		t.Errorf("expected SiteType blog, got %s", plan.SiteType)
 	}
-	if len(plan.Pages) != 5 {
-		t.Errorf("expected 5 pages, got %d", len(plan.Pages))
+	if len(plan.Pages) != 8 {
+		t.Errorf("expected 8 pages, got %d", len(plan.Pages))
 	}
 	if plan.Status != PlanStatusPending {
 		t.Errorf("expected status pending, got %s", plan.Status)
@@ -224,21 +239,20 @@ func TestPlanner_Plan_PlanValidation(t *testing.T) {
 					{ID: "contact", Path: "content/contact.md", PageType: "page"},
 					{ID: "post1", Path: "content/posts/welcome/index.md", PageType: "post"},
 					{ID: "post2", Path: "content/posts/start/index.md", PageType: "post"},
+					{ID: "post3", Path: "content/posts/insights/index.md", PageType: "post"},
+					{ID: "post4", Path: "content/posts/case-study/index.md", PageType: "post"},
 					{ID: "extra", Path: "content/extra.md", PageType: "page"},
 				},
 			},
 			expectedError: "home page",
 		},
 		{
-			name: "too few pages for blog",
+			name: "empty pages list",
 			planResponse: AIPlanResponse{
-				Site: AISiteInfo{Type: "blog"},
-				Pages: []AIPageInfo{
-					{ID: "home", Path: "content/_index.md", PageType: "home"},
-					{ID: "about", Path: "content/about.md", PageType: "page"},
-				},
+				Site:  AISiteInfo{Type: "blog"},
+				Pages: []AIPageInfo{},
 			},
-			expectedError: "requires at least",
+			expectedError: "no pages",
 		},
 		{
 			name: "duplicate paths",
@@ -250,6 +264,9 @@ func TestPlanner_Plan_PlanValidation(t *testing.T) {
 					{ID: "about2", Path: "content/about.md", PageType: "page"}, // Duplicate
 					{ID: "contact", Path: "content/contact.md", PageType: "page"},
 					{ID: "post1", Path: "content/posts/welcome/index.md", PageType: "post"},
+					{ID: "post2", Path: "content/posts/start/index.md", PageType: "post"},
+					{ID: "post3", Path: "content/posts/insights/index.md", PageType: "post"},
+					{ID: "post4", Path: "content/posts/case-study/index.md", PageType: "post"},
 				},
 			},
 			expectedError: "duplicate path",
@@ -264,6 +281,8 @@ func TestPlanner_Plan_PlanValidation(t *testing.T) {
 					{ID: "contact", Path: "content/contact.md", PageType: "page"},
 					{ID: "post1", Path: "content/posts/welcome/index.md", PageType: "post"},
 					{ID: "post2", Path: "content/posts/start/index.md", PageType: "post"},
+					{ID: "post3", Path: "content/posts/insights/index.md", PageType: "post"},
+					{ID: "post4", Path: "content/posts/case-study/index.md", PageType: "post"},
 				},
 			},
 			expectedError: "must start with 'content/'",
@@ -278,6 +297,8 @@ func TestPlanner_Plan_PlanValidation(t *testing.T) {
 					{ID: "contact", Path: "content/contact.md", PageType: "page"},
 					{ID: "post1", Path: "content/posts/welcome/index.md", PageType: "post"},
 					{ID: "post2", Path: "content/posts/start/index.md", PageType: "post"},
+					{ID: "post3", Path: "content/posts/insights/index.md", PageType: "post"},
+					{ID: "post4", Path: "content/posts/case-study/index.md", PageType: "post"},
 				},
 			},
 			expectedError: "path is required",
@@ -342,8 +363,11 @@ func TestPlanner_Plan_AlternativeFormat(t *testing.T) {
 			{"id": "home", "path": "content/_index.md", "page_type": "home"},
 			{"id": "about", "path": "content/about.md", "page_type": "page"},
 			{"id": "contact", "path": "content/contact.md", "page_type": "page"},
+			{"id": "posts-index", "path": "content/posts/_index.md", "page_type": "section"},
 			{"id": "post1", "path": "content/posts/welcome/index.md", "page_type": "post"},
-			{"id": "post2", "path": "content/posts/start/index.md", "page_type": "post"}
+			{"id": "post2", "path": "content/posts/start/index.md", "page_type": "post"},
+			{"id": "post3", "path": "content/posts/insights/index.md", "page_type": "post"},
+			{"id": "post4", "path": "content/posts/case-study/index.md", "page_type": "post"}
 		]
 	}`
 
@@ -385,8 +409,8 @@ func TestPlanner_Plan_AlternativeFormat(t *testing.T) {
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	if len(plan.Pages) != 5 {
-		t.Errorf("expected 5 pages, got %d", len(plan.Pages))
+	if len(plan.Pages) != 8 {
+		t.Errorf("expected 8 pages, got %d", len(plan.Pages))
 	}
 }
 
@@ -397,8 +421,11 @@ func TestPlanner_Plan_WithMarkdownFence(t *testing.T) {
 			{ID: "home", Path: "content/_index.md", PageType: "home"},
 			{ID: "about", Path: "content/about.md", PageType: "page"},
 			{ID: "contact", Path: "content/contact.md", PageType: "page"},
+			{ID: "posts-index", Path: "content/posts/_index.md", PageType: "section"},
 			{ID: "post1", Path: "content/posts/welcome/index.md", PageType: "post"},
 			{ID: "post2", Path: "content/posts/start/index.md", PageType: "post"},
+			{ID: "post3", Path: "content/posts/insights/index.md", PageType: "post"},
+			{ID: "post4", Path: "content/posts/case-study/index.md", PageType: "post"},
 		},
 	}
 
@@ -443,8 +470,8 @@ func TestPlanner_Plan_WithMarkdownFence(t *testing.T) {
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	if len(plan.Pages) != 5 {
-		t.Errorf("expected 5 pages, got %d", len(plan.Pages))
+	if len(plan.Pages) != 8 {
+		t.Errorf("expected 8 pages, got %d", len(plan.Pages))
 	}
 }
 

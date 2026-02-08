@@ -1,52 +1,70 @@
 import React, { useEffect, useState } from 'react';
-import { Minus, Square, X, Maximize2, Minimize2 } from 'lucide-react';
-import { WindowMinimise, WindowToggleMaximise, Quit, WindowFullscreen } from '../../../wailsjs/runtime/runtime';
+import { Minus, Square, X } from 'lucide-react';
+import { WindowMinimise, WindowToggleMaximise, Quit, Environment } from '../../../wailsjs/runtime/runtime';
+
+type Platform = 'windows' | 'linux' | 'darwin' | 'unknown';
 
 export const WindowControls: React.FC = () => {
-    const [isMac, setIsMac] = useState(false);
-    const [isFullscreen, setIsFullscreen] = useState(false);
+    const [platform, setPlatform] = useState<Platform>('unknown');
+    const [isMaximized, setIsMaximized] = useState(false);
 
     useEffect(() => {
-        // Detect macOS using userAgent (platform is deprecated)
-        const userAgent = navigator.userAgent.toLowerCase();
-        setIsMac(userAgent.indexOf('mac') >= 0);
+        // Use Wails Environment API for reliable platform detection
+        Environment().then((env) => {
+            setPlatform(env.platform as Platform);
+        }).catch(() => {
+            // Fallback: try to detect from userAgent
+            const ua = navigator.userAgent.toLowerCase();
+            if (ua.includes('mac os') || ua.includes('macos')) {
+                setPlatform('darwin');
+            } else if (ua.includes('linux')) {
+                setPlatform('linux');
+            } else if (ua.includes('windows')) {
+                setPlatform('windows');
+            }
+        });
     }, []);
 
-    const handleFullscreenToggle = () => {
-        WindowFullscreen();
-        setIsFullscreen(!isFullscreen);
+    const handleMaximizeToggle = () => {
+        WindowToggleMaximise();
+        setIsMaximized(!isMaximized);
     };
 
     // macOS: Use native traffic lights, don't show custom controls
-    if (isMac) {
+    if (platform === 'darwin') {
+        return null;
+    }
+
+    // Don't render until platform is detected
+    if (platform === 'unknown') {
         return null;
     }
 
     // Windows/Linux: Show custom controls on the right side
     return (
-        <div className="fixed top-0 right-0 z-[60] flex items-center h-10 px-2 gap-1">
-        <button
-            onClick={WindowMinimise}
+        <div className="fixed top-0 right-0 z-[60] flex items-center h-10 px-2 gap-1 wails-nodrag">
+            <button
+                onClick={WindowMinimise}
                 className="w-8 h-8 flex items-center justify-center text-zinc-400 hover:text-white hover:bg-white/10 rounded transition-colors"
                 title="Minimize"
-        >
-            <Minus size={14} />
-        </button>
-        <button
-                onClick={handleFullscreenToggle}
+            >
+                <Minus size={14} />
+            </button>
+            <button
+                onClick={handleMaximizeToggle}
                 className="w-8 h-8 flex items-center justify-center text-zinc-400 hover:text-white hover:bg-white/10 rounded transition-colors"
-                title={isFullscreen ? "Exit Fullscreen" : "Enter Fullscreen"}
-        >
-                {isFullscreen ? <Minimize2 size={14} /> : <Maximize2 size={14} />}
-        </button>
-        <button
-            onClick={Quit}
+                title={isMaximized ? "Restore" : "Maximize"}
+            >
+                <Square size={12} />
+            </button>
+            <button
+                onClick={Quit}
                 className="w-8 h-8 flex items-center justify-center text-zinc-400 hover:text-white hover:bg-red-500/20 hover:text-red-400 rounded transition-colors"
                 title="Close"
-        >
-            <X size={14} />
-        </button>
-    </div>
-);
+            >
+                <X size={14} />
+            </button>
+        </div>
+    );
 };
 

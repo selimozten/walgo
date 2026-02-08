@@ -188,11 +188,10 @@ func TestNewCommandExecution(t *testing.T) {
 		}
 
 		// Execute new command with invalid slug
-		output, err := executeCommand(rootCmd, "new", "my post with spaces", "--no-build")
+		_, err := executeCommand(rootCmd, "new", "my post with spaces", "--no-build")
 		if err == nil {
-			t.Log("Expected error for invalid slug")
+			t.Error("Expected error for invalid slug")
 		}
-		_ = output
 	})
 
 	t.Run("New command adds .md extension", func(t *testing.T) {

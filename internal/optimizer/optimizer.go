@@ -1,26 +1,23 @@
 package optimizer
 
 import (
+	"bytes"
 	"fmt"
 	"io/fs"
 	"os"
 	"path/filepath"
 	"strings"
-	"sync"
 	"time"
 
 	"github.com/selimozten/walgo/internal/ui"
 )
 
 // Engine manages the entire optimization process for HTML, CSS, and JavaScript files.
-// Thread-safe for concurrent use.
 type Engine struct {
 	config        OptimizerConfig
 	htmlOptimizer *HTMLOptimizer
 	cssOptimizer  *CSSOptimizer
 	jsOptimizer   *JSOptimizer
-	mu            sync.RWMutex      // Protects htmlContent
-	htmlContent   map[string][]byte // Store HTML content for CSS unused rule detection
 }
 
 // NewEngine initializes and returns a new optimization engine with provided configuration.
@@ -30,7 +27,6 @@ func NewEngine(config OptimizerConfig) *Engine {
 		htmlOptimizer: NewHTMLOptimizer(config.HTML),
 		cssOptimizer:  NewCSSOptimizer(config.CSS),
 		jsOptimizer:   NewJSOptimizer(config.JS),
-		htmlContent:   make(map[string][]byte),
 	}
 }
 
@@ -43,15 +39,6 @@ func (e *Engine) OptimizeDirectory(sourceDir string) (*OptimizationStats, error)
 	stats := &OptimizationStats{}
 	startTime := time.Now()
 
-	// First pass: collect HTML content for CSS optimization
-	if e.config.CSS.RemoveUnused {
-		err := e.collectHTMLContent(sourceDir)
-		if err != nil {
-			return stats, fmt.Errorf("failed to collect HTML content: %w", err)
-		}
-	}
-
-	// Second pass: optimize all files
 	err := filepath.WalkDir(sourceDir, func(path string, d fs.DirEntry, err error) error {
 		if err != nil {
 			return err
@@ -112,12 +99,6 @@ func (e *Engine) optimizeFile(filePath string, stats *OptimizationStats) error {
 		if err != nil {
 			return fmt.Errorf("CSS optimization failed: %w", err)
 		}
-
-		// Apply unused rule removal if enabled
-		if e.config.CSS.RemoveUnused {
-			optimizedContent = e.applyCSSUnusedRuleRemoval(optimizedContent)
-		}
-
 		e.updateCSSStats(stats, originalSize, int64(len(optimizedContent)))
 
 	case ".js", ".mjs":
@@ -133,7 +114,7 @@ func (e *Engine) optimizeFile(filePath string, stats *OptimizationStats) error {
 	}
 
 	// Only write if content changed
-	if len(optimizedContent) != len(originalContent) || string(optimizedContent) != string(originalContent) {
+	if !bytes.Equal(optimizedContent, originalContent) {
 		err = os.WriteFile(filePath, optimizedContent, 0644) // #nosec G306 - HTML/CSS/JS files need to be readable by web servers
 		if err != nil {
 			return fmt.Errorf("failed to write optimized file: %w", err)
@@ -142,53 +123,6 @@ func (e *Engine) optimizeFile(filePath string, stats *OptimizationStats) error {
 	}
 
 	return nil
-}
-
-// collectHTMLContent gathers all HTML content to detect unused CSS rules.
-// Thread-safe for concurrent access.
-func (e *Engine) collectHTMLContent(sourceDir string) error {
-	return filepath.WalkDir(sourceDir, func(path string, d fs.DirEntry, err error) error {
-		if err != nil {
-			return err
-		}
-
-		if d.IsDir() {
-			return nil
-		}
-
-		ext := strings.ToLower(filepath.Ext(path))
-		if ext == ".html" || ext == ".htm" {
-			content, err := os.ReadFile(path) // #nosec G304 - path comes from controlled directory walk
-			if err != nil {
-				return err
-			}
-			e.mu.Lock()
-			e.htmlContent[path] = content
-			e.mu.Unlock()
-		}
-
-		return nil
-	})
-}
-
-// applyCSSUnusedRuleRemoval removes unused CSS rules using the collected HTML content.
-// Thread-safe for concurrent access.
-func (e *Engine) applyCSSUnusedRuleRemoval(cssContent []byte) []byte {
-	e.mu.RLock()
-	defer e.mu.RUnlock()
-
-	// Combine all HTML content
-	var allHTML []byte
-	for _, htmlContent := range e.htmlContent {
-		allHTML = append(allHTML, htmlContent...)
-		allHTML = append(allHTML, []byte(" ")...) // Add separator
-	}
-
-	if len(allHTML) > 0 {
-		return e.cssOptimizer.RemoveUnusedRules(cssContent, allHTML)
-	}
-
-	return cssContent
 }
 
 // shouldSkipFile checks whether a file should be skipped based on configured patterns.
@@ -293,9 +227,6 @@ func (e *Engine) PrintStats(stats *OptimizationStats) {
 			stats.CSSFiles.FilesProcessed,
 			formatBytes(stats.CSSFiles.SavingsBytes),
 			stats.CSSFiles.SavingsPercent)
-		if stats.CSSFiles.RulesRemoved > 0 {
-			fmt.Printf("Unused rules removed: %d\n", stats.CSSFiles.RulesRemoved)
-		}
 	}
 
 	if stats.JSFiles.FilesProcessed > 0 {

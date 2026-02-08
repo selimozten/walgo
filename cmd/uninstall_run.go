@@ -156,8 +156,11 @@ func confirmUninstall(removeCLI, removeDesktop bool) bool {
 	fmt.Println()
 	fmt.Print("Are you sure you want to continue? [y/N]: ")
 
-	input, _ := reader.ReadString('\n')
-	input = strings.TrimSpace(strings.ToLower(input))
+	input, err := readLine(reader)
+	if err != nil {
+		return false
+	}
+	input = strings.ToLower(input)
 
 	return input == "y" || input == "yes"
 }

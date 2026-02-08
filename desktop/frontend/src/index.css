@@ -5,16 +5,15 @@
   --font-display: 'Rajdhani', sans-serif;
   --font-body: 'Barlow', sans-serif;
   --font-mono: 'JetBrains Mono', monospace;
+  --color-accent: #4DA2FF;
 }
 
 :root {
   color-scheme: dark;
 
-  /* Cyber-Industrial Palette */
+  /* Cyber-Industrial Palette (CSS-only vars, not used as Tailwind utilities) */
   --color-bg-main: #0a0f14;
   --color-bg-card: #11161d;
-  --color-accent: #4DA2FF;
-  /* Sui Blue */
   --color-accent-dim: rgba(77, 162, 255, 0.1);
   --color-text-main: #e0e6ed;
   --color-text-muted: #94a3b8;
@@ -22,9 +21,13 @@
   --color-border-active: rgba(77, 162, 255, 0.5);
 }
 
-/* Custom Utilities */
+/* Custom Utilities - Wails Window Dragging */
 .wails-drag {
   --wails-draggable: drag;
+}
+
+.wails-nodrag {
+  --wails-draggable: no-drag;
 }
 
 body {
@@ -39,10 +42,6 @@ body {
   color: black;
 }
 
-/* Custom Utilities */
-.font-display {
-  font-family: var(--font-display);
-}
 
 .bg-noise {
   background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noiseFilter'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.65' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noiseFilter)' opacity='0.05'/%3E%3C/svg%3E");
@@ -64,18 +63,6 @@ body {
 .glass-panel-tech:hover {
   border-color: rgba(255, 255, 255, 0.15);
   box-shadow: 0 8px 30px rgba(0, 0, 0, 0.6);
-}
-
-.text-accent {
-  color: var(--color-accent);
-}
-
-.bg-accent {
-  background-color: var(--color-accent);
-}
-
-.border-accent {
-  border-color: var(--color-accent);
 }
 
 /* Scanline Effect */

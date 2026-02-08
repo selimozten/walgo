@@ -64,7 +64,7 @@ func DeploySite(ctx context.Context, deployDir string, walrusCfg config.WalrusCo
 		} else {
 			fmt.Printf("%s\n", FormatCostBreakdown(*breakdown))
 			fmt.Printf("\n%s Summary: %s\n\n", icons.Info,
-				FormatCostSummary(breakdown.GasCostSUI+breakdown.TotalWAL, breakdown.FileCount, epochs))
+				FormatCostSummary(breakdown.TotalWAL, breakdown.GasCostSUI, breakdown.FileCount, epochs))
 
 			if breakdown.GasCostSUI+breakdown.TotalWAL > 0.5 {
 				fmt.Printf("%s %s Tip: Consider using `update-resources` for small changes\n", icons.Lightbulb, icons.Info)

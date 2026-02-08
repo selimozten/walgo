@@ -51,6 +51,15 @@ func (h *DeployHelper) PrepareDeployment(buildDir string) (*DeploymentPlan, erro
 	var totalSize int64
 	var changedSize int64
 
+	// Build lookup sets for O(1) change detection
+	changedFiles := make(map[string]struct{}, len(changes.Added)+len(changes.Modified))
+	for _, p := range changes.Added {
+		changedFiles[p] = struct{}{}
+	}
+	for _, p := range changes.Modified {
+		changedFiles[p] = struct{}{}
+	}
+
 	for path := range hashes {
 		fullPath := filepath.Join(buildDir, path)
 		info, err := os.Stat(fullPath)
@@ -60,24 +69,7 @@ func (h *DeployHelper) PrepareDeployment(buildDir string) (*DeploymentPlan, erro
 
 		totalSize += info.Size()
 
-		// Check if file changed
-		isChanged := false
-		for _, p := range changes.Added {
-			if p == path {
-				isChanged = true
-				break
-			}
-		}
-		if !isChanged {
-			for _, p := range changes.Modified {
-				if p == path {
-					isChanged = true
-					break
-				}
-			}
-		}
-
-		if isChanged {
+		if _, isChanged := changedFiles[path]; isChanged {
 			changedSize += info.Size()
 		}
 	}

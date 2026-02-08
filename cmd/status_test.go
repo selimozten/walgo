@@ -90,11 +90,10 @@ func TestStatusCommandExecution(t *testing.T) {
 		defer func() { _ = os.Chdir(originalWd) }()
 
 		// Execute status command without config - should fail
-		output, err := executeCommand(rootCmd, "status")
+		_, err := executeCommand(rootCmd, "status")
 		if err == nil {
-			t.Log("Expected error when no config file exists")
+			t.Error("Expected error when no config file exists")
 		}
-		_ = output
 	})
 
 	t.Run("Status with config but no project ID", func(t *testing.T) {
@@ -108,7 +107,7 @@ func TestStatusCommandExecution(t *testing.T) {
 		// Create config without valid project ID
 		configContent := `
 walrus:
-  projectId: YOUR_WALRUS_PROJECT_ID
+  projectID: YOUR_WALRUS_PROJECT_ID
   network: testnet
 hugo:
   publishDir: public
@@ -118,12 +117,11 @@ hugo:
 		}
 
 		// Execute status command
-		output, err := executeCommand(rootCmd, "status")
+		_, err := executeCommand(rootCmd, "status")
 		// Should fail because project ID is placeholder
 		if err == nil {
-			t.Log("Expected error when project ID is placeholder")
+			t.Error("Expected error when project ID is placeholder")
 		}
-		_ = output
 	})
 
 	t.Run("Status with object ID argument", func(t *testing.T) {
@@ -165,7 +163,7 @@ hugo:
 		// Create config with valid project ID format
 		configContent := `
 walrus:
-  projectId: "0x1234567890abcdef1234567890abcdef12345678"
+  projectID: "0x1234567890abcdef1234567890abcdef12345678"
   network: testnet
 hugo:
   publishDir: public
@@ -196,7 +194,7 @@ site:
   title: Test Site
   description: Test Description
 walrus:
-  projectId: "0xabcdef1234567890abcdef1234567890abcdef12"
+  projectID: "0xabcdef1234567890abcdef1234567890abcdef12"
   network: testnet
 hugo:
   publishDir: public

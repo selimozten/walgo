@@ -5,6 +5,9 @@ import (
 	"strings"
 )
 
+// Pre-compiled regexes for JS operations.
+var jsBlockCommentRegex = regexp.MustCompile(`/\*[^*]*\*+(?:[^/*][^*]*\*+)*/`)
+
 // JSOptimizer handles JavaScript optimization
 type JSOptimizer struct {
 	config JSConfig
@@ -35,11 +38,6 @@ func (j *JSOptimizer) Optimize(content []byte) ([]byte, error) {
 		result = j.minifyJS(result)
 	}
 
-	// Basic obfuscation (if enabled)
-	if j.config.Obfuscate {
-		result = j.obfuscateBasic(result)
-	}
-
 	return result, nil
 }
 
@@ -58,19 +56,19 @@ func (j *JSOptimizer) removeComments(content []byte) []byte {
 		escaped := false
 		quote := byte(0)
 
-		cleanLine := ""
+		var cleanLine strings.Builder
 		for i := 0; i < len(line); i++ {
 			char := line[i]
 
 			if escaped {
-				cleanLine += string(char)
+				cleanLine.WriteByte(char)
 				escaped = false
 				continue
 			}
 
 			if char == '\\' {
 				escaped = true
-				cleanLine += string(char)
+				cleanLine.WriteByte(char)
 				continue
 			}
 
@@ -95,20 +93,18 @@ func (j *JSOptimizer) removeComments(content []byte) []byte {
 				inRegex = false
 			}
 
-			cleanLine += string(char)
+			cleanLine.WriteByte(char)
 		}
 
-		if strings.TrimSpace(cleanLine) != "" {
-			processedLines = append(processedLines, cleanLine)
-		}
+		// Always keep the line (even if empty after comment removal) to preserve
+		// line structure. The minifier handles whitespace collapse.
+		processedLines = append(processedLines, cleanLine.String())
 	}
 
 	js = strings.Join(processedLines, "\n")
 
 	// Remove multi-line comments /* ... */
-	// This is a simplified approach - in production, you'd need a proper parser
-	blockCommentRegex := regexp.MustCompile(`/\*[^*]*\*+(?:[^/*][^*]*\*+)*/`)
-	js = blockCommentRegex.ReplaceAllString(js, "")
+	js = jsBlockCommentRegex.ReplaceAllString(js, "")
 
 	return []byte(js)
 }
@@ -117,18 +113,9 @@ func (j *JSOptimizer) removeComments(content []byte) []byte {
 func (j *JSOptimizer) minifyJS(content []byte) []byte {
 	js := string(content)
 
-	// Remove unnecessary whitespace while preserving string contents
+	// Remove unnecessary whitespace while preserving string contents (including template literals)
+	// This function handles all minification in a string-aware manner
 	js = j.preserveStringsAndMinify(js)
-
-	// Remove unnecessary semicolons before }
-	js = regexp.MustCompile(`;\s*}`).ReplaceAllString(js, "}")
-
-	// Remove unnecessary whitespace around operators and punctuation
-	js = regexp.MustCompile(`\s*([{}();,])\s*`).ReplaceAllString(js, "$1")
-	js = regexp.MustCompile(`\s*([=+\-*/%<>!&|^])\s*`).ReplaceAllString(js, "$1")
-
-	// Compress consecutive newlines and spaces
-	js = regexp.MustCompile(`\s+`).ReplaceAllString(js, " ")
 
 	// Trim leading and trailing whitespace
 	js = strings.TrimSpace(js)
@@ -136,12 +123,17 @@ func (j *JSOptimizer) minifyJS(content []byte) []byte {
 	return []byte(js)
 }
 
-// preserveStringsAndMinify minifies JavaScript while preserving string contents
+// preserveStringsAndMinify minifies JavaScript while preserving string contents.
+// Newlines are preserved (collapsed to a single \n) to maintain JavaScript's
+// Automatic Semicolon Insertion (ASI) semantics. Without this, constructs like
+// "return\nvalue" would become "return value" (returns value) instead of the
+// correct "return;\nvalue" (returns undefined).
 func (j *JSOptimizer) preserveStringsAndMinify(js string) string {
 	var result strings.Builder
 	inString := false
 	inRegex := false
 	stringChar := byte(0)
+	var lastWritten byte
 	i := 0
 
 	for i < len(js) {
@@ -150,9 +142,11 @@ func (j *JSOptimizer) preserveStringsAndMinify(js string) string {
 		// Handle escape sequences
 		if i < len(js)-1 && char == '\\' {
 			result.WriteByte(char)
+			lastWritten = char
 			i++
 			if i < len(js) {
 				result.WriteByte(js[i])
+				lastWritten = js[i]
 			}
 			i++
 			continue
@@ -168,6 +162,7 @@ func (j *JSOptimizer) preserveStringsAndMinify(js string) string {
 				stringChar = 0
 			}
 			result.WriteByte(char)
+			lastWritten = char
 			i++
 			continue
 		}
@@ -183,18 +178,19 @@ func (j *JSOptimizer) preserveStringsAndMinify(js string) string {
 			}
 			if inRegex && i < len(js)-1 {
 				// Look for end of regex
-				j := i + 1
-				for j < len(js) && js[j] != '/' {
-					if js[j] == '\\' && j+1 < len(js) {
-						j += 2 // Skip escaped character
+				k := i + 1
+				for k < len(js) && js[k] != '/' {
+					if js[k] == '\\' && k+1 < len(js) {
+						k += 2 // Skip escaped character
 					} else {
-						j++
+						k++
 					}
 				}
-				if j < len(js) {
+				if k < len(js) {
 					// Copy the entire regex
-					result.WriteString(js[i : j+1])
-					i = j + 1
+					result.WriteString(js[i : k+1])
+					lastWritten = js[k]
+					i = k + 1
 					inRegex = false
 					continue
 				}
@@ -204,20 +200,36 @@ func (j *JSOptimizer) preserveStringsAndMinify(js string) string {
 		// If we're in a string or regex, preserve everything
 		if inString || inRegex {
 			result.WriteByte(char)
+			lastWritten = char
 			i++
 			continue
 		}
 
-		// Handle whitespace outside of strings
-		if char == ' ' || char == '\t' || char == '\n' || char == '\r' {
+		// Handle newlines — preserve them to maintain ASI behavior.
+		// Collapse consecutive newlines and \r\n into a single \n.
+		if char == '\n' || char == '\r' {
+			if char == '\r' && i+1 < len(js) && js[i+1] == '\n' {
+				i++ // Skip \r in \r\n
+			}
+			// Only emit newline if previous output wasn't already a newline
+			if lastWritten != '\n' {
+				result.WriteByte('\n')
+				lastWritten = '\n'
+			}
+			i++
+			continue
+		}
+
+		// Handle horizontal whitespace (spaces, tabs) outside of strings
+		if char == ' ' || char == '\t' {
 			// Only add space if the previous and next characters need separation
 			if result.Len() > 0 && i < len(js)-1 {
-				prevChar := result.String()[result.Len()-1]
 				nextChar := js[i+1]
 
 				// Check if space is needed between identifiers/keywords
-				if isAlphaNumeric(prevChar) && isAlphaNumeric(nextChar) {
+				if isAlphaNumeric(lastWritten) && isAlphaNumeric(nextChar) {
 					result.WriteByte(' ')
+					lastWritten = ' '
 				}
 			}
 			i++
@@ -225,35 +237,11 @@ func (j *JSOptimizer) preserveStringsAndMinify(js string) string {
 		}
 
 		result.WriteByte(char)
+		lastWritten = char
 		i++
 	}
 
 	return result.String()
-}
-
-// obfuscateBasic performs basic variable name obfuscation
-func (j *JSOptimizer) obfuscateBasic(content []byte) []byte {
-	// This is a very basic obfuscation - in production, you'd use a proper parser
-	js := string(content)
-
-	// Map of common variable names to shorter versions
-	// This is a simplified approach and may break code
-	obfuscationMap := map[string]string{
-		"function": "f",
-		"variable": "v",
-		"element":  "e",
-		"document": "d",
-		"window":   "w",
-	}
-
-	// Only obfuscate if explicitly enabled and user understands the risks
-	for original, obfuscated := range obfuscationMap {
-		// Use word boundaries to avoid partial matches
-		wordRegex := regexp.MustCompile(`\b` + original + `\b`)
-		js = wordRegex.ReplaceAllString(js, obfuscated)
-	}
-
-	return []byte(js)
 }
 
 // isAlphaNumeric checks if a character is alphanumeric or underscore
@@ -262,9 +250,4 @@ func isAlphaNumeric(char byte) bool {
 		(char >= 'A' && char <= 'Z') ||
 		(char >= '0' && char <= '9') ||
 		char == '_' || char == '$'
-}
-
-// GetFileExtensions returns the file extensions this optimizer handles
-func (j *JSOptimizer) GetFileExtensions() []string {
-	return []string{".js", ".mjs"}
 }

@@ -104,7 +104,7 @@ export const Projects: React.FC<ProjectsProps> = ({
     const paginatedProjects = filteredProjects.slice(startIndex, endIndex);
 
     // Reset to page 1 when filters change
-    React.useEffect(() => {
+    useEffect(() => {
         setCurrentPage(1);
     }, [search, statusFilter]);
 
@@ -135,13 +135,23 @@ export const Projects: React.FC<ProjectsProps> = ({
                     timestamp: d.createdAt,
                     objectId: d.objectId,
                     network: d.network,
-                    size: undefined, // Not available in DeploymentRecord
+                    size: undefined,
+                    epochs: d.epochs,
                     status: d.success ? 'success' as const : 'failed' as const,
-                    wallet: undefined // Not available in DeploymentRecord
+                    wallet: undefined,
+                    gasFee: d.gasFee // Actual gas cost from blockchain
                 })) || [];
 
                 setShowProjectDetails({
                     ...project,
+                    deployments: fullProject.deployCount || project.deployments,
+                    epochs: fullProject.epochs || project.epochs,
+                    lastDeployAt: fullProject.lastDeployAt || project.lastDeployAt,
+                    size: fullProject.size,
+                    fileCount: fullProject.fileCount,
+                    totalEpochs: fullProject.totalEpochs || project.totalEpochs,
+                    expiresIn: fullProject.expiresIn || project.expiresIn,
+                    gasFee: fullProject.gasFee || project.gasFee,
                     deploymentHistory
                 });
             }
@@ -188,6 +198,48 @@ export const Projects: React.FC<ProjectsProps> = ({
         }
     };
 
+    // Calculate storage expiry based on epochs and first deploy date
+    // Uses firstDeployAt + totalEpochs for accurate cumulative calculation
+    const calculateExpiry = (firstDeployAt?: string, totalEpochs?: number, network?: string) => {
+        if (!firstDeployAt || firstDeployAt === '0001-01-01 00:00' || !totalEpochs || totalEpochs <= 0) {
+            return null;
+        }
+        try {
+            const deployDate = new Date(firstDeployAt);
+            // Mainnet: ~2 weeks per epoch, Testnet: ~1 day per epoch
+            const daysPerEpoch = network === 'mainnet' ? 14 : 1;
+            const expiryDate = new Date(deployDate.getTime() + (totalEpochs * daysPerEpoch * 24 * 60 * 60 * 1000));
+            return expiryDate;
+        } catch {
+            return null;
+        }
+    };
+
+    const formatExpiryTime = (expiryDate: Date | null) => {
+        if (!expiryDate) return 'Unknown';
+        const now = new Date();
+        const diffMs = expiryDate.getTime() - now.getTime();
+        const diffDays = Math.floor(diffMs / (1000 * 60 * 60 * 24));
+        const diffHours = Math.floor((diffMs % (1000 * 60 * 60 * 24)) / (1000 * 60 * 60));
+
+        if (diffMs < 0) return 'Expired';
+        if (diffDays === 0 && diffHours === 0) return 'Expiring soon';
+        if (diffDays === 0) return `${diffHours} hours`;
+        if (diffDays === 1) return `1 day ${diffHours}h`;
+        return `${diffDays} days`;
+    };
+
+    const formatEpochsDuration = (epochs?: number, network?: string) => {
+        if (!epochs || epochs <= 0) return 'Unknown';
+        // Mainnet: ~2 weeks per epoch, Testnet: ~1 day per epoch
+        if (network === 'mainnet') {
+            const weeks = epochs * 2;
+            return weeks === 2 ? '~2 weeks' : `~${weeks} weeks`;
+        } else {
+            return epochs === 1 ? '~1 day' : `~${epochs} days`;
+        }
+    };
+
     const handleDelete = (project: Project) => {
         setDeleteConfirm(project);
     };
@@ -231,7 +283,7 @@ export const Projects: React.FC<ProjectsProps> = ({
                     message: `Delete failed: ${result.error}`,
                 });
             }
-        } catch (err: any) {
+        } catch (err) {
             onStatusChange?.({
                 type: 'error',
                 message: `Delete failed: ${err?.toString()}`,
@@ -307,7 +359,7 @@ export const Projects: React.FC<ProjectsProps> = ({
                             });
                             return;
                         }
-                    } catch (err: any) {
+                    } catch (err) {
                         onStatusChange?.({
                             type: 'error',
                             message: `Unarchive failed: SetStatus API not found. Please add it to backend.`,
@@ -323,7 +375,7 @@ export const Projects: React.FC<ProjectsProps> = ({
             });
             await onRefresh?.();
             setEditProject(null);
-        } catch (err: any) {
+        } catch (err) {
             onStatusChange?.({
                 type: 'error',
                 message: `Update failed: ${err?.toString()}`,
@@ -337,7 +389,7 @@ export const Projects: React.FC<ProjectsProps> = ({
         try {
             const { OpenInFinder } = await import('../../wailsjs/go/main/App');
             await OpenInFinder(path);
-        } catch (err: any) {
+        } catch (err) {
             onStatusChange?.({
                 type: 'error',
                 message: `Failed to open: ${err?.toString()}`,
@@ -361,9 +413,9 @@ export const Projects: React.FC<ProjectsProps> = ({
         const suiscanUrl = `https://suiscan.xyz/${network}/object/${project.objectId}`;
 
         try {
-            const { OpenInBrowser } = await import('../../wailsjs/go/main/App');
-            await OpenInBrowser(suiscanUrl);
-        } catch (err: any) {
+            const { BrowserOpenURL } = await import('../../wailsjs/runtime/runtime');
+            BrowserOpenURL(suiscanUrl);
+        } catch (err) {
             onStatusChange?.({
                 type: 'error',
                 message: `Failed to open Suiscan: ${err?.toString()}`,
@@ -1016,10 +1068,67 @@ export const Projects: React.FC<ProjectsProps> = ({
                                                 <span className="text-white">{showProjectDetails.deployments}</span>
                                             </div>
                                         )}
+                                        {(showProjectDetails.totalEpochs !== undefined && showProjectDetails.totalEpochs > 0) && (
+                                            <div className="flex">
+                                                <span className="text-zinc-500 w-32 flex-shrink-0">Total Epochs:</span>
+                                                <span className="text-white whitespace-nowrap">{showProjectDetails.totalEpochs} <span className="text-zinc-500">({formatEpochsDuration(showProjectDetails.totalEpochs, showProjectDetails.network)})</span></span>
+                                            </div>
+                                        )}
+                                        {showProjectDetails.epochs !== undefined && showProjectDetails.epochs > 0 && showProjectDetails.epochs !== showProjectDetails.totalEpochs && (
+                                            <div className="flex">
+                                                <span className="text-zinc-500 w-32">Last Deploy:</span>
+                                                <span className="text-zinc-400">+{showProjectDetails.epochs} epochs</span>
+                                            </div>
+                                        )}
+                                        {showProjectDetails.expiresIn ? (
+                                            <div className="flex">
+                                                <span className="text-zinc-500 w-32 flex-shrink-0">Expires In:</span>
+                                                <span className={cn(
+                                                    showProjectDetails.expiresIn === 'Expired' ? "text-red-400" :
+                                                    showProjectDetails.expiresIn.includes('hour') || showProjectDetails.expiresIn === 'Expiring soon' ? "text-orange-400" :
+                                                    "text-green-400"
+                                                )}>
+                                                    {showProjectDetails.expiresIn}
+                                                </span>
+                                            </div>
+                                        ) : (() => {
+                                            // Fallback to local calculation if API doesn't provide expiresIn
+                                            // Use firstDeployAt for accurate cumulative calculation, fallback to lastDeployAt
+                                            const expiryDate = calculateExpiry(
+                                                showProjectDetails.firstDeployAt || showProjectDetails.lastDeployAt || showProjectDetails.lastDeploy,
+                                                showProjectDetails.totalEpochs || showProjectDetails.epochs,
+                                                showProjectDetails.network
+                                            );
+                                            const isExpired = expiryDate && expiryDate.getTime() < new Date().getTime();
+                                            const isExpiringSoon = expiryDate && !isExpired && (expiryDate.getTime() - new Date().getTime()) < (3 * 24 * 60 * 60 * 1000);
+                                            return expiryDate ? (
+                                                <div className="flex">
+                                                    <span className="text-zinc-500 w-32 flex-shrink-0">Expires In:</span>
+                                                    <span className={cn(
+                                                        "whitespace-nowrap",
+                                                        isExpired ? "text-red-400" : isExpiringSoon ? "text-orange-400" : "text-green-400"
+                                                    )}>
+                                                        {formatExpiryTime(expiryDate)}
+                                                    </span>
+                                                </div>
+                                            ) : null;
+                                        })()}
+                                        {showProjectDetails.gasFee && (
+                                            <div className="flex">
+                                                <span className="text-zinc-500 w-32 flex-shrink-0">Gas Fee:</span>
+                                                <span className="text-blue-400 whitespace-nowrap">{showProjectDetails.gasFee}</span>
+                                            </div>
+                                        )}
                                         {showProjectDetails.lastDeploy && (
                                             <div className="flex col-span-2">
                                                 <span className="text-zinc-500 w-32">Last Deploy:</span>
                                                 <span className="text-zinc-400">{formatDate(showProjectDetails.lastDeploy)}</span>
+                                            </div>
+                                        )}
+                                        {showProjectDetails.lastDeployAt && !showProjectDetails.lastDeploy && (
+                                            <div className="flex col-span-2">
+                                                <span className="text-zinc-500 w-32">Last Deploy:</span>
+                                                <span className="text-zinc-400">{formatDate(showProjectDetails.lastDeployAt)}</span>
                                             </div>
                                         )}
                                         {showProjectDetails.deployedAt && (
@@ -1129,8 +1238,8 @@ export const Projects: React.FC<ProjectsProps> = ({
                                                         </div>
                                                         {deployment.size !== undefined && (
                                                             <div className="flex">
-                                                                <span className="text-zinc-500">Size:</span>
-                                                                <span className="text-zinc-400 ml-2">{(deployment.size / 1024).toFixed(2)} KB</span>
+                                                                <span className="text-zinc-500 flex-shrink-0">Size:</span>
+                                                                <span className="text-zinc-400 ml-2 whitespace-nowrap">{(deployment.size / 1024).toFixed(2)} KB</span>
                                                             </div>
                                                         )}
                                                         {deployment.wallet && (
@@ -1139,6 +1248,12 @@ export const Projects: React.FC<ProjectsProps> = ({
                                                                 <span className="text-zinc-400 ml-2 truncate" title={deployment.wallet}>
                                                                     {deployment.wallet.slice(0, 8)}...{deployment.wallet.slice(-6)}
                                                                 </span>
+                                                            </div>
+                                                        )}
+                                                        {deployment.gasFee && (
+                                                            <div className="flex">
+                                                                <span className="text-zinc-500 flex-shrink-0">Gas Fee:</span>
+                                                                <span className="text-blue-400 ml-2 whitespace-nowrap">{deployment.gasFee}</span>
                                                             </div>
                                                         )}
                                                     </div>
@@ -1155,8 +1270,8 @@ export const Projects: React.FC<ProjectsProps> = ({
                                         <div className="grid grid-cols-2 gap-3 text-sm font-mono">
                                             {showProjectDetails.size !== undefined && (
                                                 <div className="flex">
-                                                    <span className="text-zinc-500 w-32">Size:</span>
-                                                    <span className="text-white">{(showProjectDetails.size / 1024).toFixed(2)} KB</span>
+                                                    <span className="text-zinc-500 w-32 flex-shrink-0">Size:</span>
+                                                    <span className="text-white whitespace-nowrap">{(showProjectDetails.size / 1024).toFixed(2)} KB</span>
                                                 </div>
                                             )}
                                             {showProjectDetails.fileCount !== undefined && (

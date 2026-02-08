@@ -63,8 +63,10 @@ Examples:
 		var selectedType string
 		if len(contentTypes) > 1 {
 			fmt.Print("Select content type (or press Enter for default): ")
-			input, _ := reader.ReadString('\n')
-			input = strings.TrimSpace(input)
+			input, err := readLine(reader)
+			if err != nil {
+				return fmt.Errorf("reading content type: %w", err)
+			}
 
 			if input == "" {
 				selectedType = defaultType

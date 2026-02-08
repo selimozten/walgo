@@ -1,14 +1,12 @@
 import React from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { Loader2, CheckCircle2, Maximize2 } from "lucide-react";
+import { Loader2, Maximize2 } from "lucide-react";
 import { useAIProgress } from "../contexts/AIProgressContext";
 
 export const AIProgressIndicator: React.FC = () => {
-  const { progressState, isMinimized, openModal } = useAIProgress();
+  const { progressState, openModal } = useAIProgress();
 
-  // Show indicator when minimized OR when active but modal is closed
-  const shouldShow =
-    (isMinimized || progressState.isActive) && progressState.isActive;
+  const shouldShow = progressState.isActive;
 
   if (!shouldShow) return null;
 

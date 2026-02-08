@@ -168,7 +168,10 @@ func (c *Collector) writeEvent(event Event) error {
 	// Read existing events
 	var events []Event
 	if data, err := os.ReadFile(c.sinkPath); err == nil {
-		_ = json.Unmarshal(data, &events)
+		if jsonErr := json.Unmarshal(data, &events); jsonErr != nil {
+			// Corrupted file — start fresh rather than losing new event
+			events = nil
+		}
 	}
 
 	// Append new event
@@ -179,15 +182,20 @@ func (c *Collector) writeEvent(event Event) error {
 		events = events[len(events)-1000:]
 	}
 
-	// Write back
+	// Write back atomically via temp file to prevent corruption on crash
 	data, err := json.MarshalIndent(events, "", "  ")
 	if err != nil {
 		return fmt.Errorf("failed to marshal events: %w", err)
 	}
 
+	tmpPath := c.sinkPath + ".tmp"
 	// #nosec G306 - metrics file can be readable
-	if err := os.WriteFile(c.sinkPath, data, 0644); err != nil {
+	if err := os.WriteFile(tmpPath, data, 0644); err != nil {
 		return fmt.Errorf("failed to write events: %w", err)
+	}
+	if err := os.Rename(tmpPath, c.sinkPath); err != nil {
+		os.Remove(tmpPath) // Clean up temp file on rename failure
+		return fmt.Errorf("failed to finalize events file: %w", err)
 	}
 
 	return nil

@@ -100,7 +100,7 @@ export const AIGenerate: React.FC<AIGenerateProps> = ({
           });
         }
       }
-    } catch (err: any) {
+    } catch (err) {
       if (onStatusChange) {
         onStatusChange({
           type: "error",

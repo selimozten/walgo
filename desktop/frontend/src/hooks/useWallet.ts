@@ -66,8 +66,7 @@ export const useWallet = () => {
         setError(null);
         try {
             const result = await CreateWalletAddress(keyScheme || 'ed25519', alias || '');
-            await loadWalletInfo();
-            await loadAddressList();
+            await Promise.all([loadWalletInfo(), loadAddressList()]);
             return { success: true, result, address: result?.address };
         } catch (err) {
             const errorMsg = err instanceof Error ? err.message : 'Unknown error';
@@ -87,8 +86,7 @@ export const useWallet = () => {
                 input,
                 keyScheme: keyScheme || 'ed25519',
             });
-            await loadWalletInfo();
-            await loadAddressList();
+            await Promise.all([loadWalletInfo(), loadAddressList()]);
             return { success: true, result, address: result?.address };
         } catch (err) {
             const errorMsg = err instanceof Error ? err.message : 'Unknown error';

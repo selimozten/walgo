@@ -7,4 +7,5 @@ export { AIGenerateModal } from './AIGenerateModal';
 export { AIUpdateModal } from './AIUpdateModal';
 export { AutoInstallModal } from './AutoInstallModal';
 export { InstallInstructionsModal } from './InstallInstructionsModal';
+export { ThemeModal } from './ThemeModal';
 export type { DeploymentParams, DeploymentResult } from './DeploymentModal';

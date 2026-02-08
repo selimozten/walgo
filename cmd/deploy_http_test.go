@@ -103,10 +103,11 @@ hugo:
 		}
 
 		// Execute deploy-http without publisher/aggregator
-		output, err := executeCommand(rootCmd, "deploy-http")
+		_, err := executeCommand(rootCmd, "deploy-http")
 		// Should fail when required flags not provided
-		_ = err
-		_ = output
+		if err == nil {
+			t.Error("Expected error when required flags not provided")
+		}
 	})
 
 	t.Run("Deploy-http without config file", func(t *testing.T) {
@@ -118,13 +119,12 @@ hugo:
 		defer func() { _ = os.Chdir(originalWd) }()
 
 		// Execute deploy-http without config
-		output, err := executeCommand(rootCmd, "deploy-http",
+		_, err := executeCommand(rootCmd, "deploy-http",
 			"--publisher", "https://publisher.walrus-testnet.walrus.space",
 			"--aggregator", "https://aggregator.walrus-testnet.walrus.space")
 		if err == nil {
-			t.Log("Expected error when no config file exists")
+			t.Error("Expected error when no config file exists")
 		}
-		_ = output
 	})
 
 	t.Run("Deploy-http without public directory", func(t *testing.T) {
@@ -145,12 +145,13 @@ hugo:
 		}
 
 		// Execute deploy-http without public directory
-		output, err := executeCommand(rootCmd, "deploy-http",
+		_, err := executeCommand(rootCmd, "deploy-http",
 			"--publisher", "https://publisher.walrus-testnet.walrus.space",
 			"--aggregator", "https://aggregator.walrus-testnet.walrus.space")
 		// Should fail when public directory doesn't exist
-		_ = err
-		_ = output
+		if err == nil {
+			t.Error("Expected error when public directory doesn't exist")
+		}
 	})
 
 	t.Run("Deploy-http with all required flags", func(t *testing.T) {

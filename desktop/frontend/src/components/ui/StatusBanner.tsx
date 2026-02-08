@@ -1,6 +1,6 @@
 import React from 'react';
-import { AnimatePresence } from 'framer-motion';
-import { Check, AlertCircle, Info, X, Loader2 } from 'lucide-react';
+import { motion } from 'framer-motion';
+import { Check, AlertCircle, X, Loader2 } from 'lucide-react';
 import { Status } from '../../types';
 import { cn } from '../../utils/helpers';
 
@@ -35,23 +35,27 @@ export const StatusBanner: React.FC<StatusBannerProps> = ({ status, onClose }) =
     };
 
     return (
-        <AnimatePresence>
-            <div className={cn(
+        <motion.div
+            initial={{ opacity: 0, y: -20 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: -20 }}
+            transition={{ duration: 0.2 }}
+            className={cn(
                 "fixed top-10 left-1/2 -translate-x-1/2 z-50 px-4 py-3 rounded-sm border backdrop-blur-sm flex items-center gap-3 shadow-lg",
                 getStatusColor()
-            )}>
-                {getStatusIcon()}
-                <span className="text-sm font-medium font-mono">{status.message}</span>
-                {onClose && (
-                    <button
-                        onClick={onClose}
-                        className="ml-2 hover:opacity-70 transition-opacity"
-                    >
-                        <X size={14} />
-                    </button>
-                )}
-            </div>
-        </AnimatePresence>
+            )}
+        >
+            {getStatusIcon()}
+            <span className="text-sm font-medium font-mono">{status.message}</span>
+            {onClose && (
+                <button
+                    onClick={onClose}
+                    className="ml-2 hover:opacity-70 transition-opacity"
+                >
+                    <X size={14} />
+                </button>
+            )}
+        </motion.div>
     );
 };
 

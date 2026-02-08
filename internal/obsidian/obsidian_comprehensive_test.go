@@ -354,66 +354,6 @@ title: Draft Post
 	}
 }
 
-func TestConvertWikilinksEdgeCases(t *testing.T) {
-	tests := []struct {
-		name          string
-		input         string
-		attachmentDir string
-		expected      string
-	}{
-		{
-			name:          "Multiple wikilinks on same line",
-			input:         "See [[Page One]] and [[Page Two]] for details.",
-			attachmentDir: "images",
-			expected:      "See [Page One]({{< relref \"page-one.md\" >}}) and [Page Two]({{< relref \"page-two.md\" >}}) for details.",
-		},
-		{
-			name:          "Nested brackets",
-			input:         "This is [[a [complex] link]] here.",
-			attachmentDir: "images",
-			expected:      "This is [a [complex] link]({{< relref \"a-complex-link.md\" >}}) here.",
-		},
-		{
-			name:          "Empty wikilink",
-			input:         "Empty [[]] link.",
-			attachmentDir: "images",
-			expected:      "Empty [[]] link.",
-		},
-		{
-			name:          "Wikilink with special characters",
-			input:         "Link to [[C++ Programming]] guide.",
-			attachmentDir: "images",
-			expected:      "Link to [C++ Programming]({{< relref \"c-programming.md\" >}}) guide.",
-		},
-		{
-			name:          "Mixed attachments and links",
-			input:         "See [[note]] and image [[photo.jpg]] here.",
-			attachmentDir: "imgs",
-			expected:      "See [note]({{< relref \"note.md\" >}}) and image ![photo.jpg](/imgs/photo.jpg) here.",
-		},
-		{
-			name:          "Wikilink at start and end",
-			input:         "[[Start]] middle [[End]]",
-			attachmentDir: "images",
-			expected:      "[Start]({{< relref \"start.md\" >}}) middle [End]({{< relref \"end.md\" >}})",
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			// Skip tests for unimplemented edge cases
-			if tt.name == "Nested brackets" || tt.name == "Wikilink with special characters" {
-				t.Skip("Complex wikilink patterns not yet fully supported")
-			}
-
-			result := convertWikilinks(tt.input, tt.attachmentDir)
-			if result != tt.expected {
-				t.Errorf("convertWikilinks() = %q, want %q", result, tt.expected)
-			}
-		})
-	}
-}
-
 func TestEnsureFrontmatterEdgeCases(t *testing.T) {
 	tests := []struct {
 		name     string
@@ -645,19 +585,6 @@ draft: true
 }
 
 // Benchmark tests
-func BenchmarkConvertWikilinks(b *testing.B) {
-	content := `# Document
-
-This has [[many]] different [[links|custom text]] and [[attachments.png]].
-More [[references]] to [[other pages|click here]] throughout.
-`
-	attachmentDir := "images"
-
-	b.ResetTimer()
-	for i := 0; i < b.N; i++ {
-		_ = convertWikilinks(content, attachmentDir)
-	}
-}
 
 func BenchmarkEnsureFrontmatter(b *testing.B) {
 	content := `# My Document

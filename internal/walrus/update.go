@@ -53,8 +53,10 @@ func UpdateSite(ctx context.Context, deployDir, objectID string, epochs int) (*S
 
 	var totalSize int64
 	var fileCount int
+	var walkErrors int
 	_ = filepath.Walk(deployDir, func(path string, info os.FileInfo, err error) error {
 		if err != nil {
+			walkErrors++
 			return nil
 		}
 		if !info.IsDir() {
@@ -63,6 +65,9 @@ func UpdateSite(ctx context.Context, deployDir, objectID string, epochs int) (*S
 		}
 		return nil
 	})
+	if walkErrors > 0 {
+		fmt.Fprintf(os.Stderr, "%s Warning: Could not access %d file(s) during size calculation\n", icons.Warning, walkErrors)
+	}
 
 	sizeMB := float64(totalSize) / (1024 * 1024)
 	simpleCost := sizeMB * 0.01 * float64(epochs)

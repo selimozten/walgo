@@ -6,21 +6,19 @@ import { Card } from '../components/ui/Card';
 import { itemVariants, buttonVariants } from '../utils/constants';
 import { SystemHealth as SystemHealthType } from '../types';
 import { motion } from 'framer-motion';
-import { useVersionCheck } from '../hooks';
+import { useVersionCheck, ToolVersionInfo } from '../hooks';
 import { InstallInstructionsModal } from '../components/modals';
 
 interface SystemHealthProps {
     systemHealth: SystemHealthType | null;
     onCheckDeps: () => void;
     onRefresh?: () => void;
-    installing?: any;
 }
 
 export const SystemHealth: React.FC<SystemHealthProps> = ({
     systemHealth,
     onCheckDeps,
-    onRefresh,
-    installing
+    onRefresh
 }) => {
     const [showInstallModal, setShowInstallModal] = useState(false);
     const [missingTools, setMissingTools] = useState<string[]>([]);
@@ -247,7 +245,7 @@ export const SystemHealth: React.FC<SystemHealthProps> = ({
         toolName: string, 
         displayName: string, 
         installed?: boolean, 
-        versionInfo?: any,
+        versionInfo?: ToolVersionInfo,
         isOptional: boolean = false
     ) {
         const hasUpdate = versionInfo?.updateRequired;

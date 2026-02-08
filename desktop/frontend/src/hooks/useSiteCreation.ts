@@ -16,7 +16,7 @@ interface UseSiteCreationReturn {
   siteNameExists: boolean;
   siteNameCheckLoading: boolean;
   isProcessing: boolean;
-  handleQuickStart: () => Promise<{
+  handleQuickStart: (siteType?: string) => Promise<{
     success: boolean;
     sitePath?: string;
     error?: string;
@@ -74,7 +74,7 @@ export const useSiteCreation = (
     return () => clearTimeout(timeoutId);
   }, [siteName]);
 
-  const handleQuickStart = async () => {
+  const handleQuickStart = async (siteType?: string) => {
     if (!siteName) {
       return { success: false, error: "Site name required" };
     }
@@ -84,6 +84,7 @@ export const useSiteCreation = (
       const result = await QuickStart({
         parentDir: parentDir || "", // Empty string will use default walgo-sites directory
         siteName: siteName,
+        siteType: siteType || "biolink",
         skipBuild: false,
       });
 
@@ -97,7 +98,7 @@ export const useSiteCreation = (
       } else {
         return { success: false, error: result.error || 'Unknown error' };
       }
-    } catch (err: any) {
+    } catch (err) {
       return { success: false, error: err?.toString() || "Unknown error" };
     } finally {
       setIsProcessing(false);
@@ -123,7 +124,7 @@ export const useSiteCreation = (
       } else {
         return { success: false, error: result.error || 'Unknown error' };
       }
-    } catch (err: any) {
+    } catch (err) {
       return { success: false, error: err?.toString() || "Unknown error" };
     } finally {
       setIsProcessing(false);
@@ -136,7 +137,7 @@ export const useSiteCreation = (
       if (dir) {
         setParentDir(dir);
       }
-    } catch (err: any) {
+    } catch (err) {
       console.error("Error selecting directory:", err);
     }
   };

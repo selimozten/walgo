@@ -2,34 +2,20 @@ package cmd
 
 import (
 	"fmt"
-	"strconv"
 	"time"
 
 	"github.com/selimozten/walgo/internal/projects"
 	"github.com/selimozten/walgo/internal/ui"
 )
 
-// archiveProject marks a project as archived without deleting it.
-func archiveProject(nameOrID string) error {
+// archiveProjectByRef marks a project as archived without deleting it.
+func archiveProjectByRef(proj *projects.Project) error {
 	icons := ui.GetIcons()
 	pm, err := projects.NewManager()
 	if err != nil {
 		return fmt.Errorf("failed to initialize project manager: %w", err)
 	}
 	defer pm.Close()
-
-	var proj *projects.Project
-	if id, err := strconv.ParseInt(nameOrID, 10, 64); err == nil {
-		proj, err = pm.GetProject(id)
-		if err != nil {
-			return err
-		}
-	} else {
-		proj, err = pm.GetProjectByName(nameOrID)
-		if err != nil {
-			return err
-		}
-	}
 
 	if err := pm.ArchiveProject(proj.ID); err != nil {
 		return fmt.Errorf("failed to archive project: %w", err)

@@ -129,6 +129,9 @@ Example (Mainnet):
 		if workers <= 0 {
 			workers = 10
 		}
+		if workers > 50 {
+			workers = 50 // Cap to prevent resource exhaustion
+		}
 		if retries <= 0 {
 			retries = 5
 		}

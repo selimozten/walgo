@@ -119,9 +119,12 @@ func convertWikilinksWithStyle(content, attachmentDir string, style LinkStyle) s
 		case LinkStyleRelref:
 			// Use Hugo's relref for internal links (strict - throws error if target missing)
 			return fmt.Sprintf("[%s]({{< relref \"%s.md%s\" >}})", displayText, linkPath, anchor)
-		default:
+		case LinkStyleMarkdown:
 			// Use plain markdown links (permissive - works even if target missing)
 			// This avoids REF_NOT_FOUND errors during Hugo build
+			return fmt.Sprintf("[%s](%s.md%s)", displayText, linkPath, anchor)
+		default:
+			// Default to markdown style for safety (same as LinkStyleMarkdown)
 			return fmt.Sprintf("[%s](%s.md%s)", displayText, linkPath, anchor)
 		}
 	})

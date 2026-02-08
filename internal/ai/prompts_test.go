@@ -44,7 +44,6 @@ func TestBuildSinglePageUserPrompt(t *testing.T) {
 		name           string
 		plan           *SitePlan
 		page           *PageSpec
-		expectedTheme  string
 		expectedChecks []string
 	}{
 		{
@@ -61,7 +60,6 @@ func TestBuildSinglePageUserPrompt(t *testing.T) {
 				PageType: PageTypePage,
 				Title:    "About Me",
 			},
-			expectedTheme: "Ananke",
 			expectedChecks: []string{
 				"My Blog",
 				"blog",
@@ -83,82 +81,8 @@ func TestBuildSinglePageUserPrompt(t *testing.T) {
 				PageType: PageTypePost,
 				Title:    "Welcome",
 			},
-			expectedTheme: "Ananke",
 			expectedChecks: []string{
 				"content/posts/welcome/index.md",
-				"Ananke blog post",
-			},
-		},
-		{
-			name: "business page",
-			plan: &SitePlan{
-				SiteName:    "My Business",
-				SiteType:    SiteTypeBusiness,
-				Description: "A business site",
-				Audience:    "customers",
-			},
-			page: &PageSpec{
-				ID:       "home",
-				Path:     "content/_index.md",
-				PageType: PageTypeHome,
-			},
-			expectedTheme: "Ananke",
-			expectedChecks: []string{
-				"business",
-				"Ananke",
-			},
-		},
-		{
-			name: "business service page",
-			plan: &SitePlan{
-				SiteName:    "My Business",
-				SiteType:    SiteTypeBusiness,
-				Description: "A business site",
-				Audience:    "customers",
-			},
-			page: &PageSpec{
-				ID:   "service1",
-				Path: "content/services/consulting.md",
-			},
-			expectedTheme: "Ananke",
-			expectedChecks: []string{
-				"Ananke service",
-				"date (ISO 8601)",
-			},
-		},
-		{
-			name: "portfolio page",
-			plan: &SitePlan{
-				SiteName:    "My Portfolio",
-				SiteType:    SiteTypePortfolio,
-				Description: "A portfolio site",
-				Audience:    "employers",
-			},
-			page: &PageSpec{
-				ID:   "home",
-				Path: "content/_index.md",
-			},
-			expectedTheme: "Ananke",
-			expectedChecks: []string{
-				"Ananke page",
-			},
-		},
-		{
-			name: "portfolio project",
-			plan: &SitePlan{
-				SiteName:    "My Portfolio",
-				SiteType:    SiteTypePortfolio,
-				Description: "A portfolio site",
-				Audience:    "employers",
-			},
-			page: &PageSpec{
-				ID:   "project1",
-				Path: "content/projects/my-app.md",
-			},
-			expectedTheme: "Ananke",
-			expectedChecks: []string{
-				"Ananke project/portfolio entry",
-				"date (ISO 8601)",
 			},
 		},
 		{
@@ -173,10 +97,8 @@ func TestBuildSinglePageUserPrompt(t *testing.T) {
 				ID:   "home",
 				Path: "content/_index.md",
 			},
-			expectedTheme: "Book",
 			expectedChecks: []string{
-				"Hugo Book homepage",
-				"documentation landing page",
+				"docs",
 			},
 		},
 		{
@@ -191,9 +113,8 @@ func TestBuildSinglePageUserPrompt(t *testing.T) {
 				ID:   "docs-index",
 				Path: "content/docs/_index.md",
 			},
-			expectedTheme: "Book",
 			expectedChecks: []string{
-				"Hugo Book docs section index",
+				"content/docs/_index.md",
 			},
 		},
 		{
@@ -208,9 +129,8 @@ func TestBuildSinglePageUserPrompt(t *testing.T) {
 				ID:   "getting-started",
 				Path: "content/docs/intro/_index.md",
 			},
-			expectedTheme: "Book",
 			expectedChecks: []string{
-				"Hugo Book section index",
+				"content/docs/intro/_index.md",
 			},
 		},
 		{
@@ -225,10 +145,8 @@ func TestBuildSinglePageUserPrompt(t *testing.T) {
 				ID:   "installation",
 				Path: "content/docs/intro/installation.md",
 			},
-			expectedTheme: "Book",
 			expectedChecks: []string{
-				"Hugo Book documentation page",
-				"code examples",
+				"content/docs/intro/installation.md",
 			},
 		},
 		{
@@ -245,10 +163,9 @@ func TestBuildSinglePageUserPrompt(t *testing.T) {
 				Keywords:  []string{"about", "me", "developer"},
 				WordCount: 500,
 			},
-			expectedTheme: "Ananke",
 			expectedChecks: []string{
 				"about, me, developer",
-				"approximately 500 words",
+				"~500",
 			},
 		},
 		{
@@ -264,7 +181,6 @@ func TestBuildSinglePageUserPrompt(t *testing.T) {
 				Path:          "content/about.md",
 				InternalLinks: []string{"/contact/", "/posts/"},
 			},
-			expectedTheme: "Ananke",
 			expectedChecks: []string{
 				"/contact/, /posts/",
 			},
@@ -282,7 +198,6 @@ func TestBuildSinglePageUserPrompt(t *testing.T) {
 				Path:        "content/about.md",
 				Description: "This page should contain information about me.",
 			},
-			expectedTheme: "Ananke",
 			expectedChecks: []string{
 				"PAGE REQUIREMENTS",
 				"This page should contain information about me",
@@ -301,7 +216,6 @@ func TestBuildSinglePageUserPrompt(t *testing.T) {
 				ID:   "about",
 				Path: "content/about.md",
 			},
-			expectedTheme: "Ananke",
 			expectedChecks: []string{
 				"casual and friendly",
 			},
@@ -310,11 +224,7 @@ func TestBuildSinglePageUserPrompt(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			result := BuildSinglePageUserPrompt(tt.plan, tt.page)
-
-			if !strings.Contains(result, tt.expectedTheme) {
-				t.Errorf("expected theme %s in prompt", tt.expectedTheme)
-			}
+			result := BuildSinglePageUserPrompt(tt.plan, tt.page, nil)
 
 			for _, check := range tt.expectedChecks {
 				if !strings.Contains(result, check) {
@@ -335,8 +245,8 @@ func TestBuildUserPrompt(t *testing.T) {
 		if !strings.Contains(result, "Site is about technology") {
 			t.Error("expected context in prompt")
 		}
-		if !strings.Contains(result, "Additional Context") {
-			t.Error("expected 'Additional Context' label")
+		if !strings.Contains(result, "CONTEXT:") {
+			t.Error("expected 'CONTEXT:' label")
 		}
 	})
 
@@ -346,8 +256,8 @@ func TestBuildUserPrompt(t *testing.T) {
 		if !strings.Contains(result, "Create about page") {
 			t.Error("expected instruction in prompt")
 		}
-		if strings.Contains(result, "Additional Context") {
-			t.Error("should not include 'Additional Context' when empty")
+		if strings.Contains(result, "CONTEXT:") {
+			t.Error("should not include 'CONTEXT:' when empty")
 		}
 	})
 }
@@ -367,40 +277,11 @@ Some existing content here.`
 	if !strings.Contains(result, existingContent) {
 		t.Error("expected existing content in prompt")
 	}
-	if !strings.Contains(result, "---START OF FILE---") {
+	if !strings.Contains(result, "---START---") {
 		t.Error("expected file markers in prompt")
 	}
-	if !strings.Contains(result, "---END OF FILE---") {
+	if !strings.Contains(result, "---END---") {
 		t.Error("expected file markers in prompt")
-	}
-}
-
-func TestBuildSiteGenerationPrompt(t *testing.T) {
-	result := BuildSiteGenerationPrompt(
-		"My Blog",
-		"blog",
-		"Tech blog",
-		"developers",
-		"about, contact, posts",
-	)
-
-	if !strings.Contains(result, "My Blog") {
-		t.Error("expected site name in prompt")
-	}
-	if !strings.Contains(result, "blog") {
-		t.Error("expected site type in prompt")
-	}
-	if !strings.Contains(result, "Tech blog") {
-		t.Error("expected description in prompt")
-	}
-	if !strings.Contains(result, "developers") {
-		t.Error("expected audience in prompt")
-	}
-	if !strings.Contains(result, "about, contact, posts") {
-		t.Error("expected features in prompt")
-	}
-	if !strings.Contains(result, "===FILE:") {
-		t.Error("expected file format instruction in prompt")
 	}
 }
 
@@ -524,52 +405,16 @@ func TestSystemPrompts(t *testing.T) {
 		"SystemPromptSitePlanner": {
 			prompt: SystemPromptSitePlanner,
 			contains: []string{
-				"SITE PLANNER",
+				"SITE ARCHITECT",
 				"JSON",
 				"pages",
-			},
-		},
-		"SystemPromptSinglePageGenerator": {
-			prompt: SystemPromptSinglePageGenerator,
-			contains: []string{
-				"CONTENT GENERATOR",
-				"Markdown",
-				"frontmatter",
-			},
-		},
-		"SystemPromptContentGeneration": {
-			prompt: SystemPromptContentGeneration,
-			contains: []string{
-				"Hugo",
-				"draft: false",
 			},
 		},
 		"SystemPromptContentUpdate": {
 			prompt: SystemPromptContentUpdate,
 			contains: []string{
-				"update",
+				"UPDATE RULES",
 				"frontmatter",
-			},
-		},
-		"SystemPromptBlogPost": {
-			prompt: SystemPromptBlogPost,
-			contains: []string{
-				"BLOG POST",
-				"title",
-			},
-		},
-		"SystemPromptPageGeneration": {
-			prompt: SystemPromptPageGeneration,
-			contains: []string{
-				"HUGO PAGES",
-				"title",
-			},
-		},
-		"SystemPromptSiteGeneration": {
-			prompt: SystemPromptSiteGeneration,
-			contains: []string{
-				"Hugo site architect",
-				"===FILE:",
 			},
 		},
 	}
@@ -588,19 +433,55 @@ func TestSystemPrompts(t *testing.T) {
 	}
 }
 
-func TestSystemPromptBaseRules(t *testing.T) {
-	// The base rules should be included in prompts that use it
-	baseRulesContent := []string{
-		"GLOBAL RULES",
-		"Hugo static site",
-		"Markdown",
-		"frontmatter",
-		"draft: false",
+func TestPromptComponents(t *testing.T) {
+	// Test that core prompt components contain expected content
+	tests := []struct {
+		name     string
+		prompt   string
+		contains []string
+	}{
+		{
+			name:   "OutputFormatRules",
+			prompt: OutputFormatRules,
+			contains: []string{
+				"OUTPUT FORMAT",
+				"frontmatter",
+				"---",
+			},
+		},
+		{
+			name:   "YAMLSyntaxRules",
+			prompt: YAMLSyntaxRules,
+			contains: []string{
+				"YAML",
+				"double quotes",
+			},
+		},
+		{
+			name:   "ContentQualityRules",
+			prompt: ContentQualityRules,
+			contains: []string{
+				"Hook",
+				"call-to-action",
+			},
+		},
+		{
+			name:   "HugoRules",
+			prompt: HugoRules,
+			contains: []string{
+				"title",
+				"draft",
+			},
+		},
 	}
 
-	for _, content := range baseRulesContent {
-		if !strings.Contains(systemPromptBaseRules, content) {
-			t.Errorf("expected %q in systemPromptBaseRules", content)
-		}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			for _, expected := range tt.contains {
+				if !strings.Contains(tt.prompt, expected) {
+					t.Errorf("expected %q in %s", expected, tt.name)
+				}
+			}
+		})
 	}
 }

@@ -4,49 +4,6 @@ import (
 	"testing"
 )
 
-func TestConvertWikilinks(t *testing.T) {
-	tests := []struct {
-		name          string
-		input         string
-		attachmentDir string
-		expected      string
-	}{
-		{
-			name:          "Simple wikilink",
-			input:         "This is a [[test link]] to another page.",
-			attachmentDir: "images",
-			expected:      "This is a [test link]({{< relref \"test-link.md\" >}}) to another page.",
-		},
-		{
-			name:          "Wikilink with display text",
-			input:         "Check out [[My Page|this awesome page]]!",
-			attachmentDir: "images",
-			expected:      "Check out [this awesome page]({{< relref \"my-page.md\" >}})!",
-		},
-		{
-			name:          "Image attachment",
-			input:         "Here's an image: [[image.png]]",
-			attachmentDir: "images",
-			expected:      "Here's an image: ![image.png](/images/image.png)",
-		},
-		{
-			name:          "Image with display text",
-			input:         "Beautiful sunset: [[sunset.jpg|My sunset photo]]",
-			attachmentDir: "images",
-			expected:      "Beautiful sunset: ![My sunset photo](/images/sunset.jpg)",
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			result := convertWikilinks(tt.input, tt.attachmentDir)
-			if result != tt.expected {
-				t.Errorf("convertWikilinks() = %v, want %v", result, tt.expected)
-			}
-		})
-	}
-}
-
 func TestGenerateTitle(t *testing.T) {
 	tests := []struct {
 		name     string

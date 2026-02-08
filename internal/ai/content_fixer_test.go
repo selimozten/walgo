@@ -125,120 +125,6 @@ Post content.`,
 	}
 }
 
-func TestContentFixer_FixBusinessContent(t *testing.T) {
-	tests := []struct {
-		name           string
-		path           string
-		content        string
-		expectedChecks []string
-	}{
-		{
-			name: "home page",
-			path: "content/_index.md",
-			content: `---
-title: My Business
----
-
-Content here.`,
-			expectedChecks: []string{"heroHeading:", "heroSubHeading:", "heroBackground:"},
-		},
-		{
-			name: "service page",
-			path: "content/services/consulting.md",
-			content: `---
-title: Consulting
----
-
-Service content.`,
-			expectedChecks: []string{"heroHeading:", "featured:", "weight:"},
-		},
-		{
-			name: "homepage index",
-			path: "content/homepage/index.md",
-			content: `---
-title: Homepage
----
-
-Content.`,
-			expectedChecks: []string{"headless:"},
-		},
-		{
-			name: "homepage section",
-			path: "content/homepage/about.md",
-			content: `---
-title: About Section
----
-
-Content.`,
-			expectedChecks: []string{"weight:", "background:", "button:", "buttonLink:"},
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			fixer := NewContentFixer("", SiteTypeBusiness)
-			result, changed := fixer.fixBusinessContent(tt.path, tt.content)
-
-			if !changed {
-				t.Error("expected content to be changed")
-			}
-
-			for _, check := range tt.expectedChecks {
-				if !strings.Contains(result, check) {
-					t.Errorf("expected %q in result:\n%s", check, result)
-				}
-			}
-		})
-	}
-}
-
-func TestContentFixer_FixPortfolioContent(t *testing.T) {
-	tests := []struct {
-		name           string
-		path           string
-		content        string
-		expectedChecks []string
-	}{
-		{
-			name: "home page",
-			path: "content/_index.md",
-			content: `---
-title: My Portfolio
----
-
-Content.`,
-			expectedChecks: []string{"description:", "draft: false"},
-		},
-		{
-			name: "project page",
-			path: "content/projects/my-app.md",
-			content: `---
-title: My App
----
-
-Project content.`,
-			expectedChecks: []string{"description:", "date:", "draft: false"},
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			fixer := NewContentFixer("", SiteTypePortfolio)
-			result, changed := fixer.fixPortfolioContent(tt.path, tt.content)
-
-			if !changed {
-				t.Error("expected content to be changed")
-			}
-
-			for _, check := range tt.expectedChecks {
-				if !strings.Contains(result, check) {
-					t.Errorf("expected %q in result:\n%s", check, result)
-				}
-			}
-		})
-	}
-}
-
 func TestContentFixer_FixDocsContent(t *testing.T) {
 	tests := []struct {
 		name           string
@@ -697,99 +583,6 @@ func TestValidateBlogContent_MissingFiles(t *testing.T) {
 	}
 }
 
-func TestValidatePortfolioContent(t *testing.T) {
-	tempDir := t.TempDir()
-	contentDir := filepath.Join(tempDir, "content")
-	projectsDir := filepath.Join(contentDir, "projects")
-	os.MkdirAll(projectsDir, 0755)
-
-	// Create valid structure
-	os.WriteFile(filepath.Join(contentDir, "_index.md"), []byte("---\ntitle: Portfolio\ndescription: My portfolio\n---"), 0644)
-	os.WriteFile(filepath.Join(contentDir, "about.md"), []byte("---\ntitle: About\ndescription: About\n---"), 0644)
-	os.WriteFile(filepath.Join(contentDir, "contact.md"), []byte("---\ntitle: Contact\n---"), 0644)
-	os.WriteFile(filepath.Join(projectsDir, "_index.md"), []byte("---\ntitle: Projects\n---"), 0644)
-	os.WriteFile(filepath.Join(projectsDir, "project-1.md"), []byte("---\ntitle: Project 1\ndescription: A project\n---"), 0644)
-
-	issues := ValidatePortfolioContent(tempDir)
-
-	if len(issues) != 0 {
-		t.Errorf("expected no issues for valid portfolio, got: %v", issues)
-	}
-}
-
-func TestValidatePortfolioContent_MissingProjects(t *testing.T) {
-	tempDir := t.TempDir()
-	contentDir := filepath.Join(tempDir, "content")
-	projectsDir := filepath.Join(contentDir, "projects")
-	os.MkdirAll(projectsDir, 0755)
-
-	// Create structure without project files
-	os.WriteFile(filepath.Join(contentDir, "_index.md"), []byte("---\ntitle: Portfolio\ndescription: My portfolio\n---"), 0644)
-	os.WriteFile(filepath.Join(contentDir, "about.md"), []byte("---\ntitle: About\ndescription: About\n---"), 0644)
-	os.WriteFile(filepath.Join(contentDir, "contact.md"), []byte("---\ntitle: Contact\n---"), 0644)
-	os.WriteFile(filepath.Join(projectsDir, "_index.md"), []byte("---\ntitle: Projects\n---"), 0644)
-	// No project files!
-
-	issues := ValidatePortfolioContent(tempDir)
-
-	hasProjectsIssue := false
-	for _, issue := range issues {
-		if strings.Contains(issue, "No projects found") {
-			hasProjectsIssue = true
-		}
-	}
-
-	if !hasProjectsIssue {
-		t.Error("expected issue for missing projects")
-	}
-}
-
-func TestValidateBusinessContent(t *testing.T) {
-	tempDir := t.TempDir()
-	contentDir := filepath.Join(tempDir, "content")
-	servicesDir := filepath.Join(contentDir, "services")
-	homepageDir := filepath.Join(contentDir, "homepage")
-	os.MkdirAll(servicesDir, 0755)
-	os.MkdirAll(homepageDir, 0755)
-
-	// Create valid structure
-	os.WriteFile(filepath.Join(contentDir, "_index.md"), []byte("---\ntitle: Business\nheroHeading: Welcome\nheroSubHeading: Sub\n---"), 0644)
-	os.WriteFile(filepath.Join(contentDir, "about.md"), []byte("---\ntitle: About\nheroHeading: About\nheroSubHeading: Sub\n---"), 0644)
-	os.WriteFile(filepath.Join(contentDir, "contact.md"), []byte("---\ntitle: Contact\nheroHeading: Contact\nheroSubHeading: Sub\n---"), 0644)
-	os.WriteFile(filepath.Join(servicesDir, "_index.md"), []byte("---\ntitle: Services\nheroHeading: Services\nheroSubHeading: Sub\n---"), 0644)
-	os.WriteFile(filepath.Join(homepageDir, "index.md"), []byte("---\nheadless: true\n---"), 0644)
-	os.WriteFile(filepath.Join(homepageDir, "about.md"), []byte("---\ntitle: About Section\n---"), 0644)
-
-	issues := ValidateBusinessContent(tempDir)
-
-	if len(issues) != 0 {
-		t.Errorf("expected no issues for valid business site, got: %v", issues)
-	}
-}
-
-func TestValidateBusinessContent_MissingHeroFields(t *testing.T) {
-	tempDir := t.TempDir()
-	contentDir := filepath.Join(tempDir, "content")
-	servicesDir := filepath.Join(contentDir, "services")
-	homepageDir := filepath.Join(contentDir, "homepage")
-	os.MkdirAll(servicesDir, 0755)
-	os.MkdirAll(homepageDir, 0755)
-
-	// Create structure with missing hero fields
-	os.WriteFile(filepath.Join(contentDir, "_index.md"), []byte("---\ntitle: Business\n---"), 0644) // Missing hero fields
-	os.WriteFile(filepath.Join(contentDir, "about.md"), []byte("---\ntitle: About\n---"), 0644)
-	os.WriteFile(filepath.Join(contentDir, "contact.md"), []byte("---\ntitle: Contact\n---"), 0644)
-	os.WriteFile(filepath.Join(servicesDir, "_index.md"), []byte("---\ntitle: Services\n---"), 0644)
-	os.WriteFile(filepath.Join(homepageDir, "index.md"), []byte("---\nheadless: true\n---"), 0644)
-	os.WriteFile(filepath.Join(homepageDir, "about.md"), []byte("---\ntitle: About Section\n---"), 0644)
-
-	issues := ValidateBusinessContent(tempDir)
-
-	if len(issues) == 0 {
-		t.Error("expected issues for missing hero fields")
-	}
-}
-
 func TestValidateDocsContent(t *testing.T) {
 	tempDir := t.TempDir()
 	contentDir := filepath.Join(tempDir, "content")
@@ -883,10 +676,245 @@ Post content.`
 	}
 }
 
-func TestEnsureCoderFrontmatter_ChangeDraftTrue(t *testing.T) {
+func TestContentFixer_FixWhitepaperContent(t *testing.T) {
+	tests := []struct {
+		name           string
+		path           string
+		content        string
+		expectedChecks []string
+	}{
+		{
+			name: "root index",
+			path: "content/_index.md",
+			content: `---
+title: My Whitepaper
+---
+
+Content here.`,
+			expectedChecks: []string{"draft: false"},
+		},
+		{
+			name: "whitepaper section index",
+			path: "content/whitepaper/_index.md",
+			content: `---
+title: Whitepaper
+---
+
+Section index.`,
+			expectedChecks: []string{"draft: false"},
+		},
+		{
+			name: "whitepaper section page without weight",
+			path: "content/whitepaper/01-abstract.md",
+			content: `---
+title: Abstract
+---
+
+Abstract content.`,
+			expectedChecks: []string{"draft: false", "weight:"},
+		},
+		{
+			name: "whitepaper section page with draft true",
+			path: "content/whitepaper/03-problem.md",
+			content: `---
+title: Problem Statement
+draft: true
+weight: 3
+---
+
+Problem content.`,
+			expectedChecks: []string{"draft: false", "weight: 3"},
+		},
+		{
+			name: "appendix page",
+			path: "content/appendix/glossary.md",
+			content: `---
+title: Glossary
+---
+
+Glossary content.`,
+			expectedChecks: []string{"draft: false", "weight:"},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			fixer := NewContentFixer("", SiteTypeWhitepaper)
+			result, changed := fixer.fixWhitepaperContent(tt.path, tt.content)
+
+			if !changed {
+				t.Error("expected content to be changed")
+			}
+
+			for _, check := range tt.expectedChecks {
+				if !strings.Contains(result, check) {
+					t.Errorf("expected %q in result:\n%s", check, result)
+				}
+			}
+		})
+	}
+}
+
+func TestContentFixer_FixWhitepaperContent_NoChange(t *testing.T) {
+	fixer := NewContentFixer("", SiteTypeWhitepaper)
+
+	content := `---
+title: Abstract
+draft: false
+weight: 1
+---
+
+Complete content.`
+
+	_, changed := fixer.fixWhitepaperContent("content/whitepaper/01-abstract.md", content)
+	if changed {
+		t.Error("expected no change for already-valid whitepaper section")
+	}
+}
+
+func TestEnsureWhitepaperFrontmatter_SectionPage(t *testing.T) {
+	content := `---
+title: Introduction
+---
+
+Intro content.`
+
+	result, changed := ensureWhitepaperFrontmatter(content, "section-page")
+
+	if !changed {
+		t.Error("expected content to be changed")
+	}
+	if !strings.Contains(result, "draft: false") {
+		t.Error("draft: false should be added")
+	}
+	if !strings.Contains(result, "weight:") {
+		t.Error("weight should be added")
+	}
+}
+
+func TestEnsureWhitepaperFrontmatter_Home(t *testing.T) {
+	content := `---
+title: Home
+---
+
+Home content.`
+
+	result, changed := ensureWhitepaperFrontmatter(content, "home")
+
+	if !changed {
+		t.Error("expected content to be changed")
+	}
+	if !strings.Contains(result, "draft: false") {
+		t.Error("draft: false should be added")
+	}
+	// Home pages should NOT get weight
+	if strings.Contains(result, "weight:") {
+		t.Error("home page should not have weight")
+	}
+}
+
+func TestValidateWhitepaperContent(t *testing.T) {
+	tempDir := t.TempDir()
+	contentDir := filepath.Join(tempDir, "content")
+	wpDir := filepath.Join(contentDir, "whitepaper")
+	os.MkdirAll(wpDir, 0755)
+
+	// Create valid structure
+	os.WriteFile(filepath.Join(contentDir, "_index.md"), []byte("---\ntitle: My Project\n---"), 0644)
+	os.WriteFile(filepath.Join(wpDir, "_index.md"), []byte("---\ntitle: Whitepaper\n---"), 0644)
+	os.WriteFile(filepath.Join(wpDir, "01-abstract.md"), []byte("---\ntitle: Abstract\nweight: 1\ndraft: false\n---\nAbstract."), 0644)
+	os.WriteFile(filepath.Join(wpDir, "02-introduction.md"), []byte("---\ntitle: Introduction\nweight: 2\ndraft: false\n---\nIntro."), 0644)
+	os.WriteFile(filepath.Join(wpDir, "03-problem.md"), []byte("---\ntitle: Problem\nweight: 3\ndraft: false\n---\nProblem."), 0644)
+
+	issues := ValidateWhitepaperContent(tempDir)
+
+	if len(issues) != 0 {
+		t.Errorf("expected no issues for valid whitepaper, got: %v", issues)
+	}
+}
+
+func TestValidateWhitepaperContent_MissingFiles(t *testing.T) {
+	tempDir := t.TempDir()
+	contentDir := filepath.Join(tempDir, "content")
+	os.MkdirAll(contentDir, 0755)
+
+	// Only create root _index.md
+	os.WriteFile(filepath.Join(contentDir, "_index.md"), []byte("---\ntitle: Test\n---"), 0644)
+
+	issues := ValidateWhitepaperContent(tempDir)
+
+	hasWpIndexIssue := false
+	hasWpDirIssue := false
+	for _, issue := range issues {
+		if strings.Contains(issue, "whitepaper/_index.md") {
+			hasWpIndexIssue = true
+		}
+		if strings.Contains(issue, "whitepaper directory") {
+			hasWpDirIssue = true
+		}
+	}
+
+	if !hasWpIndexIssue {
+		t.Error("expected issue for missing whitepaper/_index.md")
+	}
+	if !hasWpDirIssue {
+		t.Error("expected issue for missing whitepaper directory")
+	}
+}
+
+func TestValidateWhitepaperContent_TooFewSections(t *testing.T) {
+	tempDir := t.TempDir()
+	contentDir := filepath.Join(tempDir, "content")
+	wpDir := filepath.Join(contentDir, "whitepaper")
+	os.MkdirAll(wpDir, 0755)
+
+	os.WriteFile(filepath.Join(contentDir, "_index.md"), []byte("---\ntitle: Test\n---"), 0644)
+	os.WriteFile(filepath.Join(wpDir, "_index.md"), []byte("---\ntitle: Whitepaper\n---"), 0644)
+	// Only one section
+	os.WriteFile(filepath.Join(wpDir, "01-abstract.md"), []byte("---\ntitle: Abstract\nweight: 1\n---\nAbstract."), 0644)
+
+	issues := ValidateWhitepaperContent(tempDir)
+
+	hasSectionCountIssue := false
+	for _, issue := range issues {
+		if strings.Contains(issue, "at least 2 sections") {
+			hasSectionCountIssue = true
+		}
+	}
+
+	if !hasSectionCountIssue {
+		t.Error("expected issue for too few sections")
+	}
+}
+
+func TestValidateWhitepaperContent_MissingWeight(t *testing.T) {
+	tempDir := t.TempDir()
+	contentDir := filepath.Join(tempDir, "content")
+	wpDir := filepath.Join(contentDir, "whitepaper")
+	os.MkdirAll(wpDir, 0755)
+
+	os.WriteFile(filepath.Join(contentDir, "_index.md"), []byte("---\ntitle: Test\n---"), 0644)
+	os.WriteFile(filepath.Join(wpDir, "_index.md"), []byte("---\ntitle: Whitepaper\n---"), 0644)
+	os.WriteFile(filepath.Join(wpDir, "01-abstract.md"), []byte("---\ntitle: Abstract\n---\nAbstract."), 0644)
+	os.WriteFile(filepath.Join(wpDir, "02-intro.md"), []byte("---\ntitle: Introduction\nweight: 2\n---\nIntro."), 0644)
+
+	issues := ValidateWhitepaperContent(tempDir)
+
+	hasWeightIssue := false
+	for _, issue := range issues {
+		if strings.Contains(issue, "weight") && strings.Contains(issue, "01-abstract") {
+			hasWeightIssue = true
+		}
+	}
+
+	if !hasWeightIssue {
+		t.Error("expected issue for missing weight in 01-abstract.md")
+	}
+}
+
+func TestEnsureAnankeFrontmatter_AddsDescriptionAndFeaturedImage(t *testing.T) {
 	content := `---
 title: My Page
-draft:true
 ---
 
 Page content.`
@@ -896,10 +924,10 @@ Page content.`
 	if !changed {
 		t.Error("expected content to be changed")
 	}
-	if strings.Contains(result, "draft:true") {
-		t.Error("draft should be changed to false")
+	if !strings.Contains(result, "description:") {
+		t.Error("description should be added")
 	}
-	if !strings.Contains(result, "draft: false") {
-		t.Error("draft: false should be present")
+	if !strings.Contains(result, "featured_image:") {
+		t.Error("featured_image should be added")
 	}
 }

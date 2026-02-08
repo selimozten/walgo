@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useMemo } from 'react';
 import {
     Zap, Workflow, Wallet, ChevronDown, Check, Plus, Database, Sparkles, Activity, Import as ImportIcon, Copy, AlertCircle, RefreshCw
 } from 'lucide-react';
@@ -60,6 +60,14 @@ export const Dashboard: React.FC<DashboardProps> = ({
     const accountDropdownRef = useRef<HTMLDivElement>(null);
 
     const currentNetwork = NETWORKS.find(n => n.id === walletInfo?.network) || NETWORKS[0];
+
+    const sortedAddressList = useMemo(() => {
+        return [...addressList].sort((a, b) => {
+            if (a === walletInfo?.address) return -1;
+            if (b === walletInfo?.address) return 1;
+            return 0;
+        });
+    }, [addressList, walletInfo?.address]);
 
     // Close dropdowns when clicking outside
     useEffect(() => {
@@ -224,7 +232,7 @@ export const Dashboard: React.FC<DashboardProps> = ({
                                     whileTap="tap"
                                 >
                                     <span className="text-white">
-                                        {walletInfo?.address.slice(0, 8)}...{walletInfo?.address.slice(-6)}
+                                        {walletInfo?.address?.slice(0, 8)}...{walletInfo?.address?.slice(-6)}
                                     </span>
                                     <ChevronDown size={14} className={`transition-transform ${showAccountMenu ? 'rotate-180' : ''}`} />
                                 </motion.button>
@@ -598,12 +606,7 @@ export const Dashboard: React.FC<DashboardProps> = ({
                     )}
                     <div className="h-px bg-white/10 my-1" />
                     <div className="max-h-64 overflow-y-auto">
-                        {[...addressList].sort((a, b) => {
-                            // Put selected address first
-                            if (a === walletInfo?.address) return -1;
-                            if (b === walletInfo?.address) return 1;
-                            return 0;
-                        }).map((address) => (
+                        {sortedAddressList.map((address) => (
                             <motion.button
                                 key={address}
                                 onClick={() => {

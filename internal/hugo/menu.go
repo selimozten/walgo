@@ -1,7 +1,6 @@
 package hugo
 
 import (
-	"encoding/json"
 	"fmt"
 	"os"
 	"sort"
@@ -70,18 +69,43 @@ func RenderMenuTOML(items []MenuItem) string {
 // Hugo Configuration File Management
 // =============================================================================
 
+// hasExistingMenuSection checks whether the TOML content already contains a
+// [menu] or [[menu.*]] section outside of WALGO-managed markers.
+func hasExistingMenuSection(content string) bool {
+	// Strip WALGO block so we only inspect user-authored content
+	stripped := content
+	if start := strings.Index(stripped, menuBlockStart); start >= 0 {
+		if end := strings.Index(stripped, menuBlockEnd); end > start {
+			stripped = stripped[:start] + stripped[end+len(menuBlockEnd):]
+		}
+	}
+
+	for _, line := range strings.Split(stripped, "\n") {
+		trimmed := strings.TrimSpace(line)
+		if strings.HasPrefix(trimmed, "#") {
+			continue
+		}
+		if trimmed == "[menu]" || strings.HasPrefix(trimmed, "[[menu.") {
+			return true
+		}
+	}
+	return false
+}
+
 // UpsertMenuBlockInHugoTOML writes menu TOML into hugo.toml using markers.
 //
 // This function implements an "upsert" (insert-or-update) pattern:
 //   - If a WALGO MENU block already exists: replace it with new content
-//   - If no block exists: append a new block to the end of the file
+//   - If the config already contains a [menu] or [[menu.*]] section (not
+//     managed by WALGO): skip — the existing menu is preserved untouched
+//   - Otherwise: append a new block to the end of the file
 //
 // Parameters:
 //   - hugoTomlPath: Path to the Hugo configuration file (hugo.toml or config.toml)
 //   - menuTOML: Menu TOML content to write (excluding block markers)
 //
 // Returns:
-//   - nil on success
+//   - nil on success (including the "skip" case — no error when menu already exists)
 //   - error on file I/O failure (wrapped with context about what operation failed)
 //
 // Note: The function preserves all existing content in hugo.toml outside the menu block.
@@ -97,10 +121,24 @@ func UpsertMenuBlockInHugoTOML(hugoTomlPath string, menuTOML string) error {
 
 	// Replace existing block if present, otherwise append
 	if strings.Contains(content, menuBlockStart) && strings.Contains(content, menuBlockEnd) {
-		before := strings.Split(content, menuBlockStart)[0]
-		after := strings.Split(content, menuBlockEnd)[1]
-		content = before + block + after
+		startIdx := strings.Index(content, menuBlockStart)
+		endIdx := strings.Index(content, menuBlockEnd)
+		if startIdx >= 0 && endIdx > startIdx {
+			before := content[:startIdx]
+			after := content[endIdx+len(menuBlockEnd):]
+			content = before + block + after
+		} else {
+			// Markers in unexpected order; append new block instead
+			if !strings.HasSuffix(content, "\n") {
+				content += "\n"
+			}
+			content += "\n" + block
+		}
 	} else {
+		// No WALGO block — skip if config already has a menu section
+		if hasExistingMenuSection(content) {
+			return nil
+		}
 		// Ensure proper newline before appending
 		if !strings.HasSuffix(content, "\n") {
 			content += "\n"
@@ -127,17 +165,9 @@ func UpsertMenuBlockInHugoTOML(hugoTomlPath string, menuTOML string) error {
 //   - Posts: included if any content/posts/ pages exist
 //   - About/Contact: included if content/about.md and content/contact.md exist
 //
-// Portfolio sites: Home → Projects → About → Contact
-//   - Projects: uses title from content/projects/_index.md if available
-//   - About/Contact: included if content/about.md and content/contact.md exist
-//
 // Docs sites: Home → Docs → Contact (optional)
 //   - Docs: minimal top-level entry; sidebar handles detailed navigation
 //   - Contact: only included if explicitly present
-//
-// Business sites: Home → Services → About → Contact
-//   - Services: uses title from content/services/_index.md if available
-//   - About/Contact: included if content/about.md and content/contact.md exist
 //
 // Design principles:
 //   - Only includes items that exist in the plan (prevents 404 links)
@@ -181,9 +211,11 @@ func BuildProfessionalMainMenuFromPlan(plan *ai.SitePlan) ([]MenuItem, error) {
 		return fallback
 	}
 
-	// Initialize with Home page (always present)
+	// Initialize with Home page (always present).
+	// Always use "Home" as the label — the page title (often the site name)
+	// is too long and duplicates the site branding already shown by the theme.
 	items := []MenuItem{
-		{Name: titleFor("content/_index.md", "Home"), PageRef: "/", Weight: 10},
+		{Name: "Home", PageRef: "/", Weight: 10},
 	}
 
 	// Add type-specific menu items
@@ -202,30 +234,12 @@ func BuildProfessionalMainMenuFromPlan(plan *ai.SitePlan) ([]MenuItem, error) {
 		addIfExists(MenuItem{Name: "Contact", PageRef: "/contact", Weight: 40},
 			pathExists("content/contact.md"))
 
-	case ai.SiteTypePortfolio:
-		projectsTitle := titleFor("content/projects/_index.md", "Projects")
-		addIfExists(MenuItem{Name: projectsTitle, PageRef: "/projects", Weight: 20},
-			hasPrefix("content/projects/"))
-		addIfExists(MenuItem{Name: "About", PageRef: "/about", Weight: 30},
-			pathExists("content/about.md"))
-		addIfExists(MenuItem{Name: "Contact", PageRef: "/contact", Weight: 40},
-			pathExists("content/contact.md"))
-
 	case ai.SiteTypeDocs:
 		// Docs sites keep top menu minimal - sidebar handles detailed navigation
 		docsTitle := titleFor("content/docs/_index.md", "Docs")
 		addIfExists(MenuItem{Name: docsTitle, PageRef: "/docs", Weight: 20},
 			pathExists("content/docs/_index.md") || hasPrefix("content/docs/"))
 		// Contact is optional for docs sites
-		addIfExists(MenuItem{Name: "Contact", PageRef: "/contact", Weight: 40},
-			pathExists("content/contact.md"))
-
-	case ai.SiteTypeBusiness:
-		servicesTitle := titleFor("content/services/_index.md", "Services")
-		addIfExists(MenuItem{Name: servicesTitle, PageRef: "/services", Weight: 20},
-			pathExists("content/services/_index.md") || hasPrefix("content/services/"))
-		addIfExists(MenuItem{Name: "About", PageRef: "/about", Weight: 30},
-			pathExists("content/about.md"))
 		addIfExists(MenuItem{Name: "Contact", PageRef: "/contact", Weight: 40},
 			pathExists("content/contact.md"))
 
@@ -260,50 +274,6 @@ func BuildProfessionalMainMenuFromPlan(plan *ai.SitePlan) ([]MenuItem, error) {
 	}
 
 	return deduped, nil
-}
-
-// =============================================================================
-// High-Level Convenience Functions
-// =============================================================================
-
-// ApplyMenuFromPlan reads a plan JSON file, builds the menu, and writes it to hugo.toml.
-// This is a convenience wrapper for CLI commands that have a plan file path.
-//
-// Parameters:
-//   - planPath: Path to plan.json file
-//   - hugoTomlPath: Path to hugo.toml configuration file
-//
-// Returns:
-//   - nil on success
-//   - error wrapped with context about what operation failed (read/parse/write)
-//
-// Example:
-//
-//	err := ApplyMenuFromPlan(".walgo/plan.json", "hugo.toml")
-//	if err != nil {
-//	    log.Fatal(err)
-//	}
-func ApplyMenuFromPlan(planPath, hugoTomlPath string) error {
-	// Read and parse plan file
-	planBytes, err := os.ReadFile(planPath)
-	if err != nil {
-		return fmt.Errorf("failed to read plan from %s: %w", planPath, err)
-	}
-
-	var plan ai.SitePlan
-	if err := json.Unmarshal(planBytes, &plan); err != nil {
-		return fmt.Errorf("failed to parse plan from %s: %w", planPath, err)
-	}
-
-	// Build and render menu
-	items, err := BuildProfessionalMainMenuFromPlan(&plan)
-	if err != nil {
-		return err
-	}
-	menuTOML := RenderMenuTOML(items)
-
-	// Write to Hugo config
-	return UpsertMenuBlockInHugoTOML(hugoTomlPath, menuTOML)
 }
 
 // ApplyMenuFromSitePlan builds and applies menu configuration from a SitePlan object.

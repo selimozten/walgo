@@ -133,10 +133,10 @@ hugo:
 		}
 
 		// Execute import with non-existent vault
-		output, err := executeCommand(rootCmd, "import", "/nonexistent/vault/path")
-		// Should fail when vault path doesn't exist
-		_ = err
-		_ = output
+		_, err := executeCommand(rootCmd, "import", "/nonexistent/vault/path")
+		if err == nil {
+			t.Error("Expected error for non-existent vault path")
+		}
 	})
 
 	t.Run("Import with file instead of directory", func(t *testing.T) {
@@ -164,10 +164,10 @@ hugo:
 		}
 
 		// Execute import with file path
-		output, err := executeCommand(rootCmd, "import", vaultFile)
-		// Should fail when vault path is a file
-		_ = err
-		_ = output
+		_, err := executeCommand(rootCmd, "import", vaultFile)
+		if err == nil {
+			t.Error("Expected error when vault path is a file")
+		}
 	})
 
 	t.Run("Import without config file", func(t *testing.T) {
@@ -185,11 +185,10 @@ hugo:
 		}
 
 		// Execute import without config
-		output, err := executeCommand(rootCmd, "import", vaultDir)
+		_, err := executeCommand(rootCmd, "import", vaultDir)
 		if err == nil {
-			t.Log("Expected error when no config file exists")
+			t.Error("Expected error when no config file exists")
 		}
-		_ = output
 	})
 
 	t.Run("Import with dry-run flag", func(t *testing.T) {

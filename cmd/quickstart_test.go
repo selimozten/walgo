@@ -146,10 +146,10 @@ func TestQuickstartCommandExecution(t *testing.T) {
 		defer func() { _ = os.Chdir(originalWd) }()
 
 		// Execute quickstart with invalid site name
-		// The test validates the command handles invalid input
-		output, err := executeCommand(rootCmd, "quickstart", "my site with spaces")
-		_ = err
-		_ = output
+		_, err := executeCommand(rootCmd, "quickstart", "my site with spaces")
+		if err == nil {
+			t.Error("Expected error for invalid site name with spaces")
+		}
 	})
 
 	t.Run("Quickstart with special characters", func(t *testing.T) {
@@ -161,10 +161,10 @@ func TestQuickstartCommandExecution(t *testing.T) {
 		defer func() { _ = os.Chdir(originalWd) }()
 
 		// Execute quickstart with special characters
-		// The test validates the command handles invalid input
-		output, err := executeCommand(rootCmd, "quickstart", "my@site!")
-		_ = err
-		_ = output
+		_, err := executeCommand(rootCmd, "quickstart", "my@site!")
+		if err == nil {
+			t.Error("Expected error for invalid site name with special characters")
+		}
 	})
 
 }

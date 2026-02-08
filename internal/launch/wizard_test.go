@@ -346,8 +346,9 @@ func TestProjectDetailsDefaults(t *testing.T) {
 		if !strings.HasPrefix(DefaultWalgoLogoURL, "https://") {
 			t.Error("DefaultWalgoLogoURL should be a valid HTTPS URL")
 		}
-		if !strings.Contains(DefaultWalgoLogoURL, "github") {
-			t.Error("DefaultWalgoLogoURL should be hosted on GitHub")
+		// Check for GitHub hosting - either direct github.com or jsdelivr CDN (uses "gh" for GitHub)
+		if !strings.Contains(DefaultWalgoLogoURL, "github") && !strings.Contains(DefaultWalgoLogoURL, "jsdelivr.net/gh/") {
+			t.Error("DefaultWalgoLogoURL should be hosted on GitHub or jsdelivr CDN")
 		}
 	})
 

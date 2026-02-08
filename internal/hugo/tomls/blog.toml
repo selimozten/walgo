@@ -24,6 +24,10 @@ disableKinds = ["taxonomy", "term"]
 [minify]
   disableXML = true
   minifyOutput = true
+  # ⚠ Do NOT enable CSS minification — Hugo's minifier (tdewolff/minify) breaks
+  # var() spacing in multi-value properties (e.g. "var(--x) 1fr" → "var(--x)1fr").
+  # The walgo optimizer handles CSS minification correctly.
+  disableCSS = true
 
 [markup]
   [markup.goldmark.renderer]

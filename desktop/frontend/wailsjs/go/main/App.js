@@ -78,6 +78,10 @@ export function GetAIConfig() {
   return window['go']['main']['App']['GetAIConfig']();
 }
 
+export function GetAIProgress() {
+  return window['go']['main']['App']['GetAIProgress']();
+}
+
 export function GetAddressList() {
   return window['go']['main']['App']['GetAddressList']();
 }
@@ -92,6 +96,10 @@ export function GetDefaultSitesDir() {
 
 export function GetFolderStats(arg1) {
   return window['go']['main']['App']['GetFolderStats'](arg1);
+}
+
+export function GetInstalledThemes(arg1) {
+  return window['go']['main']['App']['GetInstalledThemes'](arg1);
 }
 
 export function GetProject(arg1) {
@@ -128,6 +136,10 @@ export function ImportObsidian(arg1) {
 
 export function InitSite(arg1, arg2) {
   return window['go']['main']['App']['InitSite'](arg1, arg2);
+}
+
+export function InstallTheme(arg1) {
+  return window['go']['main']['App']['InstallTheme'](arg1);
 }
 
 export function LaunchWizard(arg1) {
@@ -216,6 +228,10 @@ export function UpdateAIConfig(arg1) {
 
 export function UpdateContent(arg1) {
   return window['go']['main']['App']['UpdateContent'](arg1);
+}
+
+export function UpdateSite(arg1) {
+  return window['go']['main']['App']['UpdateSite'](arg1);
 }
 
 export function UpdateTools(arg1) {

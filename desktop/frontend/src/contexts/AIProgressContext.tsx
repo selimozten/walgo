@@ -1,5 +1,5 @@
-import React, { createContext, useContext, useState, useEffect } from "react";
-import { EventsOn, EventsOff } from "../../wailsjs/runtime/runtime";
+import React, { createContext, useContext, useState, useEffect, useRef, useCallback } from "react";
+import { GetAIProgress } from "../../wailsjs/go/main/App";
 
 interface AIProgressState {
   isActive: boolean;
@@ -12,15 +12,24 @@ interface AIProgressState {
   progress: number;
 }
 
+interface AICompleteEvent {
+  success?: boolean;
+  sitePath?: string;
+  totalPages?: number;
+  filesCreated?: number;
+  error?: string;
+}
+
 interface AIProgressContextType {
   progressState: AIProgressState;
   isModalOpen: boolean;
   isMinimized: boolean;
   startProgress: (siteName: string) => void;
-  completeProgress: () => void;
   openModal: () => void;
   closeModal: () => void;
   toggleMinimize: () => void;
+  completionResult: AICompleteEvent | null;
+  clearCompletionResult: () => void;
 }
 
 const AIProgressContext = createContext<AIProgressContextType | undefined>(
@@ -51,45 +60,88 @@ export const AIProgressProvider: React.FC<{ children: React.ReactNode }> = ({
 
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [isMinimized, setIsMinimized] = useState(false);
+  const [completionResult, setCompletionResult] = useState<AICompleteEvent | null>(null);
+  const [polling, setPolling] = useState(false);
+  const autoCloseTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  // Listen for progress events globally
+  // Poll GetAIProgress() when polling is true
   useEffect(() => {
-    const handleProgress = (data: any) => {
-      setProgressState((prev) => {
-        const updates: Partial<AIProgressState> = { isActive: true };
+    if (!polling) return;
 
-        if (data.phase === "planning") {
-          updates.phase = "Planning site structure...";
-        } else if (data.phase === "generating") {
-          updates.phase = "Generating content...";
+    const intervalId = setInterval(async () => {
+      try {
+        const data = await GetAIProgress();
+
+        if (data.complete) {
+          // Pipeline finished — stop polling and handle completion
+          setPolling(false);
+
+          setCompletionResult({
+            success: data.success,
+            sitePath: data.sitePath,
+            totalPages: data.totalPages,
+            filesCreated: data.filesCreated,
+            error: data.error,
+          });
+
+          setProgressState((prev) => ({
+            ...prev,
+            isActive: false,
+            phase: "Completed!",
+          }));
+
+          // Auto-close after 2 seconds
+          if (autoCloseTimerRef.current) {
+            clearTimeout(autoCloseTimerRef.current);
+          }
+          autoCloseTimerRef.current = setTimeout(() => {
+            setIsModalOpen(false);
+            setIsMinimized(false);
+            autoCloseTimerRef.current = null;
+          }, 2000);
+
+          return;
         }
 
-        if (data.message) {
-          updates.message = data.message;
+        if (data.isActive) {
+          setProgressState((prev) => {
+            const updates: Partial<AIProgressState> = { isActive: true };
+
+            if (data.phase === "planning") {
+              updates.phase = "Planning site structure...";
+            } else if (data.phase === "generating") {
+              updates.phase = "Generating content...";
+            } else if (data.phase === "completed") {
+              updates.phase = "Finishing up...";
+            }
+
+            if (data.message) {
+              updates.message = data.message;
+            }
+
+            if (data.pagePath) {
+              updates.currentFile = data.pagePath;
+            }
+
+            if (data.current !== undefined && data.total !== undefined) {
+              updates.current = data.current;
+              updates.total = data.total;
+              updates.progress = data.total > 0 ? data.current / data.total : 0;
+            }
+
+            return { ...prev, ...updates };
+          });
         }
+      } catch {
+        // Ignore poll errors — will retry on next interval
+      }
+    }, 500);
 
-        if (data.pagePath) {
-          updates.currentFile = data.pagePath;
-        }
+    return () => clearInterval(intervalId);
+  }, [polling]);
 
-        if (data.current !== undefined && data.total !== undefined) {
-          updates.current = data.current;
-          updates.total = data.total;
-          updates.progress = data.total > 0 ? data.current / data.total : 0;
-        }
-
-        return { ...prev, ...updates };
-      });
-    };
-
-    EventsOn("ai:progress", handleProgress);
-
-    return () => {
-      EventsOff("ai:progress");
-    };
-  }, []);
-
-  const startProgress = (siteName: string) => {
+  const startProgress = useCallback((siteName: string) => {
+    setCompletionResult(null);
     setProgressState({
       isActive: true,
       siteName,
@@ -102,37 +154,37 @@ export const AIProgressProvider: React.FC<{ children: React.ReactNode }> = ({
     });
     setIsModalOpen(true);
     setIsMinimized(false);
-  };
+    setPolling(true);
+  }, []);
 
-  const completeProgress = () => {
-    setProgressState((prev) => ({
-      ...prev,
-      isActive: false,
-      phase: "Completed!",
-    }));
-    // Auto-close after 2 seconds
-    setTimeout(() => {
-      setIsModalOpen(false);
-      setIsMinimized(false);
-    }, 2000);
-  };
+  const clearCompletionResult = useCallback(() => {
+    setCompletionResult(null);
+  }, []);
 
-  const openModal = () => {
+  // Clean up timers on unmount
+  useEffect(() => {
+    return () => {
+      if (autoCloseTimerRef.current) {
+        clearTimeout(autoCloseTimerRef.current);
+      }
+    };
+  }, []);
+
+  const openModal = useCallback(() => {
     setIsModalOpen(true);
     setIsMinimized(false);
-  };
+  }, []);
 
-  const closeModal = () => {
+  const closeModal = useCallback(() => {
     if (progressState.isActive) {
-      // If still in progress, minimize instead of close
       setIsMinimized(true);
       setIsModalOpen(false);
     } else {
       setIsModalOpen(false);
     }
-  };
+  }, [progressState.isActive]);
 
-  const toggleMinimize = () => {
+  const toggleMinimize = useCallback(() => {
     if (isModalOpen) {
       setIsMinimized(true);
       setIsModalOpen(false);
@@ -140,7 +192,7 @@ export const AIProgressProvider: React.FC<{ children: React.ReactNode }> = ({
       setIsMinimized(false);
       setIsModalOpen(true);
     }
-  };
+  }, [isModalOpen]);
 
   return (
     <AIProgressContext.Provider
@@ -149,10 +201,11 @@ export const AIProgressProvider: React.FC<{ children: React.ReactNode }> = ({
         isModalOpen,
         isMinimized,
         startProgress,
-        completeProgress,
         openModal,
         closeModal,
         toggleMinimize,
+        completionResult,
+        clearCompletionResult,
       }}
     >
       {children}

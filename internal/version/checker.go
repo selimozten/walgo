@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	neturl "net/url"
 	"regexp"
 	"strconv"
 	"strings"
@@ -134,7 +135,8 @@ func GetHugoVersion() (currentVersion string, isExtended bool, err error) {
 
 // getLatestGitHubRelease fetches the latest release version from GitHub
 func getLatestGitHubRelease(owner, repo string) (string, error) {
-	url := fmt.Sprintf("https://api.github.com/repos/%s/%s/releases/latest", owner, repo)
+	url := fmt.Sprintf("https://api.github.com/repos/%s/%s/releases/latest",
+		neturl.PathEscape(owner), neturl.PathEscape(repo))
 
 	client := &http.Client{Timeout: 10 * time.Second}
 	req, err := http.NewRequest("GET", url, nil)

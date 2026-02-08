@@ -7,10 +7,30 @@ import (
 	"fmt"
 	"os"
 	"os/exec"
+	"runtime"
 	"strconv"
 	"strings"
 	"syscall"
 )
+
+// hideWindow is a no-op on Unix systems (no console window issue)
+func hideWindow(cmd *exec.Cmd) {
+	// Unix systems don't have the console window issue
+}
+
+// openFileExplorer opens a path in the system file manager
+func openFileExplorer(path string) error {
+	var cmd *exec.Cmd
+
+	switch runtime.GOOS {
+	case "darwin":
+		cmd = exec.Command("open", path)
+	default: // linux and others
+		cmd = exec.Command("xdg-open", path)
+	}
+
+	return cmd.Start() // Use Start() so we don't wait for file manager to close
+}
 
 // killExistingHugoProcesses kills any existing Hugo serve processes (Unix/Linux/macOS)
 func killExistingHugoProcesses() error {
@@ -25,7 +45,7 @@ func killExistingHugoProcesses() error {
 	var killedPIDs []int
 
 	for _, line := range lines {
-		if strings.Contains(line, "hugo") && strings.Contains(line, "server") {
+		if strings.Contains(line, "hugo server") || strings.Contains(line, "hugo serve") {
 			fields := strings.Fields(line)
 			if len(fields) < 2 {
 				continue

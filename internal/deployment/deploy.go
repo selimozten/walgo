@@ -15,6 +15,7 @@ import (
 	"github.com/selimozten/walgo/internal/projects"
 	"github.com/selimozten/walgo/internal/sui"
 	"github.com/selimozten/walgo/internal/ui"
+	"github.com/selimozten/walgo/internal/walrus"
 )
 
 // DeploymentOptions contains all options for deployment
@@ -39,12 +40,15 @@ type DeploymentOptions struct {
 
 // DeploymentResult contains the result of a deployment
 type DeploymentResult struct {
-	Success      bool
-	ObjectID     string
-	IsUpdate     bool
-	IsNewProject bool
-	SiteSize     int64
-	Error        error
+	Success           bool
+	ObjectID          string
+	IsUpdate          bool
+	IsNewProject      bool
+	SiteSize          int64
+	Error             error
+	ActualGasSUI      float64 // Actual SUI gas cost from blockchain
+	ActualWAL         float64 // Actual WAL spent from blockchain balance changes
+	TransactionDigest string  // Transaction digest for reference
 }
 
 // PerformDeployment handles the complete site deployment workflow
@@ -180,9 +184,7 @@ func PerformDeployment(ctx context.Context, opts DeploymentOptions) (*Deployment
 		result.IsUpdate = true
 		if !opts.Quiet {
 			fmt.Printf("  %s This site was already deployed - will UPDATE existing site\n", icons.Info)
-			if opts.ForceNew {
-				fmt.Printf("  %s To deploy as new site instead, use: --force-new\n", icons.Lightbulb)
-			}
+			fmt.Printf("  %s To deploy as new site instead, use: --force-new\n", icons.Lightbulb)
 		}
 	}
 
@@ -250,6 +252,11 @@ func PerformDeployment(ctx context.Context, opts DeploymentOptions) (*Deployment
 		return result, fmt.Errorf("deployment failed: %w", err)
 	}
 
+	if output == nil {
+		result.Error = fmt.Errorf("deployment failed: deployer returned no result")
+		return result, result.Error
+	}
+
 	if !output.Success || output.ObjectID == "" {
 		result.Error = fmt.Errorf("deployment failed: no object ID returned")
 		return result, result.Error
@@ -258,8 +265,38 @@ func PerformDeployment(ctx context.Context, opts DeploymentOptions) (*Deployment
 	result.Success = true
 	result.ObjectID = output.ObjectID
 
+	// Get wallet address and network for gas query
+	queryWalletAddr := opts.WalletAddr
+	queryNetwork := opts.Network
+	if queryWalletAddr == "" {
+		queryWalletAddr, _ = sui.GetActiveAddress()
+	}
+	if queryNetwork == "" {
+		queryNetwork, _ = sui.GetActiveEnv()
+	}
+
+	// Query actual SUI gas cost from blockchain
+	if queryWalletAddr != "" && queryNetwork != "" {
+		gasInfo, err := walrus.GetLatestTransactionGas(queryWalletAddr, queryNetwork)
+		if err != nil {
+			if !opts.Quiet {
+				fmt.Fprintf(os.Stderr, "%s Warning: Could not fetch actual gas cost: %v\n", icons.Warning, err)
+			}
+		} else {
+			result.ActualGasSUI = gasInfo.TotalGasSUI
+			result.ActualWAL = gasInfo.TotalWAL
+			result.TransactionDigest = gasInfo.Digest
+		}
+	}
+
 	if !opts.Quiet {
 		fmt.Printf("  %s Deployment completed in %v\n", icons.Check, time.Since(uploadStart).Round(time.Second))
+		// Display actual costs
+		if result.ActualWAL > 0 && result.ActualGasSUI > 0 {
+			fmt.Printf("  %s Cost: %.6f WAL + %.6f SUI (tx: %s)\n", icons.Info, result.ActualWAL, result.ActualGasSUI, result.TransactionDigest)
+		} else if result.ActualGasSUI > 0 {
+			fmt.Printf("  %s Gas cost: %.6f SUI (tx: %s)\n", icons.Info, result.ActualGasSUI, result.TransactionDigest)
+		}
 	}
 
 	// Update cache with deployment info
@@ -367,6 +404,24 @@ func PerformDeployment(ctx context.Context, opts DeploymentOptions) (*Deployment
 				existingProj.Epochs = opts.Epochs
 				existingProj.LastDeployAt = time.Now()
 
+				// Use actual costs from blockchain query (balance changes)
+				// Format: "X.XXXXXX WAL + Y.YYYYYY SUI"
+				var gasFee string
+				if result.ActualGasSUI > 0 || result.ActualWAL > 0 {
+					// We have actual costs from blockchain
+					if result.ActualWAL > 0 && result.ActualGasSUI > 0 {
+						gasFee = fmt.Sprintf("%.6f WAL + %.6f SUI", result.ActualWAL, result.ActualGasSUI)
+					} else if result.ActualWAL > 0 {
+						gasFee = fmt.Sprintf("%.6f WAL", result.ActualWAL)
+					} else {
+						gasFee = fmt.Sprintf("%.6f SUI", result.ActualGasSUI)
+					}
+				} else {
+					// Fallback to estimated gas fee
+					gasFee = projects.EstimateGasFeeWithEpochs(network, siteSize, opts.Epochs)
+				}
+				existingProj.GasFee = gasFee
+
 				// Update metadata if provided
 				if opts.Description != "" {
 					existingProj.Description = opts.Description
@@ -378,14 +433,13 @@ func PerformDeployment(ctx context.Context, opts DeploymentOptions) (*Deployment
 				if err := pm.UpdateProject(existingProj); err != nil {
 					fmt.Fprintf(os.Stderr, "%s Warning: Failed to update project: %v\n", icons.Warning, err)
 				} else {
-					// Record the deployment with epoch-aware cost estimation
-					estimatedGas := projects.EstimateGasFeeWithEpochs(network, siteSize, opts.Epochs)
+					// Record the deployment with actual or estimated cost
 					deployment := &projects.DeploymentRecord{
 						ProjectID: existingProj.ID,
 						ObjectID:  output.ObjectID,
 						Network:   network,
 						Epochs:    opts.Epochs,
-						GasFee:    estimatedGas,
+						GasFee:    gasFee,
 						Success:   true,
 					}
 					if err := pm.RecordDeployment(deployment); err != nil {
@@ -410,6 +464,23 @@ func PerformDeployment(ctx context.Context, opts DeploymentOptions) (*Deployment
 					category = "website"
 				}
 
+				// Use actual costs from blockchain query (balance changes)
+				// Format: "X.XXXXXX WAL + Y.YYYYYY SUI"
+				var gasFee string
+				if result.ActualGasSUI > 0 || result.ActualWAL > 0 {
+					// We have actual costs from blockchain
+					if result.ActualWAL > 0 && result.ActualGasSUI > 0 {
+						gasFee = fmt.Sprintf("%.6f WAL + %.6f SUI", result.ActualWAL, result.ActualGasSUI)
+					} else if result.ActualWAL > 0 {
+						gasFee = fmt.Sprintf("%.6f WAL", result.ActualWAL)
+					} else {
+						gasFee = fmt.Sprintf("%.6f SUI", result.ActualGasSUI)
+					}
+				} else {
+					// Fallback to estimated gas fee
+					gasFee = projects.EstimateGasFeeWithEpochs(network, siteSize, opts.Epochs)
+				}
+
 				project := &projects.Project{
 					Name:        projectName,
 					Category:    category,
@@ -417,6 +488,7 @@ func PerformDeployment(ctx context.Context, opts DeploymentOptions) (*Deployment
 					ObjectID:    output.ObjectID,
 					WalletAddr:  walletAddr,
 					Epochs:      opts.Epochs,
+					GasFee:      gasFee,
 					SitePath:    opts.SitePath,
 					Description: opts.Description,
 					ImageURL:    opts.ImageURL,
@@ -425,14 +497,13 @@ func PerformDeployment(ctx context.Context, opts DeploymentOptions) (*Deployment
 				if err := pm.CreateProject(project); err != nil {
 					fmt.Fprintf(os.Stderr, "%s Warning: Failed to create project: %v\n", icons.Warning, err)
 				} else {
-					// Record the deployment with epoch-aware cost estimation
-					estimatedGas := projects.EstimateGasFeeWithEpochs(network, siteSize, opts.Epochs)
+					// Record the deployment with actual or estimated cost
 					deployment := &projects.DeploymentRecord{
 						ProjectID: project.ID,
 						ObjectID:  output.ObjectID,
 						Network:   network,
 						Epochs:    opts.Epochs,
-						GasFee:    estimatedGas,
+						GasFee:    gasFee,
 						Success:   true,
 					}
 					if err := pm.RecordDeployment(deployment); err != nil {

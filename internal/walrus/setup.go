@@ -152,11 +152,16 @@ func checkWalrusDependencies() []string {
 
 // downloadConfig downloads a configuration file from a URL.
 func downloadConfig(url, destPath string) error {
+	// Validate URL scheme
+	if !strings.HasPrefix(url, "https://") {
+		return fmt.Errorf("only HTTPS URLs are allowed, got: %s", url)
+	}
+
 	client := &http.Client{
 		Timeout: 30 * time.Second,
 	}
 
-	resp, err := client.Get(url)
+	resp, err := client.Get(url) // #nosec G107 - URL is validated above and comes from hardcoded sources
 	if err != nil {
 		return fmt.Errorf("failed to download: %w", err)
 	}
@@ -203,7 +208,10 @@ func createSiteBuilderConfigFromTemplate(configPath, network string) error {
 
 	walletPath := filepath.Join(homeDir, ".sui", "sui_config", "client.yaml")
 	walrusConfig := filepath.Join(homeDir, ".config", "walrus", "client_config.yaml")
-	walrusBinary := "/usr/local/bin/walrus"
+	walrusBinary := "walrus"
+	if path, err := execLookPath("walrus"); err == nil {
+		walrusBinary = path
+	}
 
 	configContent := fmt.Sprintf(`contexts:
   %s:

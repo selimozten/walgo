@@ -4,7 +4,6 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
-	"strconv"
 
 	"github.com/selimozten/walgo/internal/compress"
 	"github.com/selimozten/walgo/internal/config"
@@ -21,8 +20,8 @@ type editProjectOptions struct {
 	SuiNS       string
 }
 
-// editProject updates project metadata in database and ws-resources.json.
-func editProject(nameOrID string, opts editProjectOptions) error {
+// editProjectByRef updates project metadata in database and ws-resources.json.
+func editProjectByRef(proj *projects.Project, opts editProjectOptions) error {
 	icons := ui.GetIcons()
 	pm, err := projects.NewManager()
 	if err != nil {
@@ -30,21 +29,8 @@ func editProject(nameOrID string, opts editProjectOptions) error {
 	}
 	defer pm.Close()
 
-	var proj *projects.Project
-	if id, err := strconv.ParseInt(nameOrID, 10, 64); err == nil {
-		proj, err = pm.GetProject(id)
-		if err != nil {
-			return err
-		}
-	} else {
-		proj, err = pm.GetProjectByName(nameOrID)
-		if err != nil {
-			return err
-		}
-	}
-
 	if opts.Name == "" && opts.Category == "" && opts.Description == "" && opts.ImageURL == "" && opts.SuiNS == "" {
-		return fmt.Errorf("no changes specified. Use --name, --category, --description, --image-url, or --suins flags")
+		return fmt.Errorf("no changes specified. Use --new-name, --category, --description, --image-url, or --suins flags")
 	}
 
 	fmt.Println()

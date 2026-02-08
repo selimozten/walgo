@@ -15,12 +15,6 @@ import (
 // Note: execLookPath and execCommand are defined in walrus.go for dependency injection
 
 func TestDeploySite(t *testing.T) {
-	// Save original runPreflight setting
-	originalRunPreflight := runPreflight
-	// Disable preflight checks for all tests
-	runPreflight = false
-	// Restore after all tests
-	defer func() { runPreflight = originalRunPreflight }()
 
 	tests := []struct {
 		name             string
@@ -175,10 +169,6 @@ func TestDeploySite(t *testing.T) {
 }
 
 func TestUpdateSite(t *testing.T) {
-	// Disable preflight checks for all tests
-	originalRunPreflight := runPreflight
-	runPreflight = false
-	defer func() { runPreflight = originalRunPreflight }()
 
 	tests := []struct {
 		name             string
@@ -442,10 +432,6 @@ func TestGetSiteStatus(t *testing.T) {
 }
 
 func TestConfigValidation(t *testing.T) {
-	// Disable preflight checks for all tests
-	originalRunPreflight := runPreflight
-	runPreflight = false
-	defer func() { runPreflight = originalRunPreflight }()
 
 	tests := []struct {
 		name      string

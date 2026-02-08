@@ -48,8 +48,10 @@ The file will be saved with the updated content.
 		fmt.Println()
 
 		fmt.Print("Describe what changes you want to make: ")
-		instruction, _ := reader.ReadString('\n')
-		instruction = strings.TrimSpace(instruction)
+		instruction, err := readLine(reader)
+		if err != nil {
+			return fmt.Errorf("reading instruction: %w", err)
+		}
 
 		if instruction == "" {
 			return fmt.Errorf("instruction cannot be empty")
@@ -69,8 +71,11 @@ The file will be saved with the updated content.
 		fmt.Printf("\n%s Content updated!\n", icons.Success)
 		fmt.Println()
 		fmt.Print("Save changes to file? [Y/n]: ")
-		confirm, _ := reader.ReadString('\n')
-		confirm = strings.TrimSpace(strings.ToLower(confirm))
+		confirm, err := readLine(reader)
+		if err != nil {
+			return fmt.Errorf("reading confirmation: %w", err)
+		}
+		confirm = strings.ToLower(confirm)
 
 		if confirm != "" && confirm != "y" && confirm != "yes" {
 			fmt.Printf("%s Changes not saved\n", icons.Info)
@@ -85,14 +90,17 @@ The file will be saved with the updated content.
 
 		// Apply content fixer to ensure YAML frontmatter is correct
 		sitePath, err := os.Getwd()
-		if err == nil {
-			fmt.Printf("\n%s Fixing YAML frontmatter...\n", icons.Spinner)
-			fixer := ai.NewContentFixer(sitePath, ai.SiteType(hugo.DetermineSiteTypeFromPath(sitePath)))
-			if err := fixer.FixAll(); err != nil {
-				fmt.Fprintf(os.Stderr, "%s Warning: Content fix failed: %v\n", icons.Warning, err)
-			} else {
-				fmt.Printf("%s YAML frontmatter validated\n", icons.Check)
-			}
+		if err != nil {
+			return fmt.Errorf("cannot determine current directory: %w", err)
+		}
+
+		fmt.Printf("\n%s Fixing YAML frontmatter...\n", icons.Spinner)
+		themeName := hugo.GetThemeName(sitePath)
+		fixer := ai.NewContentFixerWithTheme(sitePath, hugo.DetectSiteType(sitePath), themeName)
+		if err := fixer.FixAll(); err != nil {
+			fmt.Fprintf(os.Stderr, "%s Warning: Content fix failed: %v\n", icons.Warning, err)
+		} else {
+			fmt.Printf("%s YAML frontmatter validated\n", icons.Check)
 		}
 
 		err = hugo.BuildSite(sitePath)

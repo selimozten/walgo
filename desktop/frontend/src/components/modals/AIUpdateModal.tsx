@@ -86,7 +86,7 @@ export const AIUpdateModal: React.FC<AIUpdateModalProps> = ({
           });
         }
       }
-    } catch (err: any) {
+    } catch (err) {
       if (onStatusChange) {
         onStatusChange({
           type: "error",

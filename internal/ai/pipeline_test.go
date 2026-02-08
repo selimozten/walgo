@@ -52,6 +52,7 @@ func TestPipeline_PlanOnly_Success(t *testing.T) {
 			{ID: "home", Path: "content/_index.md", PageType: "home"},
 			{ID: "about", Path: "content/about.md", PageType: "page"},
 			{ID: "contact", Path: "content/contact.md", PageType: "page"},
+			{ID: "posts-index", Path: "content/posts/_index.md", PageType: "section"},
 			{ID: "post1", Path: "content/posts/welcome/index.md", PageType: "post"},
 			{ID: "post2", Path: "content/posts/start/index.md", PageType: "post"},
 			{ID: "post3", Path: "content/posts/another/index.md", PageType: "post"},
@@ -106,8 +107,8 @@ func TestPipeline_PlanOnly_Success(t *testing.T) {
 	if plan == nil {
 		t.Fatal("expected plan to be returned")
 	}
-	if len(plan.Pages) != 7 {
-		t.Errorf("expected 7 pages, got %d", len(plan.Pages))
+	if len(plan.Pages) != 8 {
+		t.Errorf("expected 8 pages, got %d", len(plan.Pages))
 	}
 
 	// Verify plan was saved
@@ -124,6 +125,7 @@ func TestPipeline_Run_Success(t *testing.T) {
 			{ID: "home", Path: "content/_index.md", PageType: "home"},
 			{ID: "about", Path: "content/about.md", PageType: "page"},
 			{ID: "contact", Path: "content/contact.md", PageType: "page"},
+			{ID: "posts-index", Path: "content/posts/_index.md", PageType: "section"},
 			{ID: "post1", Path: "content/posts/welcome/index.md", PageType: "post"},
 			{ID: "post2", Path: "content/posts/start/index.md", PageType: "post"},
 			{ID: "post3", Path: "content/posts/another/index.md", PageType: "post"},
@@ -210,12 +212,12 @@ func TestPipeline_Run_Success(t *testing.T) {
 	if result.Plan.Status != PlanStatusCompleted {
 		t.Errorf("expected completed status, got %s", result.Plan.Status)
 	}
-	if len(result.Pages) != 7 {
-		t.Errorf("expected 7 page results, got %d", len(result.Pages))
+	if len(result.Pages) != 8 {
+		t.Errorf("expected 8 page results, got %d", len(result.Pages))
 	}
-	// 1 planning call + 7 generation calls
-	if callCount != 8 {
-		t.Errorf("expected 8 API calls, got %d", callCount)
+	// 1 planning call + 8 generation calls
+	if callCount != 9 {
+		t.Errorf("expected 9 API calls, got %d", callCount)
 	}
 }
 
@@ -671,6 +673,7 @@ func TestPipeline_ProgressEmission(t *testing.T) {
 			{ID: "home", Path: "content/_index.md", PageType: "home"},
 			{ID: "about", Path: "content/about.md", PageType: "page"},
 			{ID: "contact", Path: "content/contact.md", PageType: "page"},
+			{ID: "posts-index", Path: "content/posts/_index.md", PageType: "section"},
 			{ID: "post1", Path: "content/posts/welcome/index.md", PageType: "post"},
 			{ID: "post2", Path: "content/posts/start/index.md", PageType: "post"},
 			{ID: "post3", Path: "content/posts/another/index.md", PageType: "post"},
@@ -759,6 +762,7 @@ func TestPipeline_Run_PartialStatus(t *testing.T) {
 					{ID: "home", Path: "content/_index.md", PageType: "home"},
 					{ID: "about", Path: "content/about.md", PageType: "page"},
 					{ID: "contact", Path: "content/contact.md", PageType: "page"},
+					{ID: "posts-index", Path: "content/posts/_index.md", PageType: "section"},
 					{ID: "post1", Path: "content/posts/welcome/index.md", PageType: "post"},
 					{ID: "post2", Path: "content/posts/start/index.md", PageType: "post"},
 					{ID: "post3", Path: "content/posts/another/index.md", PageType: "post"},
@@ -898,6 +902,7 @@ func TestPipeline_Timestamps(t *testing.T) {
 			{ID: "home", Path: "content/_index.md", PageType: "home"},
 			{ID: "about", Path: "content/about.md", PageType: "page"},
 			{ID: "contact", Path: "content/contact.md", PageType: "page"},
+			{ID: "posts-index", Path: "content/posts/_index.md", PageType: "section"},
 			{ID: "post1", Path: "content/posts/welcome/index.md", PageType: "post"},
 			{ID: "post2", Path: "content/posts/start/index.md", PageType: "post"},
 			{ID: "post3", Path: "content/posts/another/index.md", PageType: "post"},

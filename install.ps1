@@ -3,6 +3,9 @@
 
 $ErrorActionPreference = "Stop"
 
+# Enable TLS 1.2 for HTTPS connections (required for older Windows/PowerShell)
+[Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
+
 $REPO = "selimozten/walgo"
 $BINARY_NAME = "walgo"
 $TEMP_DIR = [IO.Path]::GetTempPath()
@@ -10,6 +13,7 @@ $TEMP_DIR = [IO.Path]::GetTempPath()
 # Global variables to store wallet info for display at end
 $script:SuiMnemonicPhrase = ""
 $script:SuiAddress = ""
+$script:TempDirsToCleanup = [System.Collections.Generic.List[string]]::new()
 
 # Color handling
 $useColors = $true
@@ -64,12 +68,25 @@ function Print-Info {
     }
 }
 
+# Cleanup function for temp directories
+function Cleanup-TempDirs {
+    foreach ($dir in $script:TempDirsToCleanup) {
+        if (Test-Path $dir) {
+            Remove-Item -Path $dir -Recurse -Force -ErrorAction SilentlyContinue
+        }
+    }
+}
+
+# Register cleanup on script exit
+$null = Register-EngineEvent -SourceIdentifier PowerShell.Exiting -Action { Cleanup-TempDirs } -ErrorAction SilentlyContinue
+
 # Helpers
 $script:PathUpdates = [System.Collections.Generic.List[string]]::new()
 $script:IsAdmin = $false
 $script:WalgoInstallRoot = $null
 $script:WalgoBinaryPath = $null
 $script:WalgoToolsDir = Join-Path $env:USERPROFILE ".walgo\bin"
+$script:SuiBinDir = Join-Path $env:USERPROFILE ".sui\bin"  # Suiup's actual install location
 $script:LocalBinDir = Join-Path $env:USERPROFILE ".local\bin"
 $script:DesktopInstallDir = Join-Path $env:LOCALAPPDATA "Programs\Walgo"
 
@@ -110,14 +127,18 @@ function Add-PathEntry {
     if ([string]::IsNullOrWhiteSpace($existing)) {
         $existingList = @()
     } else {
-        $existingList = $existing -split ';' | Where-Object { $_ }
+        # Split, trim whitespace, and filter empty entries
+        $existingList = $existing -split ';' | ForEach-Object { $_.Trim() } | Where-Object { $_ }
     }
 
-    if ($existingList -notcontains $resolved) {
+    # Case-insensitive comparison for Windows paths
+    $alreadyExists = $existingList | Where-Object { $_.ToLower() -eq $resolved.ToLower() }
+
+    if (-not $alreadyExists) {
         $newList = $existingList + $resolved
         $newPath = ($newList -join ';').Trim(';')
         [Environment]::SetEnvironmentVariable("Path", $newPath, $target)
-        if (-not $script:PathUpdates.Contains($resolved)) {
+        if (-not ($script:PathUpdates | Where-Object { $_.ToLower() -eq $resolved.ToLower() })) {
             $script:PathUpdates.Add($resolved)
         }
         Print-Success "Added $resolved to PATH"
@@ -125,7 +146,10 @@ function Add-PathEntry {
         Print-Info "$resolved already in PATH"
     }
 
-    if (($env:Path -split ';') -notcontains $resolved) {
+    # Also update current session PATH (case-insensitive check)
+    $currentPaths = $env:Path -split ';' | ForEach-Object { $_.Trim() } | Where-Object { $_ }
+    $inCurrentPath = $currentPaths | Where-Object { $_.ToLower() -eq $resolved.ToLower() }
+    if (-not $inCurrentPath) {
         $env:Path = ($env:Path.TrimEnd(';') + ';' + $resolved).Trim(';')
     }
 }
@@ -246,36 +270,56 @@ function Expand-TarGz {
                 return $false
             }
         } else {
-            # Fallback: Use .NET to decompress and extract
-            Print-Info "Using .NET extraction (tar.exe not available)..."
+            # Fallback: Use .NET to decompress gzip, then use 7-zip or fail gracefully
+            Print-Info "tar.exe not available, using .NET gzip decompression..."
 
             # First decompress .gz to get .tar
             $tarFile = $Archive -replace '\.gz$', ''
-            $gzStream = New-Object System.IO.FileStream($Archive, [System.IO.FileMode]::Open)
-            $tarStream = New-Object System.IO.FileStream($tarFile, [System.IO.FileMode]::Create)
-            $gzipStream = New-Object System.IO.Compression.GzipStream($gzStream, [System.IO.Compression.CompressionMode]::Decompress)
+            try {
+                $gzStream = New-Object System.IO.FileStream($Archive, [System.IO.FileMode]::Open, [System.IO.FileAccess]::Read)
+                $tarStream = New-Object System.IO.FileStream($tarFile, [System.IO.FileMode]::Create, [System.IO.FileAccess]::Write)
+                $gzipStream = New-Object System.IO.Compression.GzipStream($gzStream, [System.IO.Compression.CompressionMode]::Decompress)
 
-            $gzipStream.CopyTo($tarStream)
-            $gzipStream.Close()
-            $tarStream.Close()
-            $gzStream.Close()
+                $gzipStream.CopyTo($tarStream)
+                $gzipStream.Close()
+                $tarStream.Close()
+                $gzStream.Close()
+            } catch {
+                $errorMsg = $_.Exception.Message
+                Print-Error "Failed to decompress gzip - $errorMsg"
+                return $false
+            }
 
-            # Now extract .tar using PowerShell tar or manual extraction
-            if (Get-Command tar.exe -ErrorAction SilentlyContinue) {
-                $result = & tar.exe -xf $tarFile -C $Destination 2>&1
+            # Try to find 7-zip for tar extraction
+            $sevenZipPaths = @(
+                "C:\Program Files\7-Zip\7z.exe",
+                "C:\Program Files (x86)\7-Zip\7z.exe",
+                (Join-Path $env:LOCALAPPDATA "Programs\7-Zip\7z.exe")
+            )
+
+            $sevenZip = $null
+            foreach ($path in $sevenZipPaths) {
+                if (Test-Path $path) {
+                    $sevenZip = $path
+                    break
+                }
+            }
+
+            if ($sevenZip) {
+                Print-Info "Using 7-Zip for tar extraction..."
+                $result = & $sevenZip x $tarFile -o"$Destination" -y 2>&1
+                Remove-Item $tarFile -Force -ErrorAction SilentlyContinue
                 if ($LASTEXITCODE -ne 0) {
-                    Remove-Item $tarFile -Force -ErrorAction SilentlyContinue
-                    Print-Error "tar extraction failed: $result"
+                    Print-Error "7-Zip extraction failed: $result"
                     return $false
                 }
             } else {
                 Remove-Item $tarFile -Force -ErrorAction SilentlyContinue
-                Print-Error "Cannot extract .tar.gz: tar.exe not found. Please install tar or use Windows 10/11."
-                Print-Info "Manual extraction: extract $Archive to $Destination and rerun the installer"
+                Print-Error "Cannot extract .tar.gz: tar.exe not found and 7-Zip not installed."
+                Print-Info "Please install Windows 10/11 (has built-in tar) or install 7-Zip."
+                Print-Info "Or download the .zip version manually from GitHub releases."
                 return $false
             }
-
-            Remove-Item $tarFile -Force -ErrorAction SilentlyContinue
         }
 
         # Verify extraction succeeded
@@ -296,8 +340,9 @@ function Expand-TarGz {
 
 function New-TempDirectory {
     param([string]$Suffix)
-    $folder = Join-Path $TEMP_DIR ("walgo-" + $Suffix + "-" + [Guid]::NewGuid().ToString("N"))
+    $folder = Join-Path $TEMP_DIR ("walgo-" + $Suffix + "-" + [Guid]::NewGuid().ToString("N").Substring(0, 8))
     New-Item -ItemType Directory -Force -Path $folder | Out-Null
+    $script:TempDirsToCleanup.Add($folder)
     return $folder
 }
 
@@ -308,6 +353,7 @@ function Get-Architecture {
         "ARM64" { return "arm64" }
         default {
             Print-Error "Unsupported architecture: $($env:PROCESSOR_ARCHITECTURE)"
+            Cleanup-TempDirs
             exit 1
         }
     }
@@ -322,7 +368,7 @@ function Test-Administrator {
 function Initialize-Environment {
     $script:IsAdmin = Test-Administrator
     if ($script:IsAdmin) {
-        $script:WalgoInstallRoot = "C:\\Program Files\\Walgo"
+        $script:WalgoInstallRoot = "C:\Program Files\Walgo"
     } else {
         $script:WalgoInstallRoot = Join-Path $env:LOCALAPPDATA "Walgo"
     }
@@ -331,6 +377,7 @@ function Initialize-Environment {
 
     Ensure-Directory $script:WalgoInstallRoot
     Ensure-Directory $script:WalgoToolsDir
+    Ensure-Directory $script:SuiBinDir
     Ensure-Directory $script:LocalBinDir
     Ensure-Directory $script:DesktopInstallDir
 }
@@ -351,6 +398,7 @@ function Get-LatestVersion {
     Print-Info "Fetching latest Walgo version..."
     $release = Get-LatestRelease -Repository $REPO
     if (-not $release) {
+        Cleanup-TempDirs
         exit 1
     }
     $version = $release.tag_name -replace '^v', ''
@@ -366,11 +414,12 @@ function Install-WalgoBinary {
 
     # Try .zip first (newer releases), then .tar.gz (v0.3.2 and earlier)
     $formats = @(
-        @{ Ext = "zip"; Func = { param($a, $d) Expand-ArchiveSafe -Archive $a -Destination $d } },
-        @{ Ext = "tar.gz"; Func = { param($a, $d) Expand-TarGz -Archive $a -Destination $d } }
+        @{ Ext = "zip"; Func = "Expand-ArchiveSafe" },
+        @{ Ext = "tar.gz"; Func = "Expand-TarGz" }
     )
 
     $success = $false
+    $tempFile = $null
     foreach ($format in $formats) {
         $filename = "${BINARY_NAME}_${Version}_windows_${arch}.$($format.Ext)"
         $downloadUrl = "https://github.com/$REPO/releases/download/v$Version/$filename"
@@ -379,17 +428,20 @@ function Install-WalgoBinary {
         Print-Info "Trying to download $filename..."
         if (Download-File -Url $downloadUrl -Destination $tempFile -Description "$BINARY_NAME CLI") {
             Print-Info "Extracting archive..."
-            if (& $format.Func $tempFile $extractDir) {
+            $extractResult = & $format.Func -Archive $tempFile -Destination $extractDir
+            if ($extractResult) {
                 $success = $true
                 Remove-Item -Path $tempFile -Force -ErrorAction SilentlyContinue
                 break
             }
         }
+        Remove-Item -Path $tempFile -Force -ErrorAction SilentlyContinue
     }
 
     if (-not $success) {
         Print-Error "Failed to download or extract walgo binary"
         Print-Info "Tried formats: .zip, .tar.gz"
+        Cleanup-TempDirs
         exit 1
     }
 
@@ -397,6 +449,7 @@ function Install-WalgoBinary {
     if (-not $binary) {
         Print-Error "walgo.exe not found in archive"
         Print-Info "The downloaded archive may be corrupted. Please try again."
+        Cleanup-TempDirs
         exit 1
     }
 
@@ -413,6 +466,7 @@ function Install-WalgoBinary {
         $errorMsg = $_.Exception.Message
         Print-Error "Failed to copy binary to $script:WalgoBinaryPath - $errorMsg"
         Print-Info "Check if you have write permissions to the directory"
+        Cleanup-TempDirs
         exit 1
     }
 
@@ -422,8 +476,44 @@ function Install-WalgoBinary {
         Add-PathEntry -PathValue $script:WalgoInstallRoot
     }
 
-    Remove-Item -Path $tempFile -Force -ErrorAction SilentlyContinue
     Remove-Item -Path $extractDir -Recurse -Force -ErrorAction SilentlyContinue
+}
+
+function Create-DesktopShortcut {
+    param(
+        [Parameter(Mandatory = $true)][string]$TargetPath,
+        [Parameter(Mandatory = $true)][string]$ShortcutName,
+        [string]$Description = "",
+        [string]$IconPath = $null
+    )
+
+    try {
+        $desktopPath = [Environment]::GetFolderPath("Desktop")
+        $shortcutPath = Join-Path $desktopPath "$ShortcutName.lnk"
+
+        $shell = New-Object -ComObject WScript.Shell
+        $shortcut = $shell.CreateShortcut($shortcutPath)
+        $shortcut.TargetPath = $TargetPath
+        $shortcut.Description = $Description
+        $shortcut.WorkingDirectory = Split-Path -Parent $TargetPath
+
+        if ($IconPath -and (Test-Path $IconPath)) {
+            $shortcut.IconLocation = $IconPath
+        } elseif (Test-Path $TargetPath) {
+            $shortcut.IconLocation = $TargetPath
+        }
+
+        $shortcut.Save()
+
+        # Release COM object
+        [System.Runtime.Interopservices.Marshal]::ReleaseComObject($shell) | Out-Null
+
+        return $true
+    } catch {
+        $errorMsg = $_.Exception.Message
+        Print-Warning "Failed to create desktop shortcut - $errorMsg"
+        return $false
+    }
 }
 
 function Install-WalgoDesktop {
@@ -463,7 +553,13 @@ function Install-WalgoDesktop {
         }
 
         Print-Success "Walgo Desktop installed to $destination"
-        Print-Info "Launch via: walgo desktop"
+
+        # Create desktop shortcut
+        if (Create-DesktopShortcut -TargetPath $destination -ShortcutName "Walgo" -Description "Walgo - Ship static sites to Walrus") {
+            Print-Success "Desktop shortcut created"
+        }
+
+        Print-Info "Launch via: walgo desktop (or use the desktop shortcut)"
     } catch {
         $errorMsg = $_.Exception.Message
         Print-Warning "Failed to install desktop app - $errorMsg"
@@ -544,7 +640,7 @@ function Install-HugoDirect {
     return $true
 }
 
-function Check-Dependencies {
+function Test-Dependencies {
     Print-Info "Checking optional dependencies..."
 
     # Check for Hugo
@@ -562,6 +658,7 @@ function Check-Dependencies {
 function Install-Suiup {
     $target = Join-Path $script:WalgoToolsDir "suiup.exe"
     if (Test-Path $target) {
+        Print-Info "suiup already installed at $target"
         return $target
     }
 
@@ -573,8 +670,14 @@ function Install-Suiup {
 
     $tag = $release.tag_name
     $arch = Get-Architecture
-    # Suiup Windows releases use format: suiup-Windows-msvc-x86_64.zip
-    $suiupArch = if ($arch -eq "amd64") { "x86_64" } else { $arch }
+
+    # Suiup Windows releases use format: suiup-Windows-msvc-x86_64.zip or suiup-Windows-msvc-aarch64.zip
+    $suiupArch = switch ($arch) {
+        "amd64" { "x86_64" }
+        "arm64" { "aarch64" }
+        default { $arch }
+    }
+
     $filename = "suiup-Windows-msvc-${suiupArch}.zip"
     $downloadUrl = "https://github.com/MystenLabs/suiup/releases/download/$tag/$filename"
     $tempFile = Join-Path $TEMP_DIR $filename
@@ -604,8 +707,11 @@ function Install-Suiup {
             return $null
         }
 
+        # Add all potential binary directories to PATH
         Add-PathEntry -PathValue $script:WalgoToolsDir
-        Add-PathEntry -PathValue $script:LocalBinDir
+        Add-PathEntry -PathValue $script:SuiBinDir      # ~/.sui/bin - suiup's default on Windows
+        Add-PathEntry -PathValue $script:LocalBinDir    # ~/.local/bin - fallback
+
         Print-Success "suiup installed to $target"
     } catch {
         $errorMsg = $_.Exception.Message
@@ -616,6 +722,40 @@ function Install-Suiup {
     Remove-Item -Path $tempFile -Force -ErrorAction SilentlyContinue
     Remove-Item -Path $extractDir -Recurse -Force -ErrorAction SilentlyContinue
     return $target
+}
+
+function Get-SuiupBinDir {
+    param([string]$SuiupPath)
+
+    # Try to detect where suiup installs binaries
+    # Check in order: ~/.sui/bin, ~/.local/bin
+    $possiblePaths = @(
+        $script:SuiBinDir,
+        $script:LocalBinDir
+    )
+
+    # If suiup is installed, try running it to see where it installs
+    if ($SuiupPath -and (Test-Path $SuiupPath)) {
+        try {
+            $output = & $SuiupPath show 2>&1
+            # Parse output to find bin directory if possible
+            if ($output -match 'bin.*?([A-Za-z]:\\[^\s]+)') {
+                $detectedPath = $matches[1]
+                if (Test-Path $detectedPath) {
+                    return $detectedPath
+                }
+            }
+        } catch { }
+    }
+
+    # Return first existing path or default
+    foreach ($path in $possiblePaths) {
+        if (Test-Path $path) {
+            return $path
+        }
+    }
+
+    return $script:SuiBinDir
 }
 
 function Download-WalrusConfigs {
@@ -656,19 +796,45 @@ function Download-WalrusConfigs {
 }
 
 function Initialize-SuiClient {
-    param([string]$Network = "testnet")
+    param(
+        [string]$Network = "testnet",
+        [string]$BinDir
+    )
 
     Print-Info "Configuring Sui client..."
 
     $suiConfigPath = Join-Path $env:USERPROFILE ".sui\sui_config\client.yaml"
 
+    # Find sui.exe - check multiple locations
+    $suiPath = $null
+    $possibleSuiPaths = @(
+        (Join-Path $BinDir "sui.exe"),
+        (Join-Path $script:SuiBinDir "sui.exe"),
+        (Join-Path $script:LocalBinDir "sui.exe")
+    )
+
+    foreach ($path in $possibleSuiPaths) {
+        if (Test-Path $path) {
+            $suiPath = $path
+            break
+        }
+    }
+
+    if (-not $suiPath) {
+        # Try to find in PATH
+        $suiCmd = Get-Command sui.exe -ErrorAction SilentlyContinue
+        if ($suiCmd) {
+            $suiPath = $suiCmd.Source
+        }
+    }
+
     if (Test-Path $suiConfigPath) {
         Print-Success "Sui client already configured"
 
         # Even if already configured, ensure both environments exist
-        Print-Info "Verifying testnet and mainnet environments..."
-        $suiPath = Join-Path $script:LocalBinDir "sui.exe"
-        if (Test-Path $suiPath) {
+        if ($suiPath) {
+            Print-Info "Verifying testnet and mainnet environments..."
+
             # Add mainnet if missing
             try {
                 $envs = & $suiPath client envs 2>$null
@@ -695,14 +861,14 @@ function Initialize-SuiClient {
         return
     }
 
-    Print-Info "Initializing Sui client for $Network..."
-    Print-Info "Creating new Sui address..."
-
-    $suiPath = Join-Path $script:LocalBinDir "sui.exe"
-    if (-not (Test-Path $suiPath)) {
+    if (-not $suiPath -or -not (Test-Path $suiPath)) {
         Print-Warning "Sui CLI not found. Skipping client initialization."
+        Print-Info "After installation completes, run: sui client"
         return
     }
+
+    Print-Info "Initializing Sui client for $Network..."
+    Print-Info "Creating new Sui address..."
 
     try {
         # Prepare input for sui client initialization
@@ -754,46 +920,43 @@ function Initialize-SuiClient {
                 # Add both testnet and mainnet environments
                 Print-Info "Configuring both testnet and mainnet environments..."
 
-                $suiPath = Join-Path $script:LocalBinDir "sui.exe"
-                if (Test-Path $suiPath) {
-                    # Add mainnet if default was testnet
-                    if ($Network -eq "testnet") {
-                        try {
-                            $envs = & $suiPath client envs 2>$null
-                            if ($envs -notmatch "mainnet") {
-                                $null = & $suiPath client new-env --alias mainnet --rpc https://fullnode.mainnet.sui.io:443 2>$null
-                                if ($LASTEXITCODE -eq 0) {
-                                    Print-Success "Added mainnet environment"
-                                } else {
-                                    Print-Warning "Failed to add mainnet environment (you can add it later)"
-                                }
+                # Add mainnet if default was testnet
+                if ($Network -eq "testnet") {
+                    try {
+                        $envs = & $suiPath client envs 2>$null
+                        if ($envs -notmatch "mainnet") {
+                            $null = & $suiPath client new-env --alias mainnet --rpc https://fullnode.mainnet.sui.io:443 2>$null
+                            if ($LASTEXITCODE -eq 0) {
+                                Print-Success "Added mainnet environment"
                             } else {
-                                Print-Info "Mainnet environment already exists"
+                                Print-Warning "Failed to add mainnet environment (you can add it later)"
                             }
-                        } catch {
-                            $errorMsg = $_.Exception.Message
-                            Print-Warning "Failed to add mainnet environment - $errorMsg"
+                        } else {
+                            Print-Info "Mainnet environment already exists"
                         }
+                    } catch {
+                        $errorMsg = $_.Exception.Message
+                        Print-Warning "Failed to add mainnet environment - $errorMsg"
                     }
+                }
 
-                    # Add testnet if default was mainnet
-                    if ($Network -eq "mainnet") {
-                        try {
-                            $envs = & $suiPath client envs 2>$null
-                            if ($envs -notmatch "testnet") {
-                                $null = & $suiPath client new-env --alias testnet --rpc https://fullnode.testnet.sui.io:443 2>$null
-                                if ($LASTEXITCODE -eq 0) {
-                                    Print-Success "Added testnet environment"
-                                } else {
-                                    Print-Warning "Failed to add testnet environment (you can add it later)"
-                                }
+                # Add testnet if default was mainnet
+                if ($Network -eq "mainnet") {
+                    try {
+                        $envs = & $suiPath client envs 2>$null
+                        if ($envs -notmatch "testnet") {
+                            $null = & $suiPath client new-env --alias testnet --rpc https://fullnode.testnet.sui.io:443 2>$null
+                            if ($LASTEXITCODE -eq 0) {
+                                Print-Success "Added testnet environment"
                             } else {
-                                Print-Info "Testnet environment already exists"
+                                Print-Warning "Failed to add testnet environment (you can add it later)"
                             }
-                        } catch {
-                            $errorMsg = $_.Exception.Message
-                            Print-Warning "Failed to add testnet environment - $errorMsg"
+                        } else {
+                            Print-Info "Testnet environment already exists"
                         }
+                    } catch {
+                        $errorMsg = $_.Exception.Message
+                        Print-Warning "Failed to add testnet environment - $errorMsg"
                     }
                 }
             } else {
@@ -839,16 +1002,27 @@ function Install-WalrusDependencies {
         Print-Info "Installing $($target.Label)..."
         try {
             # Run with 120 second timeout
+            # Return both output and exit code from the job since $LASTEXITCODE
+            # in the parent session does not reflect the job's exit code.
             $job = Start-Job -ScriptBlock {
                 param($suiupPath, $spec)
-                & $suiupPath install $spec 2>&1
+                $out = & $suiupPath install $spec 2>&1
+                return @{ Output = ($out -join "`n"); ExitCode = $LASTEXITCODE }
             } -ArgumentList $suiupPath, $($target.Spec)
 
             $completed = Wait-Job $job -Timeout 120
             if ($completed) {
-                $output = Receive-Job $job
+                $result = Receive-Job $job
                 Remove-Job $job -Force
-                Print-Success "$($target.Label) installed"
+
+                $jobExitCode = $result.ExitCode
+                $output = $result.Output
+
+                if ($jobExitCode -eq 0 -or $output -notmatch "error|failed") {
+                    Print-Success "$($target.Label) installed"
+                } else {
+                    Print-Warning "$($target.Label) installation may have issues: $output"
+                }
             } else {
                 Stop-Job $job
                 Remove-Job $job -Force
@@ -860,32 +1034,74 @@ function Install-WalrusDependencies {
         }
     }
 
-    try { & $suiupPath default set "sui@testnet" | Out-Null } catch { }
-    try { & $suiupPath default set "walrus@testnet" | Out-Null } catch { }
-    try { & $suiupPath default set "site-builder@mainnet" | Out-Null } catch { }
-
-    $binaries = @(
-        @{ Name = "Sui CLI"; Path = Join-Path $script:LocalBinDir "sui.exe" },
-        @{ Name = "Walrus CLI"; Path = Join-Path $script:LocalBinDir "walrus.exe" },
-        @{ Name = "site-builder"; Path = Join-Path $script:LocalBinDir "site-builder.exe" }
+    # Set defaults with proper error reporting
+    $defaults = @(
+        @{ Spec = "sui@testnet"; Label = "Sui CLI default" },
+        @{ Spec = "walrus@testnet"; Label = "Walrus CLI default" },
+        @{ Spec = "site-builder@mainnet"; Label = "site-builder default" }
     )
 
+    foreach ($default in $defaults) {
+        try {
+            $result = & $suiupPath default set $default.Spec 2>&1
+            if ($LASTEXITCODE -ne 0) {
+                Print-Warning "Failed to set $($default.Label)"
+            }
+        } catch {
+            Print-Warning "Failed to set $($default.Label)"
+        }
+    }
+
+    # Detect where suiup installed binaries
+    $binDir = Get-SuiupBinDir -SuiupPath $suiupPath
+    Print-Info "Checking for binaries in: $binDir"
+
+    $binaries = @(
+        @{ Name = "Sui CLI"; Exe = "sui.exe" },
+        @{ Name = "Walrus CLI"; Exe = "walrus.exe" },
+        @{ Name = "site-builder"; Exe = "site-builder.exe" }
+    )
+
+    # Check multiple possible locations for each binary
     foreach ($binary in $binaries) {
-        if (Test-Path $binary.Path) {
+        $found = $false
+        $foundPath = $null
+
+        $searchPaths = @(
+            (Join-Path $binDir $binary.Exe),
+            (Join-Path $script:SuiBinDir $binary.Exe),
+            (Join-Path $script:LocalBinDir $binary.Exe)
+        )
+
+        foreach ($path in $searchPaths) {
+            if (Test-Path $path) {
+                $found = $true
+                $foundPath = $path
+                break
+            }
+        }
+
+        if ($found) {
             try {
-                $output = & $binary.Path --version 2>&1 | Select-Object -First 1
+                $output = & $foundPath --version 2>&1 | Select-Object -First 1
                 Print-Success "$($binary.Name) ready: $output"
+                Print-Info "  Location: $foundPath"
             } catch {
-                Print-Info "$($binary.Name) installed"
+                Print-Info "$($binary.Name) installed at $foundPath"
             }
         } else {
-            Print-Warning "$($binary.Name) not found in $script:LocalBinDir. Check suiup output for details."
+            Print-Warning "$($binary.Name) not found. Searched:"
+            foreach ($path in $searchPaths) {
+                Print-Info "  - $path"
+            }
+            Print-Info "Try running: suiup show"
         }
     }
 
     Download-WalrusConfigs
-    Initialize-SuiClient -Network "testnet"
-    Print-Success "Walrus dependencies installation attempted. Verify with: sui --version"
+    Initialize-SuiClient -Network "testnet" -BinDir $binDir
+    Print-Success "Walrus dependencies installation completed"
+    Print-Info "Verify with: sui --version && walrus --version && site-builder --version"
 }
 
 function Show-NextSteps {
@@ -968,7 +1184,8 @@ function Show-NextSteps {
     Write-Host "     walgo launch"
     Write-Host ""
     Write-Host "  5. To launch the desktop app:"
-    Write-Host "     walgo desktop"
+    Write-Host "     - Use the desktop shortcut on your Desktop"
+    Write-Host "     - Or run: walgo desktop"
     Write-Host "     (Desktop installed to $script:DesktopInstallDir\Walgo.exe)"
     Write-Host ""
     Write-Host "  6. If you installed Walrus dependencies:"
@@ -993,10 +1210,12 @@ function Main {
     Install-WalgoBinary -Version $version
     Install-WalgoDesktop -Version $version
     Test-Installation
-    Check-Dependencies
+    Test-Dependencies
     Install-WalrusDependencies
     Show-NextSteps
+
+    # Final cleanup
+    Cleanup-TempDirs
 }
 
 Main
-

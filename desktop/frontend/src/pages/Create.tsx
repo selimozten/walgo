@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React from "react";
 import { motion } from "framer-motion";
 import { Wand2, Rocket, Folder, Plus, AlertCircle } from "lucide-react";
 import { Card } from "../components/ui";

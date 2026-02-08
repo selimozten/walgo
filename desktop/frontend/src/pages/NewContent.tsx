@@ -79,7 +79,7 @@ export const NewContent: React.FC<NewContentProps> = ({
           });
         }
       }
-    } catch (err: any) {
+    } catch (err) {
       if (onStatusChange) {
         onStatusChange({
           type: "error",

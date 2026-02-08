@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/selimozten/walgo/internal/ai"
+	"github.com/selimozten/walgo/internal/hugo"
 	"github.com/selimozten/walgo/internal/projects"
 	"github.com/selimozten/walgo/internal/ui"
 	"github.com/spf13/cobra"
@@ -49,6 +50,24 @@ Example:
 		pipelineConfig.ContentDir = filepath.Join(sitePath, "content")
 		pipelineConfig.PlanPath = filepath.Join(sitePath, ".walgo", "plan.json")
 
+		// Apply parallel generation settings
+		if aiPipelineParallel != "" {
+			switch aiPipelineParallel {
+			case "auto":
+				pipelineConfig.ParallelMode = ai.ParallelModeAuto
+			case "sequential":
+				pipelineConfig.ParallelMode = ai.ParallelModeSequential
+			case "parallel":
+				pipelineConfig.ParallelMode = ai.ParallelModeParallel
+			}
+		}
+		if aiPipelineConcurrent > 0 {
+			pipelineConfig.MaxConcurrent = aiPipelineConcurrent
+		}
+		if aiPipelineRPM > 0 {
+			pipelineConfig.RequestsPerMinute = aiPipelineRPM
+		}
+
 		pipeline := ai.NewPipeline(client, pipelineConfig)
 		pipeline.SetProgressHandler(ai.ConsoleProgressHandler(aiPipelineVerbose))
 
@@ -74,18 +93,21 @@ Example:
 		}
 
 		if result.Plan != nil {
-			if err := applyMenuToConfig(result.Plan); err != nil {
+			if err := applyMenuToConfig(result.Plan, sitePath); err != nil {
 				fmt.Fprintf(os.Stderr, "%s Warning: %v\n", icons.Warning, err)
 			}
 
-			if result.Plan.SiteType == ai.SiteTypeBusiness {
-				fmt.Printf("\n%s Validating and fixing content for Ananke theme...\n", icons.Gear)
-				fixer := ai.NewContentFixer(sitePath, ai.SiteTypeBusiness)
-				if err := fixer.FixAll(); err != nil {
-					fmt.Fprintf(os.Stderr, "%s Warning: Content fix failed: %v\n", icons.Warning, err)
-				} else {
-					fmt.Printf("   %s Content validated and fixed\n", icons.Check)
-				}
+			// Apply content fixer with theme support
+			themeName := result.Plan.Theme
+			if themeName == "" {
+				themeName = hugo.GetThemeName(sitePath)
+			}
+			fmt.Printf("\n%s Validating and fixing content for theme...\n", icons.Gear)
+			fixer := ai.NewContentFixerWithTheme(sitePath, result.Plan.SiteType, themeName)
+			if err := fixer.FixAll(); err != nil {
+				fmt.Fprintf(os.Stderr, "%s Warning: Content fix failed: %v\n", icons.Warning, err)
+			} else {
+				fmt.Printf("   %s Content validated and fixed\n", icons.Check)
 			}
 			manager, err := projects.NewManager()
 			if err != nil {
@@ -96,8 +118,8 @@ Example:
 			if err := manager.CreateDraftProject(result.Plan.SiteName, sitePath); err != nil {
 				return fmt.Errorf("failed to create draft project: %w", err)
 			}
+			fmt.Printf("   %s Created draft project\n", icons.Check)
 		}
-		fmt.Printf("   %s Created draft project\n", icons.Check)
 
 		fmt.Printf("\n%s Site generated successfully!\n", icons.Celebrate)
 		fmt.Printf("Run 'walgo build' to build the site.\n")

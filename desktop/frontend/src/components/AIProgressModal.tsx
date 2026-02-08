@@ -5,12 +5,13 @@ import {
   Minimize2,
   Loader2,
   CheckCircle2,
+  AlertCircle,
   Sparkles,
 } from "lucide-react";
 import { useAIProgress } from "../contexts/AIProgressContext";
 
 export const AIProgressModal: React.FC = () => {
-  const { progressState, isModalOpen, closeModal, toggleMinimize } =
+  const { progressState, isModalOpen, closeModal, toggleMinimize, completionResult } =
     useAIProgress();
 
   if (!isModalOpen) return null;
@@ -39,6 +40,8 @@ export const AIProgressModal: React.FC = () => {
               <div className="w-8 h-8 bg-accent/20 rounded-sm flex items-center justify-center">
                 {progressState.isActive ? (
                   <Loader2 className="text-accent animate-spin" size={18} />
+                ) : completionResult?.success === false ? (
+                  <AlertCircle className="text-red-500" size={18} />
                 ) : (
                   <CheckCircle2 className="text-green-500" size={18} />
                 )}
@@ -47,7 +50,9 @@ export const AIProgressModal: React.FC = () => {
                 <h3 className="text-sm font-medium text-white">
                   {progressState.isActive
                     ? "Creating AI Site"
-                    : "Site Created Successfully"}
+                    : completionResult?.success === false
+                      ? "Site Creation Failed"
+                      : "Site Created Successfully"}
                 </h3>
                 {progressState.siteName && (
                   <p className="text-xs text-zinc-500 font-mono">
@@ -143,7 +148,15 @@ export const AIProgressModal: React.FC = () => {
               )}
 
             {/* Completion Message */}
-            {!progressState.isActive && (
+            {!progressState.isActive && completionResult?.success === false && (
+              <div className="flex items-center gap-2 p-4 bg-red-500/10 border border-red-500/20 rounded-sm">
+                <AlertCircle className="text-red-500" size={20} />
+                <span className="text-sm text-red-500 font-mono">
+                  {completionResult.error || "Site creation failed."}
+                </span>
+              </div>
+            )}
+            {!progressState.isActive && completionResult?.success !== false && (
               <div className="flex items-center gap-2 p-4 bg-green-500/10 border border-green-500/20 rounded-sm">
                 <CheckCircle2 className="text-green-500" size={20} />
                 <span className="text-sm text-green-500 font-mono">

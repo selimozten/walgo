@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
-	"strings"
 
 	"github.com/selimozten/walgo/internal/ai"
 	"github.com/selimozten/walgo/internal/config"
@@ -41,8 +40,10 @@ Example:
 
 		fmt.Println()
 		fmt.Printf("Site name: ")
-		siteName, _ := reader.ReadString('\n')
-		siteName = strings.TrimSpace(siteName)
+		siteName, err := readLine(reader)
+		if err != nil {
+			return fmt.Errorf("reading site name: %w", err)
+		}
 		if siteName == "" {
 			return fmt.Errorf("site name is required")
 		}
@@ -50,12 +51,12 @@ Example:
 		fmt.Println()
 		fmt.Println("Site type:")
 		fmt.Println("  1) Blog")
-		fmt.Println("  2) Portfolio")
-		fmt.Println("  3) Docs")
-		fmt.Println("  4) Business")
+		fmt.Println("  2) Docs")
 		fmt.Print("Select [1]: ")
-		siteTypeChoice, _ := reader.ReadString('\n')
-		siteTypeChoice = strings.TrimSpace(siteTypeChoice)
+		siteTypeChoice, err := readLine(reader)
+		if err != nil {
+			return fmt.Errorf("reading site type: %w", err)
+		}
 		if siteTypeChoice == "" {
 			siteTypeChoice = "1"
 		}
@@ -65,24 +66,24 @@ Example:
 		case "1":
 			siteType = ai.SiteTypeBlog
 		case "2":
-			siteType = ai.SiteTypePortfolio
-		case "3":
 			siteType = ai.SiteTypeDocs
-		case "4":
-			siteType = ai.SiteTypeBusiness
 		default:
 			return fmt.Errorf("invalid site type: %s", siteTypeChoice)
 		}
 
 		fmt.Println()
 		fmt.Printf("Describe your site (1-2 sentences): ")
-		description, _ := reader.ReadString('\n')
-		description = strings.TrimSpace(description)
+		description, err := readLine(reader)
+		if err != nil {
+			return fmt.Errorf("reading description: %w", err)
+		}
 
 		fmt.Println()
 		fmt.Printf("Target audience: ")
-		audience, _ := reader.ReadString('\n')
-		audience = strings.TrimSpace(audience)
+		audience, err := readLine(reader)
+		if err != nil {
+			return fmt.Errorf("reading audience: %w", err)
+		}
 
 		sitePath, err := os.Getwd()
 		if err != nil {
@@ -133,6 +134,7 @@ Example:
 			SiteType:    siteType,
 			Description: description,
 			Audience:    audience,
+			SitePath:    sitePath, // For dynamic theme analysis (if theme exists)
 		}
 
 		ctx := cmd.Context()

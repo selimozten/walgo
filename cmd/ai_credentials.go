@@ -41,6 +41,7 @@ Example:
 		for _, provider := range providers {
 			creds, err := ai.GetProviderCredentials(provider)
 			if err != nil {
+				fmt.Fprintf(os.Stderr, "%s Warning: Could not load credentials for %s: %v\n", icons.Warning, provider, err)
 				continue
 			}
 
@@ -82,8 +83,11 @@ Examples:
 		if len(args) > 0 {
 			provider := args[0]
 			fmt.Printf("Remove credentials for %s? [y/N]: ", provider)
-			confirm, _ := reader.ReadString('\n')
-			confirm = strings.TrimSpace(strings.ToLower(confirm))
+			confirm, err := readLine(reader)
+			if err != nil {
+				return fmt.Errorf("reading confirmation: %w", err)
+			}
+			confirm = strings.ToLower(confirm)
 
 			if confirm != "y" && confirm != "yes" {
 				fmt.Printf("%s Cancelled\n", icons.Cross)
@@ -107,8 +111,11 @@ Examples:
 			}
 
 			fmt.Printf("Remove all AI credentials (%s)? [y/N]: ", strings.Join(providers, ", "))
-			confirm, _ := reader.ReadString('\n')
-			confirm = strings.TrimSpace(strings.ToLower(confirm))
+			confirm, err := readLine(reader)
+			if err != nil {
+				return fmt.Errorf("reading confirmation: %w", err)
+			}
+			confirm = strings.ToLower(confirm)
 
 			if confirm != "y" && confirm != "yes" {
 				fmt.Printf("%s Cancelled\n", icons.Cross)

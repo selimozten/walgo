@@ -10,7 +10,7 @@ import {
 } from "../../wailsjs/go/main/App";
 
 interface ImportProps {
-  onSuccess?: () => void;
+  onSuccess?: (sitePath: string) => void;
   onStatusChange?: (status: {
     type: "success" | "error" | "info";
     message: string;
@@ -112,8 +112,8 @@ export const Import: React.FC<ImportProps> = ({
         setLinkStyle("markdown");
         setIncludeDrafts(false);
 
-        if (onSuccess) {
-          onSuccess();
+        if (onSuccess && result.sitePath) {
+          onSuccess(result.sitePath);
         }
       } else {
         if (onStatusChange) {
@@ -123,7 +123,7 @@ export const Import: React.FC<ImportProps> = ({
           });
         }
       }
-    } catch (err: any) {
+    } catch (err) {
       if (onStatusChange) {
         onStatusChange({
           type: "error",

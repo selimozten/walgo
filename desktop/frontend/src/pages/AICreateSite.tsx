@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import { motion } from "framer-motion";
 import {
   Wand2,
@@ -7,9 +7,7 @@ import {
   AlertCircle,
   Check,
   BookOpen,
-  Palette,
   FileCode,
-  Briefcase,
 } from "lucide-react";
 import { Card } from "../components/ui";
 import { itemVariants } from "../utils/constants";
@@ -34,7 +32,7 @@ export const AICreateSite: React.FC<AICreateSiteProps> = ({
   onNavigateToAI,
 }) => {
   const { configured: aiConfigured } = useAIConfig();
-  const { startProgress, completeProgress } = useAIProgress();
+  const { startProgress, completionResult, clearCompletionResult } = useAIProgress();
   const {
     siteName,
     setSiteName,
@@ -50,14 +48,55 @@ export const AICreateSite: React.FC<AICreateSiteProps> = ({
   const [siteAudience, setSiteAudience] = useState("");
   const [isProcessing, setIsProcessing] = useState(false);
 
+  // Store callbacks in refs so effect can access latest values
+  const onSuccessRef = useRef(onSuccess);
+  const onStatusChangeRef = useRef(onStatusChange);
+  const siteNameRef = useRef(siteName);
+  onSuccessRef.current = onSuccess;
+  onStatusChangeRef.current = onStatusChange;
+  siteNameRef.current = siteName;
+
   const siteTypes = [
     { id: "blog", label: "Blog", icon: BookOpen },
-    { id: "portfolio", label: "Portfolio", icon: Palette },
     { id: "docs", label: "Docs", icon: FileCode },
-    { id: "business", label: "Business", icon: Briefcase },
   ];
 
-  const handleCreate = async () => {
+  // Handle completion via polling result
+  useEffect(() => {
+    if (!isProcessing || !completionResult) return;
+
+    setIsProcessing(false);
+    clearCompletionResult();
+
+    if (completionResult.success) {
+      if (onStatusChangeRef.current) {
+        onStatusChangeRef.current({
+          type: "success",
+          message: `AI Site Created: ${siteNameRef.current}`,
+        });
+      }
+
+      // Reset form
+      setSiteName("");
+      setParentDir("");
+      setSiteDescription("");
+      setSiteAudience("");
+      setSiteType("blog");
+
+      if (onSuccessRef.current && completionResult.sitePath) {
+        onSuccessRef.current(completionResult.sitePath);
+      }
+    } else {
+      if (onStatusChangeRef.current) {
+        onStatusChangeRef.current({
+          type: "error",
+          message: `AI Create Failed: ${completionResult.error || "Unknown error"}`,
+        });
+      }
+    }
+  }, [isProcessing, completionResult, clearCompletionResult, setSiteName, setParentDir]);
+
+  const handleCreate = () => {
     if (!siteName) {
       if (onStatusChange) {
         onStatusChange({ type: "error", message: "Site name required" });
@@ -81,61 +120,15 @@ export const AICreateSite: React.FC<AICreateSiteProps> = ({
       onStatusChange({ type: "info", message: "AI creating site..." });
     }
 
-    try {
-      const result = await AICreateSiteAPI({
-        parentDir: parentDir || "",
-        siteName,
-        siteType,
-        description: siteDescription,
-        audience: siteAudience,
-      });
-
-      if (result.success) {
-        // Complete progress tracking
-        completeProgress();
-
-        if (onStatusChange) {
-          onStatusChange({
-            type: "success",
-            message: `AI Site Created: ${siteName}`,
-          });
-        }
-
-        const sitePath = result.sitePath;
-        // Reset form
-        setSiteName("");
-        setParentDir("");
-        setSiteDescription("");
-        setSiteAudience("");
-        setSiteType("blog");
-
-        if (onSuccess && sitePath) {
-          onSuccess(sitePath);
-        }
-      } else {
-        // Complete progress on error
-        completeProgress();
-
-        if (onStatusChange) {
-          onStatusChange({
-            type: "error",
-            message: `AI Create Failed: ${result.error || "Unknown error"}`,
-          });
-        }
-      }
-    } catch (err: any) {
-      // Complete progress on error
-      completeProgress();
-
-      if (onStatusChange) {
-        onStatusChange({
-          type: "error",
-          message: `AI Error: ${err?.toString() || "Unknown error"}`,
-        });
-      }
-    } finally {
-      setIsProcessing(false);
-    }
+    // Fire and forget - Go method runs in background goroutine
+    // Results come back via polling
+    AICreateSiteAPI({
+      parentDir: parentDir || "",
+      siteName,
+      siteType,
+      description: siteDescription,
+      audience: siteAudience,
+    });
   };
 
   return (
@@ -232,7 +225,7 @@ export const AICreateSite: React.FC<AICreateSiteProps> = ({
             <label className="block text-[10px] font-mono text-accent uppercase mb-2 ml-1 tracking-widest">
               Site_Type
             </label>
-            <div className="grid grid-cols-4 gap-2">
+            <div className="grid grid-cols-2 gap-2">
               {siteTypes.map((type) => (
                 <button
                   key={type.id}

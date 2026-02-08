@@ -1,0 +1,169 @@
+baseURL = "/"
+title = "{{SITE_NAME}}"
+languageCode = "en-us"
+theme = "walgo-biolink"
+canonifyURLs = false
+relativeURLs = false
+enableRobotsTXT = true
+disableKinds = ["taxonomy", "term", "RSS", "section", "page", "sitemap"]
+
+[outputs]
+  home = ["HTML"]
+
+[minify]
+  disableXML = true
+  minifyOutput = true
+  # ⚠ Do NOT enable CSS minification — Hugo's minifier (tdewolff/minify) breaks
+  # var() spacing in multi-value properties (e.g. "var(--x) 1fr" → "var(--x)1fr").
+  # The walgo optimizer handles CSS minification correctly.
+  disableCSS = true
+
+[build]
+  useResourceCacheWhen = "fallback"
+
+
+# ==============================================================================
+#  THEME CONFIG
+#  All settings go under [params]. Delete anything you don't need.
+# ==============================================================================
+[params]
+
+  # ── Profile ─────────────────────────────────────────────────────────────────
+  name  = "{{SITE_NAME}}"
+  title = "Builder & Developer"
+  bio   = "Building on the decentralized web. Edit hugo.toml to make this your own."
+  # avatar = "/images/avatar.jpg"
+  # avatarPosition = "50% 30%"       # CSS object-position (crop control)
+  # avatarZoom     = "1.2"           # scale factor (1.0 = default)
+
+  # ── Appearance ──────────────────────────────────────────────────────────────
+  favicon      = "/favicon.svg"
+  defaultTheme = "dark"              # "dark" or "light"
+  accentColor  = "#7C5CFC"           # accent color used across the theme
+
+  # Card style — pick one:
+  #   default, glass, brutal, terminal, neon
+  cardStyle = "default"
+
+  # Background image (optional — covers full page with dark overlay)
+  # backgroundImage = "/images/bg.jpg"   # local path or "https://..."
+
+  # Custom fonts (requires customFonts = true)
+  customFonts = false
+  # fontFamily = "Inter"             # any Google Font
+  # monoFont   = "JetBrains Mono"    # any Google Font mono
+  # fontUrl    = ""                  # custom CSS URL instead of Google Fonts
+
+
+# ==============================================================================
+#  SECTION ORDER
+#  Controls the order sections appear on the page.
+#  Delete this block to use the default: socials → badges → wallets → links → projects
+#
+#  Available types: socials, badges, wallets, links, projects, text, image
+#
+#  Optional fields per section:
+#    title   — override the section heading
+#    key     — use a different data array (reuse templates with different data)
+#    marquee — badges only: true = scroll ticker, false = wrap (default)
+# ==============================================================================
+
+[[params.sections]]
+  type = "socials"
+
+[[params.sections]]
+  type = "links"
+  title = "Links"
+
+[[params.sections]]
+  type = "projects"
+
+
+# ==============================================================================
+#  SOCIAL LINKS
+#  Built-in icons: x, github, discord, telegram, farcaster, lens,
+#                  mirror, youtube, linkedin, email
+#  Custom icon: icon = "/icons/custom.svg" or "https://..."
+# ==============================================================================
+
+[[params.socials]]
+  platform = "github"
+  url      = "https://github.com/username"
+  label    = "GitHub"
+
+[[params.socials]]
+  platform = "x"
+  url      = "https://x.com/username"
+  label    = "X"
+
+[[params.socials]]
+  platform = "email"
+  url      = "mailto:hello@example.com"
+  label    = "Email"
+
+
+# ==============================================================================
+#  LINKS
+#  icon: emoji, local file ("/icons/link.svg"), or URL
+#  featured = true highlights the card
+# ==============================================================================
+
+[[params.links]]
+  title       = "My Website"
+  description = "Personal website and portfolio"
+  url         = "https://example.com"
+  icon        = "🌐"
+  featured    = true
+
+[[params.links]]
+  title       = "My Project"
+  description = "An open-source project I'm building"
+  url         = "https://github.com/username/project"
+  icon        = "🚀"
+
+
+# ==============================================================================
+#  PROJECTS
+#  image: "/images/project.png" or "https://..."
+#  status: any string — "live", "building", "archived", "beta", etc.
+# ==============================================================================
+
+[[params.projects]]
+  name        = "Example Project"
+  description = "A sample project to get you started. Edit hugo.toml to replace with your own."
+  url         = "https://github.com/username/project"
+  status      = "live"
+  tags        = ["Go", "Web3"]
+
+
+# ==============================================================================
+#  BADGES (optional — uncomment to use)
+#  Small label pills — use for tools, tech stack, skills, anything.
+#  Built-in icons: sui, ethereum, bitcoin, solana, polygon, avalanche
+# ==============================================================================
+#
+# [[params.badges]]
+#   name = "Go"
+# [[params.badges]]
+#   name = "React"
+# [[params.badges]]
+#   name = "Sui"
+#   icon = "sui"
+
+
+# ==============================================================================
+#  WALLETS (optional — uncomment to use)
+#  Built-in chain icons: sui, ethereum, bitcoin, solana, polygon, avalanche
+#  Explorer: URL ending with "/" auto-appends the address
+# ==============================================================================
+#
+# [[params.wallets]]
+#   chain    = "sui"
+#   label    = "Sui"
+#   address  = "0x1234...abcd"
+#   explorer = "https://suiscan.xyz/mainnet/account/"
+# [[params.wallets]]
+#   chain    = "ethereum"
+#   label    = "Ethereum"
+#   address  = "0xabcd...1234"
+#   explorer = "https://etherscan.io/address/"

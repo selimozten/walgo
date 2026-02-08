@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { Wand2, Save, Trash2, Eye, EyeOff, Check, AlertCircle, ExternalLink } from 'lucide-react';
 import { Card } from '../components/ui/Card';
 import { LoadingOverlay } from '../components/ui';
@@ -39,7 +39,7 @@ export const AIConfig: React.FC<AIConfigProps> = ({ onConfigChange }) => {
     const [isInitialLoad, setIsInitialLoad] = useState(true);
 
     // Track initial values to detect changes - use ref to avoid infinite loops
-    const initialValuesRef = React.useRef({ provider: '', apiKey: '', baseUrl: '', model: '' });
+    const initialValuesRef = useRef({ provider: '', apiKey: '', baseUrl: '', model: '' });
 
     // Track if we just loaded credentials
     const [justLoadedCredentials, setJustLoadedCredentials] = useState(false);

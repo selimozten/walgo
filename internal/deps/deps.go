@@ -348,7 +348,7 @@ func LookPath(name string) (string, error) {
 
 	localBin, err := getLocalBinDir()
 	if err != nil {
-		return "", fmt.Errorf("%s not found in PATH", name)
+		return "", fmt.Errorf("%s not found in PATH or ~/.local/bin", name)
 	}
 
 	for _, candidate := range execCandidates(name) {

@@ -190,7 +190,7 @@ We recommend using VS Code with the Go extension, or any editor with Go language
 
 - 💬 **Discussions**: Use GitHub Discussions for questions
 - 🐛 **Issues**: Use GitHub Issues for bugs and feature requests
-- 📧 **Email**: Contact maintainers for security issues
+- 📝 **Feedback**: [Submit feedback](https://tally.so/r/447YBO)
 
 ## Recognition
 

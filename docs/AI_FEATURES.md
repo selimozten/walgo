@@ -94,9 +94,9 @@ This command:
 **Supported Site Types:**
 
 - Blog - Classic blog with posts and about page
-- Portfolio - Project showcase
 - Docs - Documentation site
-- Business - Business website
+- Biolink - Bio link page
+- Whitepaper - Technical whitepaper site
 
 ### 4. AI Plan (Create Site Plan Only)
 
@@ -153,11 +153,10 @@ This command:
 
 - `--validate` - Only validate, don't fix (default: false)
 
-**For Business/Portfolio Sites (Ananke theme):**
+**For All Sites:**
 
 - Validates title and description fields
 - Removes duplicate H1 headings (title is already in frontmatter)
-- Ensures services/projects have date fields (ISO 8601 format)
 - Sets draft to false
 
 ### 6. Update Existing Content

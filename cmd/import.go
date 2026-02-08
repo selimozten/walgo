@@ -99,8 +99,16 @@ Features:
 		success := false
 		defer func() {
 			if !success {
-				// Clean up the directory if operation failed
-				os.RemoveAll(sitePath)
+				// Resolve symlinks before removal to avoid deleting unexpected targets
+				realPath, err := filepath.EvalSymlinks(sitePath)
+				if err != nil {
+					return // Can't resolve path, skip cleanup to be safe
+				}
+				// Verify resolved path is still under the parent directory
+				if !strings.HasPrefix(realPath, filepath.Clean(parentDir)+string(os.PathSeparator)) {
+					return // Path escaped parent directory, skip cleanup
+				}
+				os.RemoveAll(realPath)
 			}
 		}()
 

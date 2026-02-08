@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"os"
 	"os/exec"
+	"path/filepath"
 	"strconv"
 	"strings"
 	"syscall"
@@ -29,31 +30,47 @@ func killExistingHugoProcesses() error {
 	var killedPIDs []int
 
 	for _, line := range lines {
-		// Look for lines containing 'hugo' and 'server'
-		if strings.Contains(line, "hugo") && strings.Contains(line, "server") {
-			// Parse PID (first field in ps ax output)
-			fields := strings.Fields(line)
-			if len(fields) == 0 {
+		fields := strings.Fields(line)
+		if len(fields) < 5 {
+			continue
+		}
+
+		// Check command field (5th column onward in ps ax output) for hugo server/serve
+		isHugoServer := false
+		for _, f := range fields[4:] {
+			base := filepath.Base(f)
+			if base == "hugo" {
+				isHugoServer = true
 				continue
 			}
-
-			// Try to parse PID from first field
-			pid, err := strconv.Atoi(fields[0])
-			if err != nil {
-				continue
+			if isHugoServer && (f == "server" || f == "serve") {
+				break
 			}
-
-			// Skip self (this process)
-			if pid == os.Getpid() || pid == os.Getppid() {
-				continue
+			if isHugoServer && !strings.HasPrefix(f, "-") {
+				isHugoServer = false
 			}
+		}
 
-			// Kill the process
-			if err := syscall.Kill(pid, syscall.SIGTERM); err != nil {
-				fmt.Fprintf(os.Stderr, "%s Warning: Could not kill Hugo process %d: %v\n", icons.Warning, pid, err)
-			} else {
-				killedPIDs = append(killedPIDs, pid)
-			}
+		if !isHugoServer {
+			continue
+		}
+
+		// Try to parse PID from first field
+		pid, err := strconv.Atoi(fields[0])
+		if err != nil {
+			continue
+		}
+
+		// Skip self (this process)
+		if pid == os.Getpid() || pid == os.Getppid() {
+			continue
+		}
+
+		// Kill the process
+		if err := syscall.Kill(pid, syscall.SIGTERM); err != nil {
+			fmt.Fprintf(os.Stderr, "%s Warning: Could not kill Hugo process %d: %v\n", icons.Warning, pid, err)
+		} else {
+			killedPIDs = append(killedPIDs, pid)
 		}
 	}
 

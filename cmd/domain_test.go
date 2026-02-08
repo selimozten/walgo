@@ -90,11 +90,10 @@ func TestDomainCommandExecution(t *testing.T) {
 		defer func() { _ = os.Chdir(originalWd) }()
 
 		// Execute domain command without config
-		output, err := executeCommand(rootCmd, "domain")
+		_, err := executeCommand(rootCmd, "domain")
 		if err == nil {
-			t.Log("Expected error when no config file exists")
+			t.Error("Expected error when no config file exists")
 		}
-		_ = output
 	})
 
 	t.Run("Domain with testnet config", func(t *testing.T) {
@@ -108,7 +107,7 @@ func TestDomainCommandExecution(t *testing.T) {
 		// Create config for testnet
 		configContent := `
 walrus:
-  projectId: "0x1234567890abcdef"
+  projectID: "0x1234567890abcdef"
   network: testnet
 hugo:
   publishDir: public
@@ -137,7 +136,7 @@ hugo:
 		// Create config for mainnet without project ID
 		configContent := `
 walrus:
-  projectId: YOUR_WALRUS_PROJECT_ID
+  projectID: YOUR_WALRUS_PROJECT_ID
   network: mainnet
 hugo:
   publishDir: public
@@ -147,11 +146,10 @@ hugo:
 		}
 
 		// Execute domain command - should fail due to missing project ID
-		output, err := executeCommand(rootCmd, "domain")
+		_, err := executeCommand(rootCmd, "domain")
 		if err == nil {
-			t.Log("Expected error when project ID is placeholder")
+			t.Error("Expected error when project ID is placeholder")
 		}
-		_ = output
 	})
 
 	t.Run("Domain with mainnet config and valid project ID", func(t *testing.T) {
@@ -165,7 +163,7 @@ hugo:
 		// Create config for mainnet with valid project ID
 		configContent := `
 walrus:
-  projectId: "0x1234567890abcdef1234567890abcdef12345678"
+  projectID: "0x1234567890abcdef1234567890abcdef12345678"
   network: mainnet
 hugo:
   publishDir: public
@@ -193,7 +191,7 @@ hugo:
 		// Create config for mainnet
 		configContent := `
 walrus:
-  projectId: "0x1234567890abcdef1234567890abcdef12345678"
+  projectID: "0x1234567890abcdef1234567890abcdef12345678"
   network: mainnet
 hugo:
   publishDir: public
@@ -221,7 +219,7 @@ hugo:
 		// Create config without network specified
 		configContent := `
 walrus:
-  projectId: "0x1234567890abcdef"
+  projectID: "0x1234567890abcdef"
 hugo:
   publishDir: public
 `

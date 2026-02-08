@@ -28,6 +28,7 @@ interface DeploymentModalProps {
   network?: string;
   currentObjectId?: string;
   deployedWallet?: string; // Wallet address used for deployment
+  currentEpochs?: number; // Current epochs from project
   onClose: () => void;
   onDeploy: (params: DeploymentParams) => Promise<DeploymentResult>;
 }
@@ -60,6 +61,7 @@ export const DeploymentModal: React.FC<DeploymentModalProps> = ({
   network: initialNetwork = "testnet",
   currentObjectId,
   deployedWallet,
+  currentEpochs = 1,
   onClose,
   onDeploy,
 }) => {
@@ -84,15 +86,18 @@ export const DeploymentModal: React.FC<DeploymentModalProps> = ({
 
   // Track changes
   useEffect(() => {
-    const changed = network !== initialNetwork || epochs !== "1";
+    const initialEpochsStr = isUpdate && currentEpochs > 0 ? currentEpochs.toString() : "1";
+    const changed = network !== initialNetwork || epochs !== initialEpochsStr;
     setHasChanges(changed);
-  }, [network, epochs, initialNetwork]);
+  }, [network, epochs, initialNetwork, currentEpochs, isUpdate]);
 
   // Reset on open - ONLY when modal opens
   useEffect(() => {
     if (isOpen) {
       setStep("config");
-      setEpochs("1");
+      // Load epochs from project if it's an update, otherwise default to 1
+      const initialEpochs = isUpdate && currentEpochs > 0 ? currentEpochs.toString() : "1";
+      setEpochs(initialEpochs);
       setLogs([]);
       setDeploymentResult(null);
       setHasChanges(false);
@@ -100,9 +105,6 @@ export const DeploymentModal: React.FC<DeploymentModalProps> = ({
 
       // If site is already deployed (locked mode), use deployed network and wallet
       if (isLocked && initialNetwork && deployedWallet) {
-        console.log("🔒 LOCKED MODE - Deployed wallet:", deployedWallet);
-        console.log("🔒 LOCKED MODE - Deployed network:", initialNetwork);
-
         setNetwork(initialNetwork);
         setSelectedAddress(deployedWallet);
         setIsSwitching(true);
@@ -112,27 +114,21 @@ export const DeploymentModal: React.FC<DeploymentModalProps> = ({
           try {
             // Switch network if different
             if (walletInfo?.network !== initialNetwork) {
-              console.log(`🔄 Switching network from ${walletInfo?.network} to ${initialNetwork}`);
               const netResult = await switchNetwork(initialNetwork);
               if (!netResult.success) {
-                console.error("❌ Failed to switch network:", netResult.error);
-              } else {
-                console.log("✅ Network switched successfully");
+                console.error("Failed to switch network:", netResult.error);
               }
             }
 
             // Switch wallet if different
             if (walletInfo?.address !== deployedWallet) {
-              console.log(`🔄 Switching wallet from ${walletInfo?.address} to ${deployedWallet}`);
               const addrResult = await switchAddress(deployedWallet);
               if (!addrResult.success) {
-                console.error("❌ Failed to switch wallet:", addrResult.error);
-              } else {
-                console.log("✅ Wallet switched successfully");
+                console.error("Failed to switch wallet:", addrResult.error);
               }
             }
           } catch (err) {
-            console.error("❌ Error during switching:", err);
+            console.error("Error during switching:", err);
           } finally {
             setIsSwitching(false);
           }

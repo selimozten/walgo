@@ -13,6 +13,12 @@ import {
 } from '../../wailsjs/go/main/App';
 import { Project, FileTreeNode } from '../types';
 
+// Sort comparator: directories first, then files, both alphabetically
+const sortFilesComparator = (a: FileTreeNode, b: FileTreeNode) => {
+    if (a.isDir === b.isDir) return a.name.localeCompare(b.name);
+    return a.isDir ? -1 : 1;
+};
+
 export const useEditProject = () => {
     const [project, setProject] = useState<Project | null>(null);
     const [files, setFiles] = useState<FileTreeNode[]>([]);
@@ -77,12 +83,7 @@ export const useEditProject = () => {
             const result = await ListFiles(path);
             if (result && result.files) {
                 // Sort files: directories first, then files, both alphabetically
-                const sortedFiles = [...result.files].sort((a, b) => {
-                    if (a.isDir === b.isDir) {
-                        return a.name.localeCompare(b.name);
-                    }
-                    return a.isDir ? -1 : 1;
-                });
+                const sortedFiles = [...result.files].sort(sortFilesComparator);
                 setFiles(sortedFiles);
             } else {
                 setFiles([]);
@@ -143,12 +144,7 @@ export const useEditProject = () => {
                 // Reload root files first
                 const rootResult = await ListFiles(projectPath);
                 if (rootResult && rootResult.files) {
-                    const sortedFiles = [...rootResult.files].sort((a, b) => {
-                        if (a.isDir === b.isDir) {
-                            return a.name.localeCompare(b.name);
-                        }
-                        return a.isDir ? -1 : 1;
-                    });
+                    const sortedFiles = [...rootResult.files].sort(sortFilesComparator);
                     setExpandedFolders(previousExpandedFolders);
 
                     // Reload children for all expanded folders with fresh root
@@ -179,12 +175,7 @@ export const useEditProject = () => {
                 // Reload root files first
                 const rootResult = await ListFiles(projectPath);
                 if (rootResult && rootResult.files) {
-                    const sortedFiles = [...rootResult.files].sort((a, b) => {
-                        if (a.isDir === b.isDir) {
-                            return a.name.localeCompare(b.name);
-                        }
-                        return a.isDir ? -1 : 1;
-                    });
+                    const sortedFiles = [...rootResult.files].sort(sortFilesComparator);
                     setExpandedFolders(previousExpandedFolders);
 
                     // Reload children for all expanded folders with fresh root
@@ -223,12 +214,7 @@ export const useEditProject = () => {
                 // Reload root files first
                 const rootResult = await ListFiles(projectPath);
                 if (rootResult && rootResult.files) {
-                    const sortedFiles = [...rootResult.files].sort((a, b) => {
-                        if (a.isDir === b.isDir) {
-                            return a.name.localeCompare(b.name);
-                        }
-                        return a.isDir ? -1 : 1;
-                    });
+                    const sortedFiles = [...rootResult.files].sort(sortFilesComparator);
                     setExpandedFolders(newExpandedFolders);
 
                     // Reload children for all expanded folders with fresh root
@@ -250,6 +236,8 @@ export const useEditProject = () => {
     };
 
     const toggleFolder = async (path: string) => {
+        const wasExpanded = expandedFolders.has(path);
+
         setExpandedFolders(prev => {
             const next = new Set(prev);
             if (next.has(path)) {
@@ -261,7 +249,7 @@ export const useEditProject = () => {
         });
 
         // Load children if folder is being expanded and doesn't have children yet
-        if (!expandedFolders.has(path)) {
+        if (!wasExpanded) {
             try {
                 const result = await ListFiles(path);
                 if (result && result.files && result.files.length > 0) {
@@ -303,12 +291,7 @@ export const useEditProject = () => {
                     try {
                         const result = await ListFiles(node.path);
                         if (result && result.files) {
-                            const sortedChildren = [...result.files].sort((a, b) => {
-                                if (a.isDir === b.isDir) {
-                                    return a.name.localeCompare(b.name);
-                                }
-                                return a.isDir ? -1 : 1;
-                            });
+                            const sortedChildren = [...result.files].sort(sortFilesComparator);
                             // Recursively load children of expanded child folders
                             const childrenWithNested = await loadChildrenRecursively(sortedChildren);
                             updatedNodes.push({ ...node, children: childrenWithNested });
@@ -415,12 +398,7 @@ export const useEditProject = () => {
                 // Reload root files first
                 const rootResult = await ListFiles(projectPath);
                 if (rootResult && rootResult.files) {
-                    const sortedFiles = [...rootResult.files].sort((a, b) => {
-                        if (a.isDir === b.isDir) {
-                            return a.name.localeCompare(b.name);
-                        }
-                        return a.isDir ? -1 : 1;
-                    });
+                    const sortedFiles = [...rootResult.files].sort(sortFilesComparator);
                     setExpandedFolders(previousExpandedFolders);
 
                     // Reload children for all expanded folders with fresh root
@@ -459,12 +437,7 @@ export const useEditProject = () => {
                 // Reload root files first
                 const rootResult = await ListFiles(projectPath);
                 if (rootResult && rootResult.files) {
-                    const sortedFiles = [...rootResult.files].sort((a, b) => {
-                        if (a.isDir === b.isDir) {
-                            return a.name.localeCompare(b.name);
-                        }
-                        return a.isDir ? -1 : 1;
-                    });
+                    const sortedFiles = [...rootResult.files].sort(sortFilesComparator);
                     setExpandedFolders(previousExpandedFolders);
 
                     // Reload children for all expanded folders with fresh root

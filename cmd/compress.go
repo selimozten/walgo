@@ -119,8 +119,11 @@ Example:
 			fmt.Printf("\n%s Generating ws-resources.json...\n", icons.Pencil)
 
 			cfg, err := config.LoadConfigFrom(targetDir)
+			if err != nil {
+				fmt.Fprintf(os.Stderr, "%s Warning: Could not load config: %v (using defaults)\n", icons.Warning, err)
+			}
 			cacheConfig := compress.DefaultCacheControlConfig()
-			if err == nil {
+			if err == nil && cfg != nil {
 				cacheConfig.Enabled = cfg.CacheConfig.Enabled
 				cacheConfig.ImmutableMaxAge = cfg.CacheConfig.ImmutableMaxAge
 				cacheConfig.MutableMaxAge = cfg.CacheConfig.MutableMaxAge

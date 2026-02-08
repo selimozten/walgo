@@ -103,10 +103,12 @@ func TestInitCommandExecution(t *testing.T) {
 			}
 		})
 
-		// Directory creation should succeed even if it exists
-		// But Hugo initialization might fail
-		_ = stdout
-		_ = stderr
+		if stdout != "" {
+			t.Logf("stdout: %s", stdout)
+		}
+		if stderr != "" {
+			t.Logf("stderr: %s", stderr)
+		}
 	})
 
 }

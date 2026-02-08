@@ -104,11 +104,10 @@ func TestDeployCommandExecution(t *testing.T) {
 		defer func() { _ = os.Chdir(originalWd) }()
 
 		// Execute deploy command without config
-		output, err := executeCommand(rootCmd, "deploy")
+		_, err := executeCommand(rootCmd, "deploy")
 		if err == nil {
-			t.Log("Expected error when no config file exists")
+			t.Error("Expected error when no config file exists")
 		}
-		_ = output
 	})
 
 	t.Run("Deploy without public directory", func(t *testing.T) {
@@ -131,11 +130,10 @@ hugo:
 		}
 
 		// Execute deploy command
-		output, err := executeCommand(rootCmd, "deploy")
+		_, err := executeCommand(rootCmd, "deploy")
 		if err == nil {
-			t.Log("Expected error when public directory doesn't exist")
+			t.Error("Expected error when public directory doesn't exist")
 		}
-		_ = output
 	})
 
 	t.Run("Deploy with force flag bypasses public directory check", func(t *testing.T) {
@@ -159,10 +157,10 @@ hugo:
 
 		// Execute deploy with force flag - will still fail due to missing site-builder
 		// but shouldn't fail on public directory check
-		output, err := executeCommand(rootCmd, "deploy", "--force")
-		// Will fail for other reasons (e.g., site-builder not installed)
-		_ = err
-		_ = output
+		_, err := executeCommand(rootCmd, "deploy", "--force")
+		if err != nil {
+			t.Logf("deploy --force returned error (expected without site-builder): %v", err)
+		}
 	})
 
 	t.Run("Deploy with dry-run flag", func(t *testing.T) {

@@ -256,10 +256,10 @@ func TestRemoveProviderCredentials(t *testing.T) {
 		t.Error("openrouter should still exist")
 	}
 
-	// Try to remove non-existent provider
+	// Try to remove non-existent provider - should succeed (idempotent)
 	err = RemoveProviderCredentials("nonexistent")
-	if err == nil {
-		t.Error("expected error for removing non-existent provider")
+	if err != nil {
+		t.Errorf("removing non-existent provider should succeed (idempotent): %v", err)
 	}
 }
 

@@ -1,16 +1,17 @@
-# Walgo
-
-[![Go Version](https://img.shields.io/badge/Go-1.22+-00ADD8?style=flat&logo=go)](https://golang.org)
-[![License](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
-[![Build Status](https://github.com/selimozten/walgo/actions/workflows/ci.yml/badge.svg)](https://github.com/selimozten/walgo/actions/workflows/ci.yml)
-[![Walrus RFP Winner](https://img.shields.io/badge/Walrus%20RFP-Winner-F97316.svg)](https://walrus.xyz)
-
-**The official CLI tool for deploying static sites to Walrus decentralized storage.**
-
-Deploy your Hugo sites to the decentralized web with an interactive wizard. No blockchain experience required.
+<p align="center">
+  <img src="github_walgo.png" alt="Walgo — Markdown to Web3, Simplified" width="100%" />
+</p>
 
 <p align="center">
-  <img src="walrus-logo.svg" alt="Walrus Logo" width="120" />
+  <a href="https://golang.org"><img src="https://img.shields.io/badge/Go-1.22+-00ADD8?style=flat&logo=go" alt="Go Version" /></a>
+  <a href="LICENSE"><img src="https://img.shields.io/badge/License-MIT-green.svg" alt="License" /></a>
+  <a href="https://github.com/selimozten/walgo/actions/workflows/ci.yml"><img src="https://github.com/selimozten/walgo/actions/workflows/ci.yml/badge.svg" alt="Build Status" /></a>
+  <a href="https://walrus.xyz"><img src="https://img.shields.io/badge/Walrus%20RFP-Winner-F97316.svg" alt="Walrus RFP Winner" /></a>
+</p>
+
+<p align="center">
+  <strong>The official CLI tool for deploying static sites to Walrus decentralized storage.</strong><br />
+  Deploy your Hugo sites to the decentralized web with an interactive wizard. No blockchain experience required.
 </p>
 
 ---
@@ -476,6 +477,7 @@ walgo doctor --fix-all # Auto-fix common issues
 - **Documentation:** [docs/TROUBLESHOOTING.md](docs/TROUBLESHOOTING.md)
 - **GitHub Issues:** [Report a bug](https://github.com/selimozten/walgo/issues)
 - **GitHub Discussions:** [Ask questions](https://github.com/selimozten/walgo/discussions)
+- **Feedback Form:** [Submit feedback](https://tally.so/r/447YBO)
 
 ---
 

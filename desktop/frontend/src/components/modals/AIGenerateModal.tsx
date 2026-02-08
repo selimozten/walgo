@@ -7,6 +7,33 @@ import {
   GetContentStructure,
 } from "../../../wailsjs/go/main/App";
 
+interface ContentTypeRuntime {
+  name: string;
+  fileCount: number;
+  path: string;
+  files: string[];
+}
+
+interface ContentStructureRuntime {
+  contentTypes: ContentTypeRuntime[];
+  defaultType: string;
+  contentDir: string;
+}
+
+// Maps Wails PascalCase ContentStructure to camelCase runtime interface
+function toRuntime(s: any): ContentStructureRuntime {
+  return {
+    contentTypes: (s.ContentTypes || []).map((ct: any) => ({
+      name: ct.Name || "",
+      fileCount: ct.FileCount || 0,
+      path: ct.Path || "",
+      files: ct.Files || [],
+    })),
+    defaultType: s.DefaultType || "",
+    contentDir: s.ContentDir || "",
+  };
+}
+
 interface AIGenerateModalProps {
   isOpen: boolean;
   onClose: () => void;
@@ -27,7 +54,7 @@ export const AIGenerateModal: React.FC<AIGenerateModalProps> = ({
 }) => {
   const [instructions, setInstructions] = useState("");
   const [isProcessing, setIsProcessing] = useState(false);
-  const [contentStructure, setContentStructure] = useState<any>(null);
+  const [contentStructure, setContentStructure] = useState<ContentStructureRuntime | null>(null);
   const [isLoadingStructure, setIsLoadingStructure] = useState(false);
 
   // Load content structure when modal opens
@@ -43,7 +70,7 @@ export const AIGenerateModal: React.FC<AIGenerateModalProps> = ({
     setIsLoadingStructure(true);
     try {
       const structure = await GetContentStructure(sitePath);
-      setContentStructure(structure);
+      setContentStructure(toRuntime(structure));
     } catch (err) {
       console.error("Error loading content structure:", err);
     } finally {
@@ -92,7 +119,7 @@ export const AIGenerateModal: React.FC<AIGenerateModalProps> = ({
           });
         }
       }
-    } catch (err: any) {
+    } catch (err) {
       if (onStatusChange) {
         onStatusChange({
           type: "error",
@@ -167,7 +194,7 @@ export const AIGenerateModal: React.FC<AIGenerateModalProps> = ({
               <h3 className="text-sm font-mono text-zinc-300">Current Content Structure</h3>
             </div>
             <div className="space-y-2">
-              {contentStructure.contentTypes.map((ct: any, idx: number) => (
+              {contentStructure.contentTypes.map((ct, idx) => (
                 <div key={idx} className="flex items-start gap-2 text-xs font-mono">
                   <span className="text-accent">📁</span>
                   <div className="flex-1">

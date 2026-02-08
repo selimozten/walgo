@@ -100,10 +100,10 @@ func TestCompressCommandExecution(t *testing.T) {
 		defer func() { _ = os.Chdir(originalWd) }()
 
 		// Execute compress with non-existent directory
-		output, err := executeCommand(rootCmd, "compress", "/nonexistent/path")
-		// Command may return error or not depending on implementation
-		_ = err
-		_ = output
+		_, err := executeCommand(rootCmd, "compress", "/nonexistent/path")
+		if err != nil {
+			t.Logf("compress with non-existent directory returned error: %v", err)
+		}
 	})
 
 	t.Run("Compress with empty directory", func(t *testing.T) {

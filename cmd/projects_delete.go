@@ -3,7 +3,6 @@ package cmd
 import (
 	"context"
 	"fmt"
-	"strconv"
 	"strings"
 	"time"
 
@@ -12,27 +11,14 @@ import (
 	"github.com/selimozten/walgo/internal/ui"
 )
 
-// deleteProject removes a project from Walrus blockchain and local database.
-func deleteProject(nameOrID string) error {
+// deleteProjectByRef removes a project from Walrus blockchain and local database.
+func deleteProjectByRef(proj *projects.Project) error {
 	icons := ui.GetIcons()
 	pm, err := projects.NewManager()
 	if err != nil {
 		return fmt.Errorf("failed to initialize project manager: %w", err)
 	}
 	defer pm.Close()
-
-	var proj *projects.Project
-	if id, err := strconv.ParseInt(nameOrID, 10, 64); err == nil {
-		proj, err = pm.GetProject(id)
-		if err != nil {
-			return err
-		}
-	} else {
-		proj, err = pm.GetProjectByName(nameOrID)
-		if err != nil {
-			return err
-		}
-	}
 
 	fmt.Println()
 	fmt.Printf("%s Delete project: %s?\n", icons.Warning, proj.Name)

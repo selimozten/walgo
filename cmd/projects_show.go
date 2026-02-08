@@ -2,34 +2,21 @@ package cmd
 
 import (
 	"fmt"
-	"strconv"
 	"strings"
+	"time"
 
 	"github.com/selimozten/walgo/internal/projects"
 	"github.com/selimozten/walgo/internal/ui"
 )
 
-// showProject displays detailed information about a specific project.
-func showProject(nameOrID string) error {
+// showProjectDetails displays detailed information about a specific project.
+func showProjectDetails(proj *projects.Project) error {
 	icons := ui.GetIcons()
 	pm, err := projects.NewManager()
 	if err != nil {
 		return fmt.Errorf("failed to initialize project manager: %w", err)
 	}
 	defer pm.Close()
-
-	var proj *projects.Project
-	if id, err := strconv.ParseInt(nameOrID, 10, 64); err == nil {
-		proj, err = pm.GetProject(id)
-		if err != nil {
-			return err
-		}
-	} else {
-		proj, err = pm.GetProjectByName(nameOrID)
-		if err != nil {
-			return err
-		}
-	}
 
 	stats, err := pm.GetProjectStats(proj.ID)
 	if err != nil {
@@ -73,23 +60,65 @@ func showProject(nameOrID string) error {
 	fmt.Printf("  Object ID:       %s\n", proj.ObjectID)
 	if proj.SuiNS != "" {
 		fmt.Printf("  SuiNS:           %s\n", proj.SuiNS)
-		fmt.Printf("  URL:             https://%s.walrus.site\n", proj.SuiNS)
+		fmt.Printf("  URL:             https://%s.wal.app\n", proj.SuiNS)
 	}
 	fmt.Printf("  Wallet:          %s\n", proj.WalletAddr)
 	fmt.Printf("  Site path:       %s\n", proj.SitePath)
 	fmt.Printf("  Created:         %s\n", proj.CreatedAt.Format("2006-01-02 15:04:05"))
 	fmt.Println()
 
-	fmt.Printf("%s Statistics\n", icons.Info)
+	fmt.Printf("%s Storage & Deployment\n", icons.Info)
 	fmt.Println("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
-	fmt.Printf("  Total deployments:     %d\n", stats.TotalDeployments)
+
+	// Get epoch info from all deployments for accurate expiry calculation
+	epochInfo, epochErr := pm.GetEpochInfo(proj.ID)
+	_ = epochErr // Ignore error, will use fallback
+
+	// Storage Epochs
+	if epochInfo != nil && epochInfo.TotalEpochs > 0 {
+		duration := projects.CalculateStorageDuration(epochInfo.TotalEpochs, proj.Network)
+		fmt.Printf("  Total Storage Epochs:  %d (~%s)\n", epochInfo.TotalEpochs, duration)
+
+		// Show last deployment epochs if different from total (indicates multiple deployments)
+		if proj.Epochs > 0 && proj.Epochs != epochInfo.TotalEpochs {
+			fmt.Printf("  Last Deploy Epochs:    %d\n", proj.Epochs)
+		}
+
+		// Calculate expiry from first deployment + total epochs
+		if !epochInfo.FirstDeploymentAt.IsZero() {
+			expiryDate := calculateExpiryDate(epochInfo.FirstDeploymentAt, epochInfo.TotalEpochs, proj.Network)
+			expiryStr := formatExpiryDuration(expiryDate)
+			fmt.Printf("  Expires In:            %s\n", expiryStr)
+		}
+	} else if proj.Epochs > 0 {
+		// Fallback to project epochs if epoch info not available
+		duration := projects.CalculateStorageDuration(proj.Epochs, proj.Network)
+		fmt.Printf("  Storage Epochs:        %d (~%s)\n", proj.Epochs, duration)
+
+		if !proj.LastDeployAt.IsZero() {
+			expiryDate := calculateExpiryDate(proj.LastDeployAt, proj.Epochs, proj.Network)
+			expiryStr := formatExpiryDuration(expiryDate)
+			fmt.Printf("  Expires In:            %s\n", expiryStr)
+		}
+	}
+
+	// Gas Fee (actual cost from last deployment)
+	if proj.GasFee != "" {
+		fmt.Printf("  Gas Fee:               %s\n", proj.GasFee)
+	}
+
+	// Last Deploy
+	if !proj.LastDeployAt.IsZero() {
+		fmt.Printf("  Last Deploy:           %s\n", proj.LastDeployAt.Format("2006-01-02 15:04"))
+	}
+
+	fmt.Printf("  Total Deployments:     %d\n", stats.TotalDeployments)
 	fmt.Printf("  Successful:            %d\n", stats.SuccessfulDeploys)
 	if stats.FailedDeploys > 0 {
 		fmt.Printf("  Failed:                %d\n", stats.FailedDeploys)
 	}
 	if !stats.FirstDeployment.IsZero() {
-		fmt.Printf("  First deployment:      %s\n", stats.FirstDeployment.Format("2006-01-02 15:04"))
-		fmt.Printf("  Last deployment:       %s\n", stats.LastDeployment.Format("2006-01-02 15:04"))
+		fmt.Printf("  First Deployment:      %s\n", stats.FirstDeployment.Format("2006-01-02 15:04"))
 	}
 	fmt.Println()
 
@@ -110,6 +139,9 @@ func showProject(nameOrID string) error {
 			}
 
 			fmt.Printf("  %s %s - %d epochs", status, d.CreatedAt.Format("2006-01-02 15:04"), d.Epochs)
+			if d.GasFee != "" {
+				fmt.Printf(" - %s", d.GasFee)
+			}
 			if d.Version != "" {
 				fmt.Printf(" (v%s)", d.Version)
 			}
@@ -137,4 +169,56 @@ func showProject(nameOrID string) error {
 	fmt.Println()
 
 	return nil
+}
+
+// calculateExpiryDate calculates when the storage will expire based on last deployment
+func calculateExpiryDate(lastDeploy time.Time, epochs int, network string) time.Time {
+	// Mainnet: ~2 weeks per epoch, Testnet: ~1 day per epoch
+	var daysPerEpoch int
+	if network == "mainnet" {
+		daysPerEpoch = 14
+	} else {
+		daysPerEpoch = 1
+	}
+
+	totalDays := epochs * daysPerEpoch
+	return lastDeploy.Add(time.Duration(totalDays) * 24 * time.Hour)
+}
+
+// formatExpiryDuration formats the time until expiry in a human-readable format
+func formatExpiryDuration(expiryDate time.Time) string {
+	now := time.Now()
+	diff := expiryDate.Sub(now)
+
+	if diff < 0 {
+		return "Expired"
+	}
+
+	days := int(diff.Hours() / 24)
+	hours := int(diff.Hours()) % 24
+
+	if days == 0 {
+		if hours == 0 {
+			return "Expiring soon"
+		}
+		return fmt.Sprintf("%d hours", hours)
+	}
+
+	if days == 1 {
+		if hours > 0 {
+			return fmt.Sprintf("1 day, %d hours", hours)
+		}
+		return "1 day"
+	}
+
+	if days >= 7 {
+		weeks := days / 7
+		remainingDays := days % 7
+		if remainingDays > 0 {
+			return fmt.Sprintf("%d weeks, %d days", weeks, remainingDays)
+		}
+		return fmt.Sprintf("%d weeks", weeks)
+	}
+
+	return fmt.Sprintf("%d days", days)
 }

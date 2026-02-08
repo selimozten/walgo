@@ -13,6 +13,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/selimozten/walgo/internal/ai"
 	"github.com/selimozten/walgo/internal/compress"
 	"github.com/selimozten/walgo/internal/config"
 	"github.com/selimozten/walgo/internal/deps"
@@ -23,9 +24,6 @@ import (
 
 //go:embed tomls/*.toml
 var tomlsFS embed.FS
-
-//go:embed archetypes/*.md
-var archetypesFS embed.FS
 
 //go:embed assets/favicon.svg
 var faviconSVG []byte
@@ -57,7 +55,7 @@ func DetectContentTypes(sitePath string) ([]ContentType, error) {
 		}
 
 		// Skip hidden directories
-		if entry.Name()[0] == '.' {
+		if name := entry.Name(); len(name) > 0 && name[0] == '.' {
 			continue
 		}
 
@@ -91,7 +89,8 @@ func GetDefaultContentType(sitePath string) string {
 	return types[0].Name
 }
 
-// countMarkdownFiles counts .md files recursively in a directory
+// countMarkdownFiles counts .md files recursively in a directory.
+// Returns -1 if the directory cannot be walked.
 func countMarkdownFiles(dir string) int {
 	count := 0
 	if err := filepath.Walk(dir, func(path string, info os.FileInfo, err error) error {
@@ -103,8 +102,7 @@ func countMarkdownFiles(dir string) int {
 		}
 		return nil
 	}); err != nil {
-		// If walk fails, return 0 (conservative estimate)
-		return 0
+		return -1
 	}
 	return count
 }
@@ -380,6 +378,11 @@ func ServeSite(sitePath string) error {
 
 // CreateContent creates new content using Hugo's new command
 func CreateContent(sitePath, contentPath string) error {
+	// Validate contentPath to prevent path traversal
+	if strings.Contains(contentPath, "..") || filepath.IsAbs(contentPath) {
+		return fmt.Errorf("invalid content path: must be relative without '..'")
+	}
+
 	hugoPath, err := deps.LookPath("hugo")
 	if err != nil {
 		return fmt.Errorf("hugo is not installed or not found in PATH")
@@ -399,73 +402,21 @@ func CreateContent(sitePath, contentPath string) error {
 type SiteType string
 
 const (
-	SiteTypeBlog      SiteType = "blog"
-	SiteTypePortfolio SiteType = "portfolio"
-	SiteTypeDocs      SiteType = "docs"
-	SiteTypeBusiness  SiteType = "business"
+	SiteTypeBlog       SiteType = "blog"
+	SiteTypeDocs       SiteType = "docs"
+	SiteTypeBiolink    SiteType = "biolink"
+	SiteTypeWhitepaper SiteType = "whitepaper"
 )
 
-// DetermineSiteTypeFromPath analyzes a Hugo site and determines its type
-func DetermineSiteTypeFromPath(sitePath string) SiteType {
-	// Check for hugo.toml or config.toml
-	configPath := filepath.Join(sitePath, "hugo.toml")
-	if _, err := os.Stat(configPath); os.IsNotExist(err) {
-		configPath = filepath.Join(sitePath, "config.toml")
-	}
-
-	// Read config file if it exists
-	if content, err := os.ReadFile(configPath); err == nil {
-		configStr := string(content)
-
-		// Check for theme indicators
-		if strings.Contains(configStr, "hugo-book") || strings.Contains(configStr, "BookTheme") {
-			return SiteTypeDocs
-		}
-		if strings.Contains(configStr, "coder") || strings.Contains(configStr, "portfolio") {
-			return SiteTypePortfolio
-		}
-		if strings.Contains(configStr, "business") {
-			return SiteTypeBusiness
-		}
-	}
-
-	// Check content structure
-	contentDir := filepath.Join(sitePath, "content")
-	if entries, err := os.ReadDir(contentDir); err == nil {
-		for _, entry := range entries {
-			if entry.IsDir() {
-				name := strings.ToLower(entry.Name())
-				if name == "docs" || name == "documentation" {
-					return SiteTypeDocs
-				}
-				if name == "portfolio" || name == "projects" {
-					return SiteTypePortfolio
-				}
-				if name == "services" || name == "products" {
-					return SiteTypeBusiness
-				}
-			}
-		}
-	}
-
-	// Default to blog
-	return SiteTypeBlog
-}
-
 // GetSiteConfig returns the embedded TOML config for a site type
-func GetSiteConfig(siteType SiteType) ([]byte, error) {
+func getSiteConfig(siteType SiteType) ([]byte, error) {
 	filename := fmt.Sprintf("tomls/%s.toml", siteType)
 	return tomlsFS.ReadFile(filename)
 }
 
-// SetupSiteConfig copies the appropriate TOML config to the site directory
-func SetupSiteConfig(sitePath string, siteType SiteType) error {
-	return SetupSiteConfigWithName(sitePath, siteType, "")
-}
-
 // SetupSiteConfigWithName copies the appropriate TOML config to the site directory with site name
 func SetupSiteConfigWithName(sitePath string, siteType SiteType, siteName string) error {
-	configData, err := GetSiteConfig(siteType)
+	configData, err := getSiteConfig(siteType)
 	if err != nil {
 		return fmt.Errorf("getting config for %s: %w", siteType, err)
 	}
@@ -476,6 +427,10 @@ func SetupSiteConfigWithName(sitePath string, siteType SiteType, siteName string
 		// Use directory name as default site name
 		siteName = filepath.Base(sitePath)
 	}
+	// Sanitize siteName to prevent TOML injection (escape quotes and newlines)
+	siteName = strings.ReplaceAll(siteName, `"`, `\"`)
+	siteName = strings.ReplaceAll(siteName, "\n", " ")
+	siteName = strings.ReplaceAll(siteName, "\r", "")
 	configStr = strings.ReplaceAll(configStr, "{{SITE_NAME}}", siteName)
 
 	configPath := filepath.Join(sitePath, "hugo.toml")
@@ -486,52 +441,21 @@ func SetupSiteConfigWithName(sitePath string, siteType SiteType, siteName string
 	return nil
 }
 
-// SetupArchetypes copies the embedded archetypes to the site directory
-func SetupArchetypes(sitePath string) error {
-	archetypesDir := filepath.Join(sitePath, "archetypes")
-
-	// Create archetypes directory if it doesn't exist
-	if err := os.MkdirAll(archetypesDir, 0755); err != nil {
-		return fmt.Errorf("creating archetypes directory: %w", err)
-	}
-
-	// Read all embedded archetypes
-	entries, err := archetypesFS.ReadDir("archetypes")
-	if err != nil {
-		return fmt.Errorf("reading embedded archetypes: %w", err)
-	}
-
-	for _, entry := range entries {
-		if entry.IsDir() {
-			continue
-		}
-
-		// Read the archetype content
-		content, err := archetypesFS.ReadFile(filepath.Join("archetypes", entry.Name()))
-		if err != nil {
-			return fmt.Errorf("reading archetype %s: %w", entry.Name(), err)
-		}
-
-		// Write to site's archetypes directory
-		destPath := filepath.Join(archetypesDir, entry.Name())
-		if err := os.WriteFile(destPath, content, 0644); err != nil {
-			return fmt.Errorf("writing archetype %s: %w", entry.Name(), err)
-		}
-	}
-
-	return nil
+// SetupArchetypes creates archetypes based on theme analysis
+// This replaces static embedded archetypes with theme-aware dynamic ones
+func SetupArchetypes(sitePath, themeName string) error {
+	return ai.SetupDynamicArchetypes(sitePath, themeName)
 }
 
 // ThemeInfo contains information about a Hugo theme
 type ThemeInfo struct {
 	Name    string // Theme name
 	DirName string // Directory name in themes/
-	RepoURL string // Git repository URL
 }
 
 // GetThemeInfo returns theme information for a site type
 // IMPORTANT: DirName must match the theme name in Hugo config files (tomls/*.toml)
-// - blog.toml, portfolio.toml, business.toml use: theme = "ananke"
+// - blog.toml uses: theme = "ananke"
 // - docs.toml uses: theme = "hugo-book"
 func GetThemeInfo(siteType SiteType) ThemeInfo {
 	switch siteType {
@@ -539,66 +463,312 @@ func GetThemeInfo(siteType SiteType) ThemeInfo {
 		return ThemeInfo{
 			Name:    "Ananke",
 			DirName: "ananke", // Must match: theme = "ananke" in blog.toml
-			RepoURL: "https://github.com/theNewDynamic/gohugo-theme-ananke.git",
-		}
-	case SiteTypePortfolio:
-		return ThemeInfo{
-			Name:    "Ananke",
-			DirName: "ananke", // Must match: theme = "ananke" in portfolio.toml
-			RepoURL: "https://github.com/theNewDynamic/gohugo-theme-ananke.git",
 		}
 	case SiteTypeDocs:
 		return ThemeInfo{
 			Name:    "Book",
 			DirName: "hugo-book", // Must match: theme = "hugo-book" in docs.toml
-			RepoURL: "https://github.com/alex-shpak/hugo-book.git",
 		}
-	case SiteTypeBusiness:
+	case SiteTypeBiolink:
 		return ThemeInfo{
-			Name:    "Ananke",
-			DirName: "ananke", // Must match: theme = "ananke" in business.toml
-			RepoURL: "https://github.com/theNewDynamic/gohugo-theme-ananke.git",
+			Name:    "Walgo Biolink",
+			DirName: "walgo-biolink", // Must match: theme = "walgo-biolink" in biolink.toml
+		}
+	case SiteTypeWhitepaper:
+		return ThemeInfo{
+			Name:    "Walgo Whitepaper",
+			DirName: "walgo-whitepaper", // Must match: theme = "walgo-whitepaper" in whitepaper.toml
 		}
 	default:
 		// Default to blog theme
 		return ThemeInfo{
 			Name:    "Ananke",
 			DirName: "ananke", // Must match: theme = "ananke" in blog.toml
-			RepoURL: "https://github.com/theNewDynamic/gohugo-theme-ananke.git",
 		}
 	}
 }
 
-// InstallTheme installs a theme to the site's themes directory
-// Downloads theme as ZIP archive from GitHub (no Git required)
-// Extracts to themes/{DirName}/ which must match the theme name in Hugo config
+// InstallTheme installs the default theme for a site type.
+// It first tries to download the real theme from GitHub using the RepoURL
+// in ai.DefaultThemes. If the download fails (no network, timeout, etc.),
+// it falls back to scaffolding a blank theme with `hugo new theme`.
 func InstallTheme(sitePath string, siteType SiteType) error {
 	theme := GetThemeInfo(siteType)
-	themesDir := filepath.Join(sitePath, "themes")
-
-	// Create themes directory if it doesn't exist
-	if err := os.MkdirAll(themesDir, 0755); err != nil {
-		return fmt.Errorf("creating themes directory: %w", err)
-	}
-
-	themePath := filepath.Join(themesDir, theme.DirName)
+	themePath := filepath.Join(sitePath, "themes", theme.DirName)
 
 	// Check if theme already exists
 	if _, err := os.Stat(themePath); err == nil {
 		return nil // Theme already installed
 	}
 
-	// Download theme as ZIP from GitHub (direct HTTP download, no Git required)
-	fmt.Printf("Downloading theme %s...\n", theme.Name)
-	return downloadThemeZip(theme, themePath)
+	// Try to download the real theme from GitHub
+	aiTheme := ai.GetDefaultTheme(ai.SiteType(siteType))
+	if aiTheme.RepoURL != "" {
+		fmt.Printf("Downloading theme %s from %s...\n", theme.Name, aiTheme.RepoURL)
+		if err := downloadThemeZip(theme.DirName, aiTheme.RepoURL, themePath); err != nil {
+			fmt.Printf("Warning: Failed to download theme: %v\n", err)
+			fmt.Printf("Falling back to blank theme scaffold...\n")
+		} else {
+			// Download succeeded — update config for theme-specific params
+			fmt.Printf("Updating site configuration for theme '%s'...\n", theme.Name)
+			if err := ai.UpdateSiteConfigForTheme(sitePath, theme.DirName); err != nil {
+				fmt.Printf("Warning: Could not update config for theme: %v\n", err)
+			}
+			return nil
+		}
+	}
+
+	// Fallback: scaffold a blank theme with hugo new theme
+	hugoPath, err := deps.LookPath("hugo")
+	if err != nil {
+		return fmt.Errorf("hugo is not installed or not found in PATH")
+	}
+
+	fmt.Printf("Creating theme %s...\n", theme.Name)
+	cmd := exec.Command(hugoPath, "new", "theme", theme.DirName)
+	cmd.Dir = sitePath
+	output, err := cmd.CombinedOutput()
+	if err != nil {
+		return fmt.Errorf("failed to create theme %s: %v\nOutput: %s", theme.DirName, err, string(output))
+	}
+
+	// Update site config with theme-specific params
+	fmt.Printf("Updating site configuration for theme '%s'...\n", theme.Name)
+	if err := ai.UpdateSiteConfigForTheme(sitePath, theme.DirName); err != nil {
+		fmt.Printf("Warning: Could not update config for theme: %v\n", err)
+	}
+
+	return nil
+}
+
+// CopyExampleSite copies the exampleSite directory from a downloaded theme into the
+// site root. This provides ready-to-use sample content and configuration from the
+// theme author. Files in the site root are NOT overwritten if they already exist
+// (e.g., hugo.toml created by SetupSiteConfigWithName is preserved).
+func CopyExampleSite(sitePath string, siteType SiteType) error {
+	theme := GetThemeInfo(siteType)
+	exampleDir := filepath.Join(sitePath, "themes", theme.DirName, "exampleSite")
+
+	if _, err := os.Stat(exampleDir); os.IsNotExist(err) {
+		return fmt.Errorf("no exampleSite found in theme %s", theme.DirName)
+	}
+
+	copied := 0
+	err := filepath.Walk(exampleDir, func(path string, info os.FileInfo, err error) error {
+		if err != nil {
+			return nil // skip unreadable files
+		}
+
+		relPath, err := filepath.Rel(exampleDir, path)
+		if err != nil {
+			return nil
+		}
+		if relPath == "." {
+			return nil
+		}
+
+		targetPath := filepath.Join(sitePath, relPath)
+
+		if info.IsDir() {
+			return os.MkdirAll(targetPath, 0755)
+		}
+
+		// Skip config files — our TOML template takes precedence
+		base := filepath.Base(relPath)
+		if base == "hugo.toml" || base == "config.toml" || base == "hugo.yaml" || base == "config.yaml" {
+			return nil
+		}
+
+		// Don't overwrite existing files
+		if _, err := os.Stat(targetPath); err == nil {
+			return nil
+		}
+
+		// Ensure parent directory exists
+		if err := os.MkdirAll(filepath.Dir(targetPath), 0755); err != nil {
+			return err
+		}
+
+		// Copy file
+		if err := copyFileContents(path, targetPath, info.Mode()); err != nil {
+			return err
+		}
+		copied++
+		return nil
+	})
+
+	if err != nil {
+		return fmt.Errorf("copying exampleSite: %w", err)
+	}
+
+	fmt.Printf("Copied %d files from theme exampleSite\n", copied)
+	return nil
+}
+
+// CopyExampleSiteWithConfig copies the entire exampleSite from a downloaded theme,
+// including config files (hugo.toml, config.toml, etc.), and replaces the title
+// with the provided site name. This is used for non-blog site types (docs, biolink,
+// whitepaper) where the exampleSite config should be used directly instead of our
+// embedded TOML templates.
+func CopyExampleSiteWithConfig(sitePath string, siteType SiteType, siteName string) error {
+	theme := GetThemeInfo(siteType)
+	exampleDir := filepath.Join(sitePath, "themes", theme.DirName, "exampleSite")
+
+	if _, err := os.Stat(exampleDir); os.IsNotExist(err) {
+		return fmt.Errorf("no exampleSite found in theme %s", theme.DirName)
+	}
+
+	copied := 0
+	err := filepath.Walk(exampleDir, func(path string, info os.FileInfo, err error) error {
+		if err != nil {
+			return nil // skip unreadable files
+		}
+
+		relPath, err := filepath.Rel(exampleDir, path)
+		if err != nil {
+			return nil
+		}
+		if relPath == "." {
+			return nil
+		}
+
+		targetPath := filepath.Join(sitePath, relPath)
+
+		if info.IsDir() {
+			return os.MkdirAll(targetPath, 0755)
+		}
+
+		// Ensure parent directory exists
+		if err := os.MkdirAll(filepath.Dir(targetPath), 0755); err != nil {
+			return err
+		}
+
+		// Copy file (overwrite existing — exampleSite takes precedence)
+		if err := copyFileContents(path, targetPath, info.Mode()); err != nil {
+			return err
+		}
+		copied++
+		return nil
+	})
+
+	if err != nil {
+		return fmt.Errorf("copying exampleSite: %w", err)
+	}
+
+	// Fix config for standalone use: title, baseURL, enableGitInfo
+	if err := fixExampleSiteConfig(sitePath, siteName); err != nil {
+		return fmt.Errorf("fixing example site config: %w", err)
+	}
+
+	fmt.Printf("Copied %d files from theme exampleSite (with config)\n", copied)
+	return nil
+}
+
+// fixExampleSiteConfig adjusts the exampleSite's config for standalone use:
+// - Sets the title to the site name
+// - Sets baseURL to "/" (Walrus uses relative URLs)
+// - Removes enableGitInfo (site may not be a git repo)
+func fixExampleSiteConfig(sitePath, siteName string) error {
+	// Sanitize siteName to prevent TOML injection
+	safeName := strings.ReplaceAll(siteName, `"`, `\"`)
+	safeName = strings.ReplaceAll(safeName, "\n", " ")
+	safeName = strings.ReplaceAll(safeName, "\r", "")
+
+	for _, configName := range []string{"hugo.toml", "config.toml"} {
+		configPath := filepath.Join(sitePath, configName)
+		data, err := os.ReadFile(configPath)
+		if err != nil {
+			continue
+		}
+
+		lines := strings.Split(string(data), "\n")
+		// Track whether we're at top-level scope (before any [section] header).
+		// Only replace title/baseURL/enableGitInfo at top level to avoid
+		// clobbering identically-named keys inside [params] or other sections.
+		topLevel := true
+		for i, line := range lines {
+			trimmed := strings.TrimSpace(line)
+			if strings.HasPrefix(trimmed, "[") {
+				topLevel = false
+			}
+			if !topLevel {
+				continue
+			}
+			if safeName != "" && strings.HasPrefix(trimmed, "title") && !strings.HasPrefix(trimmed, "titleSeparator") {
+				lines[i] = fmt.Sprintf(`title = "%s"`, safeName)
+			} else if strings.HasPrefix(trimmed, "baseURL") {
+				lines[i] = `baseURL = "/"`
+			} else if strings.HasPrefix(trimmed, "enableGitInfo") {
+				lines[i] = "enableGitInfo = false"
+			}
+		}
+
+		if err := os.WriteFile(configPath, []byte(strings.Join(lines, "\n")), 0644); err != nil {
+			return fmt.Errorf("writing config %s: %w", configName, err)
+		}
+		return nil
+	}
+	return nil
+}
+
+// copyFileContents copies a file from src to dst, closing handles promptly on error.
+func copyFileContents(src, dst string, mode os.FileMode) error {
+	srcFile, err := os.Open(src) // #nosec G304 - path validated by caller
+	if err != nil {
+		return err
+	}
+
+	dstFile, err := os.OpenFile(dst, os.O_WRONLY|os.O_CREATE|os.O_TRUNC, mode) // #nosec G304 - path validated by caller
+	if err != nil {
+		srcFile.Close()
+		return err
+	}
+
+	_, copyErr := io.Copy(dstFile, srcFile)
+	srcFile.Close()
+	closeErr := dstFile.Close()
+
+	if copyErr != nil {
+		return copyErr
+	}
+	return closeErr
+}
+
+// CreateTheme scaffolds a new Hugo theme using `hugo new theme` and updates the site config.
+func CreateTheme(sitePath, themeName string) error {
+	themePath := filepath.Join(sitePath, "themes", themeName)
+
+	// Check if theme already exists
+	if _, err := os.Stat(themePath); err == nil {
+		return fmt.Errorf("theme %q already exists at %s", themeName, themePath)
+	}
+
+	hugoPath, err := deps.LookPath("hugo")
+	if err != nil {
+		return fmt.Errorf("hugo is not installed or not found in PATH")
+	}
+
+	cmd := exec.Command(hugoPath, "new", "theme", themeName)
+	cmd.Dir = sitePath
+	output, err := cmd.CombinedOutput()
+	if err != nil {
+		return fmt.Errorf("failed to create theme %s: %v\nOutput: %s", themeName, err, string(output))
+	}
+
+	// Update hugo.toml with the new theme name
+	if err := updateHugoConfigTheme(sitePath, themeName); err != nil {
+		return fmt.Errorf("failed to update config with theme name: %w", err)
+	}
+
+	return nil
 }
 
 // downloadThemeZip downloads a theme as a ZIP archive from GitHub and extracts it
-func downloadThemeZip(theme ThemeInfo, themePath string) error {
+func downloadThemeZip(themeName, gitURL, themePath string) error {
 	// Convert git URL to ZIP download URL
 	// Example: https://github.com/theNewDynamic/gohugo-theme-ananke.git
 	//       -> https://github.com/theNewDynamic/gohugo-theme-ananke/archive/refs/heads/master.zip
-	repoURL := strings.TrimSuffix(theme.RepoURL, ".git")
+	repoURL := strings.TrimSuffix(gitURL, ".git")
 
 	// Try main branch first, then master (GitHub default branch varies)
 	branches := []string{"main", "master"}
@@ -606,7 +776,13 @@ func downloadThemeZip(theme ThemeInfo, themePath string) error {
 	var resp *http.Response
 	var err error
 
-	client := &http.Client{Timeout: 2 * time.Minute}
+	downloadTimeout := 2 * time.Minute
+	if envTimeout := os.Getenv("WALGO_THEME_DOWNLOAD_TIMEOUT"); envTimeout != "" {
+		if d, err := time.ParseDuration(envTimeout); err == nil && d > 0 {
+			downloadTimeout = d
+		}
+	}
+	client := &http.Client{Timeout: downloadTimeout}
 
 	for _, branch := range branches {
 		zipURL = repoURL + "/archive/refs/heads/" + branch + ".zip"
@@ -620,6 +796,11 @@ func downloadThemeZip(theme ThemeInfo, themePath string) error {
 
 		resp, err = client.Do(req)
 		if err != nil {
+			// resp may be non-nil even on error; close body if present
+			if resp != nil {
+				resp.Body.Close()
+				resp = nil
+			}
 			continue
 		}
 
@@ -629,6 +810,7 @@ func downloadThemeZip(theme ThemeInfo, themePath string) error {
 			break
 		}
 		resp.Body.Close()
+		resp = nil
 	}
 
 	if resp == nil || resp.StatusCode != http.StatusOK {
@@ -642,20 +824,14 @@ func downloadThemeZip(theme ThemeInfo, themePath string) error {
 		return fmt.Errorf("creating temp file: %w", err)
 	}
 	tmpName := tmpFile.Name()
-	tmpFile.Close()
 	defer os.Remove(tmpName)
 
-	// Save to temporary file
-	file, err := os.Create(tmpName)
-	if err != nil {
-		return fmt.Errorf("creating download file: %w", err)
-	}
-
-	if _, err := io.Copy(file, resp.Body); err != nil {
-		file.Close()
+	// Write response body directly to temp file (no close-reopen)
+	if _, err := io.Copy(tmpFile, resp.Body); err != nil {
+		tmpFile.Close()
 		return fmt.Errorf("saving theme download: %w", err)
 	}
-	file.Close()
+	tmpFile.Close()
 
 	// Extract ZIP archive
 	fmt.Printf("Extracting theme to %s...\n", themePath)
@@ -752,83 +928,370 @@ func downloadThemeZip(theme ThemeInfo, themePath string) error {
 		return fmt.Errorf("theme extracted but directory is not readable: %w", err)
 	}
 
-	fmt.Printf("Theme %s installed successfully to themes/%s/ (%d files, %d top-level entries)\n",
-		theme.Name, theme.DirName, filesExtracted, len(entries))
+	fmt.Printf("Theme %s installed successfully (%d files, %d top-level entries)\n",
+		themeName, filesExtracted, len(entries))
 
 	return nil
 }
 
-// SetupFavicon copies the embedded favicon to the site's static directory
-func SetupFavicon(sitePath string) error {
-	staticDir := filepath.Join(sitePath, "static")
-
-	// Create static directory if it doesn't exist
-	if err := os.MkdirAll(staticDir, 0755); err != nil {
-		return fmt.Errorf("creating static directory: %w", err)
+// InstallThemeFromURL installs a Hugo theme from a GitHub URL
+// If themes already exist, they are backed up first
+// After installation, it tries to build the site
+// If build fails, it restores the old theme and removes the new one
+func InstallThemeFromURL(sitePath, githubURL string) (string, error) {
+	// Validate URL
+	if githubURL == "" {
+		return "", fmt.Errorf("github URL is required")
 	}
 
-	// Write favicon to static directory
-	faviconPath := filepath.Join(staticDir, "favicon.svg")
-	if err := os.WriteFile(faviconPath, faviconSVG, 0644); err != nil {
-		return fmt.Errorf("writing favicon: %w", err)
+	// Clean URL - remove .git suffix and trailing slashes
+	githubURL = strings.TrimSuffix(githubURL, ".git")
+	githubURL = strings.TrimSuffix(githubURL, "/")
+
+	// Validate it's a GitHub URL
+	if !strings.Contains(githubURL, "github.com") {
+		return "", fmt.Errorf("only GitHub URLs are supported")
 	}
 
-	return nil
+	// Extract theme name from URL
+	// Example: https://github.com/theNewDynamic/gohugo-theme-ananke -> gohugo-theme-ananke
+	parts := strings.Split(githubURL, "/")
+	if len(parts) < 2 {
+		return "", fmt.Errorf("invalid GitHub URL format")
+	}
+	themeName := parts[len(parts)-1]
+
+	themesDir := filepath.Join(sitePath, "themes")
+
+	// Create themes directory if it doesn't exist
+	if err := os.MkdirAll(themesDir, 0755); err != nil {
+		return "", fmt.Errorf("creating themes directory: %w", err)
+	}
+
+	// Backup existing themes and config
+	var backupDir string
+
+	var oldConfigContent []byte
+	var configPath string
+
+	// Find config file
+	configFiles := []string{
+		filepath.Join(sitePath, "hugo.toml"),
+		filepath.Join(sitePath, "config.toml"),
+	}
+	for _, cf := range configFiles {
+		if _, err := os.Stat(cf); err == nil {
+			configPath = cf
+			oldConfigContent, err = os.ReadFile(cf)
+			if err != nil {
+				return "", fmt.Errorf("failed to read config %s for backup: %w", cf, err)
+			}
+			break
+		}
+	}
+
+	// Backup existing themes
+	entries, err := os.ReadDir(themesDir)
+	if err == nil && len(entries) > 0 {
+		// Create backup directory
+		backupDir, err = os.MkdirTemp("", "walgo-theme-backup-*")
+		if err != nil {
+			return "", fmt.Errorf("creating backup directory: %w", err)
+		}
+
+		fmt.Printf("Backing up existing themes...\n")
+		for _, entry := range entries {
+			if entry.IsDir() {
+				srcPath := filepath.Join(themesDir, entry.Name())
+				dstPath := filepath.Join(backupDir, entry.Name())
+				fmt.Printf("  Backing up: %s\n", entry.Name())
+
+				// Copy theme to backup
+				if err := copyDir(srcPath, dstPath); err != nil {
+					os.RemoveAll(backupDir)
+					return "", fmt.Errorf("failed to backup theme %s: %w", entry.Name(), err)
+				}
+
+				// Remove original
+				if err := os.RemoveAll(srcPath); err != nil {
+					os.RemoveAll(backupDir)
+					return "", fmt.Errorf("failed to remove theme %s: %w", entry.Name(), err)
+				}
+			}
+		}
+	}
+
+	// Helper function to restore on failure — returns error if restoration itself fails
+	restoreBackup := func() error {
+		if backupDir == "" {
+			return nil
+		}
+		var restoreErrors []string
+
+		fmt.Printf("Restoring previous themes...\n")
+		// Remove new theme
+		newThemePath := filepath.Join(themesDir, themeName)
+		os.RemoveAll(newThemePath)
+
+		// Restore old themes
+		backupEntries, err := os.ReadDir(backupDir)
+		if err != nil {
+			return fmt.Errorf("failed to read backup directory: %w", err)
+		}
+		for _, entry := range backupEntries {
+			if entry.IsDir() {
+				srcPath := filepath.Join(backupDir, entry.Name())
+				dstPath := filepath.Join(themesDir, entry.Name())
+				if err := copyDir(srcPath, dstPath); err != nil {
+					restoreErrors = append(restoreErrors, fmt.Sprintf("theme %s: %v", entry.Name(), err))
+				} else {
+					fmt.Printf("  Restored: %s\n", entry.Name())
+				}
+			}
+		}
+
+		// Restore old config
+		if configPath != "" && oldConfigContent != nil {
+			if err := os.WriteFile(configPath, oldConfigContent, 0644); err != nil {
+				restoreErrors = append(restoreErrors, fmt.Sprintf("config %s: %v", configPath, err))
+			}
+		}
+
+		// Cleanup backup
+		os.RemoveAll(backupDir)
+
+		if len(restoreErrors) > 0 {
+			return fmt.Errorf("partial restore failure: %s", strings.Join(restoreErrors, "; "))
+		}
+		return nil
+	}
+
+	// Download and install new theme
+	fmt.Printf("Installing theme: %s\n", themeName)
+	themePath := filepath.Join(themesDir, themeName)
+
+	if err := downloadThemeZip(themeName, githubURL+".git", themePath); err != nil {
+		if restoreErr := restoreBackup(); restoreErr != nil {
+			return "", fmt.Errorf("failed to download theme: %w (additionally, restore failed: %v)", err, restoreErr)
+		}
+		return "", fmt.Errorf("failed to download theme (previous themes restored): %w", err)
+	}
+
+	// Update hugo.toml with the new theme name
+	if err := updateHugoConfigTheme(sitePath, themeName); err != nil {
+		fmt.Printf("Warning: Could not update hugo.toml with theme name: %v\n", err)
+		fmt.Printf("Please manually set 'theme = \"%s\"' in your hugo.toml\n", themeName)
+	}
+
+	// Update site config with theme-specific params
+	fmt.Printf("Updating site configuration for theme '%s'...\n", themeName)
+	if err := ai.UpdateSiteConfigForTheme(sitePath, themeName); err != nil {
+		fmt.Printf("Warning: Could not update config for theme: %v\n", err)
+	}
+
+	// Setup archetypes for the new theme
+	fmt.Printf("Setting up archetypes for theme '%s'...\n", themeName)
+	if err := SetupArchetypes(sitePath, themeName); err != nil {
+		fmt.Printf("Warning: Could not set up archetypes for theme: %v\n", err)
+	}
+
+	// Setup favicon with theme-aware placement
+	fmt.Printf("Setting up favicon for theme '%s'...\n", themeName)
+	if err := SetupFaviconForTheme(sitePath, themeName); err != nil {
+		fmt.Printf("Warning: Could not set up favicon for theme: %v\n", err)
+	}
+
+	// Build succeeded, cleanup backup
+	if backupDir != "" {
+		fmt.Printf("Build successful, cleaning up backups...\n")
+		os.RemoveAll(backupDir)
+	}
+
+	fmt.Printf("Theme '%s' installed and verified successfully!\n", themeName)
+	return themeName, nil
 }
 
-// UpdatePortfolioParams updates the hugo.toml params for portfolio sites with dynamic values
-func UpdatePortfolioParams(sitePath, description, audience string) error {
-	configPath := filepath.Join(sitePath, "hugo.toml")
+// copyDir recursively copies a directory
+func copyDir(src, dst string) error {
+	return filepath.Walk(src, func(path string, info os.FileInfo, err error) error {
+		if err != nil {
+			return err
+		}
+
+		// Calculate destination path
+		relPath, err := filepath.Rel(src, path)
+		if err != nil {
+			return err
+		}
+		dstPath := filepath.Join(dst, relPath)
+
+		if info.IsDir() {
+			return os.MkdirAll(dstPath, info.Mode())
+		}
+
+		// Copy file
+		srcFile, err := os.Open(path)
+		if err != nil {
+			return err
+		}
+		defer srcFile.Close()
+
+		dstFile, err := os.OpenFile(dstPath, os.O_WRONLY|os.O_CREATE|os.O_TRUNC, info.Mode())
+		if err != nil {
+			return err
+		}
+		defer dstFile.Close()
+
+		_, err = io.Copy(dstFile, srcFile)
+		return err
+	})
+}
+
+// updateHugoConfigTheme updates the theme setting in hugo.toml or config.toml
+func updateHugoConfigTheme(sitePath, themeName string) error {
+	// Try hugo.toml first, then config.toml
+	configFiles := []string{
+		filepath.Join(sitePath, "hugo.toml"),
+		filepath.Join(sitePath, "config.toml"),
+	}
+
+	var configPath string
+	for _, cf := range configFiles {
+		if _, err := os.Stat(cf); err == nil {
+			configPath = cf
+			break
+		}
+	}
+
+	if configPath == "" {
+		return fmt.Errorf("no hugo.toml or config.toml found")
+	}
+
 	content, err := os.ReadFile(configPath)
 	if err != nil {
-		return fmt.Errorf("reading hugo.toml: %w", err)
+		return fmt.Errorf("reading config: %w", err)
 	}
 
 	configStr := string(content)
 
-	// Update description if provided
-	if description != "" {
-		// Replace the default description
-		configStr = strings.Replace(configStr, `description = "Portfolio website"`, fmt.Sprintf(`description = "%s"`, description), 1)
-	}
-
-	// Generate dynamic info lines based on audience/description
-	if audience != "" || description != "" {
-		// Create info lines from audience or description
-		infoLine1 := "Creative Professional"
-		infoLine2 := "Building digital experiences"
-
-		if audience != "" {
-			// Use audience as first info line hint
-			infoLine1 = audience
+	// Check if theme line exists and replace it
+	// Match "theme" as a standalone key (not "themeDir", "themes", etc.)
+	lines := strings.Split(configStr, "\n")
+	themeFound := false
+	themeLine := fmt.Sprintf("theme = \"%s\"", themeName)
+	for i, line := range lines {
+		trimmed := strings.TrimSpace(line)
+		// Skip comments
+		if strings.HasPrefix(trimmed, "#") {
+			continue
 		}
-		if description != "" && len(description) < 50 {
-			infoLine2 = description
+		// Match "theme" followed by optional whitespace and "="
+		if (strings.HasPrefix(trimmed, "theme ") || strings.HasPrefix(trimmed, "theme=")) &&
+			strings.Contains(trimmed, "=") {
+			lines[i] = themeLine
+			themeFound = true
+			break
 		}
-
-		// Replace default info array
-		oldInfo := `info = ["Designer & Developer", "Creating digital experiences"]`
-		newInfo := fmt.Sprintf(`info = ["%s", "%s"]`, infoLine1, infoLine2)
-		configStr = strings.Replace(configStr, oldInfo, newInfo, 1)
 	}
 
-	if err := os.WriteFile(configPath, []byte(configStr), 0644); err != nil {
-		return fmt.Errorf("writing hugo.toml: %w", err)
+	// If theme line not found, add it after baseURL or at the beginning
+	if !themeFound {
+		newLines := make([]string, 0, len(lines)+1)
+		added := false
+		for _, line := range lines {
+			newLines = append(newLines, line)
+			trimmed := strings.TrimSpace(line)
+			if !added && strings.HasPrefix(trimmed, "baseURL") {
+				newLines = append(newLines, themeLine)
+				added = true
+			}
+		}
+		if !added {
+			// Add after any initial comments, or at end if file is all comments
+			insertAt := len(lines)
+			for i, line := range lines {
+				trimmed := strings.TrimSpace(line)
+				if trimmed != "" && !strings.HasPrefix(trimmed, "#") {
+					insertAt = i
+					break
+				}
+			}
+			// Build new slice without mutating original
+			newLines = make([]string, 0, len(lines)+1)
+			newLines = append(newLines, lines[:insertAt]...)
+			newLines = append(newLines, themeLine)
+			newLines = append(newLines, lines[insertAt:]...)
+		}
+		lines = newLines
 	}
 
+	newContent := strings.Join(lines, "\n")
+	if err := os.WriteFile(configPath, []byte(newContent), 0644); err != nil {
+		return fmt.Errorf("writing config: %w", err)
+	}
+
+	fmt.Printf("Updated %s with theme = \"%s\"\n", filepath.Base(configPath), themeName)
 	return nil
 }
 
-// SetupFaviconForTheme copies the embedded favicon to the appropriate location for the theme
-func SetupFaviconForTheme(sitePath string, siteType SiteType) error {
-	var targetDir string
+// GetInstalledThemes returns list of installed themes in the themes directory
+func GetInstalledThemes(sitePath string) ([]string, error) {
+	themesDir := filepath.Join(sitePath, "themes")
 
-	switch siteType {
-	case SiteTypePortfolio:
-		// Coder theme expects favicon in /images/ folder
-		targetDir = filepath.Join(sitePath, "static", "images")
-	default:
-		// Default location is /static/
+	if _, err := os.Stat(themesDir); os.IsNotExist(err) {
+		return nil, nil
+	}
+
+	entries, err := os.ReadDir(themesDir)
+	if err != nil {
+		return nil, fmt.Errorf("reading themes directory: %w", err)
+	}
+
+	var themes []string
+	for _, entry := range entries {
+		if entry.IsDir() {
+			themes = append(themes, entry.Name())
+		}
+	}
+
+	return themes, nil
+}
+
+// SetupFaviconForTheme copies the embedded favicon to the location determined by theme analysis.
+// The themeName parameter should be the theme directory name (e.g., "ananke", "hugo-book").
+func SetupFaviconForTheme(sitePath, themeName string) error {
+	// Analyze theme config to find favicon path
+	configAnalysis := ai.AnalyzeThemeConfig(sitePath, themeName)
+
+	// Determine target directory from theme config
+	var targetDir string
+	var faviconName string = "favicon.svg"
+
+	// Check if theme specifies a favicon path in recommended params
+	if faviconParam, ok := configAnalysis.RecommendedParams["favicon"]; ok {
+		if faviconPath, ok := faviconParam.(string); ok && faviconPath != "" {
+			// Extract directory and filename from favicon path
+			// e.g., "/images/favicon.png" -> "static/images", "favicon.svg"
+			faviconPath = strings.TrimPrefix(faviconPath, "/")
+			dir := filepath.Dir(faviconPath)
+			if dir != "." {
+				targetDir = filepath.Join(sitePath, "static", dir)
+			} else {
+				targetDir = filepath.Join(sitePath, "static")
+			}
+		}
+	}
+
+	// Check for BookFavicon (hugo-book theme)
+	if bookFavicon, ok := configAnalysis.RecommendedParams["BookFavicon"]; ok {
+		if faviconPath, ok := bookFavicon.(string); ok && faviconPath != "" {
+			targetDir = filepath.Join(sitePath, "static")
+			faviconName = faviconPath
+		}
+	}
+
+	// Default location if no specific path found
+	if targetDir == "" {
 		targetDir = filepath.Join(sitePath, "static")
 	}
 
@@ -837,26 +1300,12 @@ func SetupFaviconForTheme(sitePath string, siteType SiteType) error {
 		return fmt.Errorf("creating favicon directory: %w", err)
 	}
 
-	// Write favicon
-	faviconPath := filepath.Join(targetDir, "favicon.svg")
+	// Write favicon (always use walgo's SVG favicon)
+	faviconPath := filepath.Join(targetDir, faviconName)
 	if err := os.WriteFile(faviconPath, faviconSVG, 0644); err != nil {
 		return fmt.Errorf("writing favicon: %w", err)
 	}
 
-	return nil
-}
-
-// SetupPortfolioThemeOverrides creates necessary layout overrides for Ananke theme.
-// This function is kept for backward compatibility but Ananke doesn't require overrides.
-func SetupPortfolioThemeOverrides(sitePath string) error {
-	// Ananke theme doesn't require specific layout overrides
-	return nil
-}
-
-// SetupBusinessThemeOverrides creates necessary layout overrides for Ananke theme.
-// This function is kept for backward compatibility but Ananke doesn't require overrides.
-func SetupBusinessThemeOverrides(sitePath string) error {
-	// Ananke theme doesn't require specific layout overrides
 	return nil
 }
 

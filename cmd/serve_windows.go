@@ -7,9 +7,18 @@ import (
 	"os"
 	"os/exec"
 	"strings"
+	"syscall"
 
 	"github.com/selimozten/walgo/internal/ui"
 )
+
+// hideConsoleWindow sets Windows-specific flags to hide console window
+func hideConsoleWindow(cmd *exec.Cmd) {
+	cmd.SysProcAttr = &syscall.SysProcAttr{
+		HideWindow:    true,
+		CreationFlags: 0x08000000, // CREATE_NO_WINDOW
+	}
+}
 
 // killExistingHugoProcesses finds and kills any existing 'hugo serve' processes on Windows
 func killExistingHugoProcesses() error {
@@ -17,6 +26,7 @@ func killExistingHugoProcesses() error {
 
 	// On Windows, use tasklist to find hugo processes
 	cmd := exec.Command("tasklist", "/FI", "IMAGENAME eq hugo.exe", "/FO", "CSV", "/NH")
+	hideConsoleWindow(cmd)
 	output, err := cmd.CombinedOutput()
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "%s Warning: Could not check for running Hugo processes: %v\n", icons.Warning, err)
@@ -42,6 +52,7 @@ func killExistingHugoProcesses() error {
 
 		// Kill the process using taskkill
 		killCmd := exec.Command("taskkill", "/PID", pid, "/F")
+		hideConsoleWindow(killCmd)
 		if err := killCmd.Run(); err != nil {
 			fmt.Fprintf(os.Stderr, "%s Warning: Could not kill Hugo process %s: %v\n", icons.Warning, pid, err)
 		} else {

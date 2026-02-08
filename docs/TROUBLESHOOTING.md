@@ -1010,6 +1010,7 @@ When reporting issues on GitHub, include:
 - **Documentation:** [https://github.com/selimozten/walgo/tree/main/docs](https://github.com/selimozten/walgo/tree/main/docs)
 - **GitHub Issues:** [https://github.com/selimozten/walgo/issues](https://github.com/selimozten/walgo/issues)
 - **GitHub Discussions:** [https://github.com/selimozten/walgo/discussions](https://github.com/selimozten/walgo/discussions)
+- **Feedback Form:** [https://tally.so/r/447YBO](https://tally.so/r/447YBO)
 - **Walrus Discord:** [https://discord.gg/walrus](https://discord.gg/walrus)
 - **Sui Discord:** [https://discord.gg/sui](https://discord.gg/sui)
 

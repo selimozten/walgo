@@ -1,6 +1,7 @@
 package ai
 
 import (
+	"strings"
 	"time"
 )
 
@@ -12,21 +13,21 @@ import (
 type SiteType string
 
 const (
-	SiteTypeBlog      SiteType = "blog"
-	SiteTypePortfolio SiteType = "portfolio"
-	SiteTypeDocs      SiteType = "docs"
-	SiteTypeBusiness  SiteType = "business"
+	SiteTypeBlog       SiteType = "blog"
+	SiteTypeDocs       SiteType = "docs"
+	SiteTypeBiolink    SiteType = "biolink"
+	SiteTypeWhitepaper SiteType = "whitepaper"
 )
 
 // ValidSiteTypes returns all valid site types.
 func ValidSiteTypes() []SiteType {
-	return []SiteType{SiteTypeBlog, SiteTypePortfolio, SiteTypeDocs, SiteTypeBusiness}
+	return []SiteType{SiteTypeBlog, SiteTypeDocs, SiteTypeBiolink, SiteTypeWhitepaper}
 }
 
 // IsValid checks if the site type is valid.
 func (s SiteType) IsValid() bool {
 	switch s {
-	case SiteTypeBlog, SiteTypePortfolio, SiteTypeDocs, SiteTypeBusiness:
+	case SiteTypeBlog, SiteTypeDocs, SiteTypeBiolink, SiteTypeWhitepaper:
 		return true
 	default:
 		return false
@@ -93,6 +94,7 @@ type SitePlan struct {
 	Description string   `json:"description"`
 	Audience    string   `json:"audience"`
 	Theme       string   `json:"theme,omitempty"`
+	SitePath    string   `json:"site_path,omitempty"` // For dynamic theme analysis
 	BaseURL     string   `json:"base_url,omitempty"`
 	Tone        string   `json:"tone,omitempty"`
 
@@ -187,6 +189,7 @@ type PlannerInput struct {
 	Audience    string   `json:"audience"`
 	Features    string   `json:"features,omitempty"` // Specific pages/features requested
 	Theme       string   `json:"theme,omitempty"`
+	SitePath    string   `json:"site_path,omitempty"` // For dynamic theme analysis
 	BaseURL     string   `json:"base_url,omitempty"`
 	Tone        string   `json:"tone,omitempty"`
 }
@@ -231,6 +234,12 @@ type PipelineConfig struct {
 	PlannerTimeout   time.Duration `json:"planner_timeout"`
 	GeneratorTimeout time.Duration `json:"generator_timeout"`
 
+	// Parallel Generation Configuration
+	ParallelMode      ParallelMode  `json:"parallel_mode"`       // auto, sequential, parallel
+	MaxConcurrent     int           `json:"max_concurrent"`      // Max concurrent generations (default: 5)
+	RequestsPerMinute int           `json:"requests_per_minute"` // Rate limit (default: 30)
+	RateLimitBackoff  time.Duration `json:"rate_limit_backoff"`  // Backoff on 429 (default: 30s)
+
 	// Behavior
 	ContinueOnError   bool `json:"continue_on_error"`
 	OverwriteExisting bool `json:"overwrite_existing"`
@@ -244,6 +253,15 @@ type PipelineConfig struct {
 	Verbose bool `json:"verbose"`
 }
 
+// ParallelMode defines how page generation should be parallelized
+type ParallelMode string
+
+const (
+	ParallelModeAuto       ParallelMode = "auto"       // Automatically determine based on page count
+	ParallelModeSequential ParallelMode = "sequential" // Generate pages one by one
+	ParallelModeParallel   ParallelMode = "parallel"   // Generate pages in parallel
+)
+
 // DefaultPipelineConfig returns the default pipeline configuration.
 func DefaultPipelineConfig() PipelineConfig {
 	return PipelineConfig{
@@ -252,12 +270,54 @@ func DefaultPipelineConfig() PipelineConfig {
 		RetryBackoffMulti: 2.0,
 		PlannerTimeout:    5 * time.Minute,
 		GeneratorTimeout:  2 * time.Minute,
+		ParallelMode:      ParallelModeAuto,
+		MaxConcurrent:     5,
+		RequestsPerMinute: 30,
+		RateLimitBackoff:  30 * time.Second,
 		ContinueOnError:   true,
 		OverwriteExisting: false,
 		DryRun:            false,
 		PlanPath:          ".walgo/plan.json",
 		ContentDir:        "content",
 		Verbose:           false,
+	}
+}
+
+// DetermineParallelism returns the optimal concurrency level based on page count, mode, and RPM.
+func (c *PipelineConfig) DetermineParallelism(pageCount int) int {
+	switch c.ParallelMode {
+	case ParallelModeSequential:
+		return 1
+	case ParallelModeParallel:
+		return c.MaxConcurrent
+	case ParallelModeAuto:
+		fallthrough
+	default:
+		// Auto mode: determine based on page count
+		var concurrency int
+		if pageCount <= 3 {
+			return 1 // Sequential - overhead not worth it
+		}
+		if pageCount <= 10 {
+			concurrency = min(3, c.MaxConcurrent)
+		} else if pageCount <= 20 {
+			concurrency = min(5, c.MaxConcurrent)
+		} else {
+			concurrency = c.MaxConcurrent
+		}
+		// Cap concurrency so workers don't starve the rate limiter.
+		// With RPM=30 (0.5 rps), more than 3 workers means each waits 6s+
+		// between requests, which is wasteful. Cap at RPM/10 (minimum 2).
+		if c.RequestsPerMinute > 0 {
+			rpmCap := c.RequestsPerMinute / 10
+			if rpmCap < 2 {
+				rpmCap = 2
+			}
+			if concurrency > rpmCap {
+				concurrency = rpmCap
+			}
+		}
+		return concurrency
 	}
 }
 
@@ -337,64 +397,18 @@ type AIPageInfo struct {
 // Minimum Page Requirements
 // =============================================================================
 
-// MinimumPageSet returns the minimum pages required for a site type.
+// MinimumPageSet returns the minimum essential pages required for any site type.
+// Only a homepage is strictly required — the AI decides all other pages.
 func MinimumPageSet(siteType SiteType) []string {
-	switch siteType {
-	case SiteTypeBlog:
-		return []string{
-			"content/_index.md",
-			"content/about.md",
-			"content/contact.md",
-			"content/posts/welcome/index.md",
-			"content/posts/getting-started/index.md",
-			"content/posts/latest-insights/index.md",
-			"content/posts/case-study/index.md",
-		}
-	case SiteTypePortfolio:
-		return []string{
-			"content/_index.md",
-			"content/about.md",
-			"content/contact.md",
-			"content/projects/_index.md",
-			"content/projects/project-1.md",
-			"content/projects/project-2.md",
-			"content/projects/featured-work.md",
-			"content/projects/tech-stack.md",
-		}
-	case SiteTypeDocs:
-		return []string{
-			"content/_index.md",
-			"content/docs/_index.md",
-			"content/docs/intro/index.md",
-			"content/docs/install/index.md",
-			"content/docs/usage/index.md",
-			"content/docs/faq/index.md",
-			"content/docs/quick-start/index.md",
-			"content/docs/best-practices/index.md",
-		}
-	case SiteTypeBusiness:
-		return []string{
-			"content/_index.md",
-			"content/about.md",
-			"content/contact.md",
-			"content/services/_index.md",
-			"content/services/service-1.md",
-			"content/services/service-2.md",
-			"content/case-studies/index.md",
-			"content/testimonials/index.md",
-		}
-	default:
-		return []string{
-			"content/_index.md",
-			"content/about.md",
-			"content/contact.md",
-		}
+	return []string{
+		"content/_index.md",
 	}
 }
 
 // MinimumPageCount returns the minimum number of pages for a site type.
+// Only a homepage is required — the AI decides the actual page count.
 func MinimumPageCount(siteType SiteType) int {
-	return len(MinimumPageSet(siteType))
+	return 1 // only homepage is mandatory
 }
 
 // =============================================================================
@@ -417,22 +431,22 @@ var DefaultThemes = map[SiteType]ThemeInfo{
 		RepoURL:     "https://github.com/theNewDynamic/gohugo-theme-ananke",
 		License:     "MIT",
 	},
-	SiteTypePortfolio: {
-		Name:        "Ananke",
-		Description: "Fast, clean, responsive theme for portfolios",
-		RepoURL:     "https://github.com/theNewDynamic/gohugo-theme-ananke",
-		License:     "MIT",
-	},
 	SiteTypeDocs: {
 		Name:        "Book",
 		Description: "Book-style documentation theme",
 		RepoURL:     "https://github.com/alex-shpak/hugo-book",
 		License:     "MIT",
 	},
-	SiteTypeBusiness: {
-		Name:        "Ananke",
-		Description: "Professional business theme",
-		RepoURL:     "https://github.com/theNewDynamic/gohugo-theme-ananke",
+	SiteTypeBiolink: {
+		Name:        "Walgo Biolink",
+		Description: "Link-in-bio theme for blockchain professionals",
+		RepoURL:     "https://github.com/ganbitlabs/walgo-biolink",
+		License:     "MIT",
+	},
+	SiteTypeWhitepaper: {
+		Name:        "Walgo Whitepaper",
+		Description: "Academic whitepaper theme for blockchain projects",
+		RepoURL:     "https://github.com/ganbitlabs/walgo-whitepaper",
 		License:     "MIT",
 	},
 }
@@ -447,14 +461,32 @@ func GetDefaultTheme(siteType SiteType) ThemeInfo {
 }
 
 // GetThemeDirName returns the expected directory name for a theme.
+// This function converts theme display names to their typical directory names.
+// For custom themes, it returns the lowercase version of the name.
 func GetThemeDirName(themeName string) string {
-	// Some themes have specific expected directory names
-	switch themeName {
-	case "Ananke":
-		return "ananke"
-	case "Book":
-		return "hugo-book"
-	default:
-		return themeName
+	// Common theme name mappings (these are well-known themes)
+	// The system will work with any theme - these are just convenience mappings
+	knownThemes := map[string]string{
+		"Ananke":           "ananke",
+		"Book":             "hugo-book",
+		"PaperMod":         "PaperMod",
+		"Stack":            "hugo-theme-stack",
+		"Docsy":            "docsy",
+		"Blowfish":         "blowfish",
+		"Congo":            "congo",
+		"Terminal":         "hugo-theme-terminal",
+		"Academic":         "academic",
+		"Mainroad":         "mainroad",
+		"Beautiful":        "beautifulhugo",
+		"Coder":            "hugo-coder",
+		"Walgo Biolink":    "walgo-biolink",
+		"Walgo Whitepaper": "walgo-whitepaper",
 	}
+
+	if dirName, ok := knownThemes[themeName]; ok {
+		return dirName
+	}
+
+	// For unknown themes, use lowercase version
+	return strings.ToLower(themeName)
 }

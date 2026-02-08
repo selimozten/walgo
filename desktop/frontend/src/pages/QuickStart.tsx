@@ -1,6 +1,17 @@
-import React from "react";
+import React, { useState } from "react";
 import { motion } from "framer-motion";
-import { Rocket, Folder, Loader2, Zap, AlertCircle, Check } from "lucide-react";
+import {
+  Rocket,
+  Folder,
+  Loader2,
+  Zap,
+  AlertCircle,
+  Check,
+  BookOpen,
+  FileCode,
+  Link,
+  FileText,
+} from "lucide-react";
 import { Card } from "../components/ui";
 import { itemVariants } from "../utils/constants";
 import { cn } from "../utils/helpers";
@@ -24,12 +35,21 @@ export const QuickStart: React.FC<QuickStartProps> = ({ onSuccess, onStatusChang
     handleSelectParentDir,
   } = useSiteCreation(onSuccess);
 
+  const [siteType, setSiteType] = useState("biolink");
+
+  const siteTypes = [
+    { id: "biolink", label: "Biolink", icon: Link },
+    { id: "blog", label: "Blog", icon: BookOpen },
+    { id: "docs", label: "Docs", icon: FileCode },
+    { id: "whitepaper", label: "Whitepaper", icon: FileText },
+  ];
+
   const onSubmit = async () => {
     if (onStatusChange) {
       onStatusChange({ type: "info", message: "Initializing quickstart..." });
     }
 
-    const result = await handleQuickStart();
+    const result = await handleQuickStart(siteType);
 
     if (result.success && onStatusChange) {
       onStatusChange({
@@ -104,7 +124,7 @@ export const QuickStart: React.FC<QuickStartProps> = ({ onSuccess, onStatusChang
                   ? "border-red-500/50 focus:border-red-500"
                   : "border-white/10 focus:border-accent/50"
               )}
-              placeholder="my-blog"
+              placeholder="my-site"
               autoFocus
               autoComplete="off"
               autoCapitalize="off"
@@ -128,6 +148,29 @@ export const QuickStart: React.FC<QuickStartProps> = ({ onSuccess, onStatusChang
                 Name available
               </p>
             )}
+          </div>
+
+          <div className="group">
+            <label className="block text-[10px] font-mono text-accent uppercase mb-2 ml-1 tracking-widest">
+              Site_Type
+            </label>
+            <div className="grid grid-cols-4 gap-2">
+              {siteTypes.map((type) => (
+                <button
+                  key={type.id}
+                  onClick={() => setSiteType(type.id)}
+                  className={cn(
+                    "p-3 rounded-sm border transition-all flex flex-col items-center gap-2",
+                    siteType === type.id
+                      ? "bg-accent/20 border-accent/50 text-accent"
+                      : "bg-black/20 border-white/10 text-zinc-500 hover:border-white/20"
+                  )}
+                >
+                  <type.icon size={18} />
+                  <span className="text-[10px] font-mono">{type.label}</span>
+                </button>
+              ))}
+            </div>
           </div>
 
           <button

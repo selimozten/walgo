@@ -7,6 +7,24 @@ import (
 	"strings"
 )
 
+// Pre-compiled regexes for HTML operations.
+var (
+	htmlConditionalCommentRegex = regexp.MustCompile(`(?s)<!--\[if\s.*?<!\[endif\]-->`)
+	htmlCommentRegex            = regexp.MustCompile(`(?s)<!--.*?-->`)
+	htmlStyleRegex              = regexp.MustCompile(`(?s)<style[^>]*>(.*?)</style>`)
+	htmlScriptRegex             = regexp.MustCompile(`(?s)<script(?:[^>]*)>(.*?)</script>`)
+	htmlBetweenTagsRegex        = regexp.MustCompile(`>\s+<`)
+
+	// Pre-compiled regexes for preserving whitespace-sensitive tags during minification.
+	htmlPreserveTagRegexes = map[string]*regexp.Regexp{
+		"pre":      regexp.MustCompile(`(?s)<pre(?:\s+[^>]*?)?>(.*?)</pre>`),
+		"code":     regexp.MustCompile(`(?s)<code(?:\s+[^>]*?)?>(.*?)</code>`),
+		"textarea": regexp.MustCompile(`(?s)<textarea(?:\s+[^>]*?)?>(.*?)</textarea>`),
+		"script":   regexp.MustCompile(`(?s)<script(?:\s+[^>]*?)?>(.*?)</script>`),
+		"style":    regexp.MustCompile(`(?s)<style(?:\s+[^>]*?)?>(.*?)</style>`),
+	}
+)
+
 // HTMLOptimizer handles HTML optimization
 type HTMLOptimizer struct {
 	config HTMLConfig
@@ -52,21 +70,19 @@ func (h *HTMLOptimizer) Optimize(content []byte) ([]byte, error) {
 
 // removeComments removes HTML comments while preserving conditional comments
 func (h *HTMLOptimizer) removeComments(content []byte) []byte {
-	// Preserve conditional comments (<!--[if ...]>...< ![endif]-->)
-	conditionalCommentRegex := regexp.MustCompile(`<!--\[if[^>]*>.*?<!\[endif\]-->`)
-	conditionalComments := conditionalCommentRegex.FindAll(content, -1)
+	// Preserve conditional comments (<!--[if ...]>...<![endif]-->)
+	conditionalComments := htmlConditionalCommentRegex.FindAll(content, -1)
 
 	// Replace conditional comments with placeholders
 	placeholders := make(map[string][]byte)
 	for i, comment := range conditionalComments {
-		placeholder := fmt.Sprintf("__CONDITIONAL_COMMENT_%d__", i)
+		placeholder := fmt.Sprintf("__WALGO_COND_CMT_%d__", i)
 		placeholders[placeholder] = comment
 		content = bytes.Replace(content, comment, []byte(placeholder), 1)
 	}
 
 	// Remove regular HTML comments
-	commentRegex := regexp.MustCompile(`<!--[^>]*-->`)
-	content = commentRegex.ReplaceAll(content, []byte(""))
+	content = htmlCommentRegex.ReplaceAll(content, []byte(""))
 
 	// Restore conditional comments
 	for placeholder, comment := range placeholders {
@@ -78,10 +94,8 @@ func (h *HTMLOptimizer) removeComments(content []byte) []byte {
 
 // compressInlineCSS compresses CSS within <style> tags
 func (h *HTMLOptimizer) compressInlineCSS(content []byte) []byte {
-	styleRegex := regexp.MustCompile(`(?s)<style[^>]*>(.*?)</style>`)
-
-	return styleRegex.ReplaceAllFunc(content, func(match []byte) []byte {
-		styleMatch := styleRegex.FindSubmatch(match)
+	return htmlStyleRegex.ReplaceAllFunc(content, func(match []byte) []byte {
+		styleMatch := htmlStyleRegex.FindSubmatch(match)
 		if len(styleMatch) < 2 {
 			return match
 		}
@@ -106,10 +120,8 @@ func (h *HTMLOptimizer) compressInlineCSS(content []byte) []byte {
 
 // compressInlineJS compresses JavaScript within <script> tags
 func (h *HTMLOptimizer) compressInlineJS(content []byte) []byte {
-	scriptRegex := regexp.MustCompile(`(?s)<script(?:[^>]*)>(.*?)</script>`)
-
-	return scriptRegex.ReplaceAllFunc(content, func(match []byte) []byte {
-		scriptMatch := scriptRegex.FindSubmatch(match)
+	return htmlScriptRegex.ReplaceAllFunc(content, func(match []byte) []byte {
+		scriptMatch := htmlScriptRegex.FindSubmatch(match)
 		if len(scriptMatch) < 2 {
 			return match
 		}
@@ -142,18 +154,17 @@ func (h *HTMLOptimizer) minifyHTML(content []byte) []byte {
 		return content
 	}
 
-	// Convert to string for easier manipulation
 	html := string(content)
 
-	// Preserve content of <pre>, <code>, <textarea>, and <script> tags
-	preserveTags := []string{"pre", "code", "textarea", "script"}
+	// Preserve content of whitespace-sensitive tags (<pre>, <code>, <textarea>,
+	// <script>, <style>) using unique placeholders that won't collide with
+	// user-generated content.
 	preserved := make(map[string]string)
 	placeholderCounter := 0
 
-	for _, tag := range preserveTags {
-		tagRegex := regexp.MustCompile(fmt.Sprintf(`(?s)<%s[^>]*>.*?</%s>`, tag, tag))
+	for _, tagRegex := range htmlPreserveTagRegexes {
 		html = tagRegex.ReplaceAllStringFunc(html, func(match string) string {
-			placeholder := fmt.Sprintf("__PRESERVE_%d__", placeholderCounter)
+			placeholder := fmt.Sprintf("\x00WALGO_PRESERVE_%d\x00", placeholderCounter)
 			preserved[placeholder] = match
 			placeholderCounter++
 			return placeholder
@@ -161,7 +172,7 @@ func (h *HTMLOptimizer) minifyHTML(content []byte) []byte {
 	}
 
 	// Remove whitespace between tags
-	html = regexp.MustCompile(`>\s+<`).ReplaceAllString(html, "><")
+	html = htmlBetweenTagsRegex.ReplaceAllString(html, "><")
 
 	// Remove leading/trailing whitespace from lines
 	lines := strings.Split(html, "\n")
@@ -180,9 +191,4 @@ func (h *HTMLOptimizer) minifyHTML(content []byte) []byte {
 	}
 
 	return []byte(html)
-}
-
-// GetFileExtensions returns the file extensions this optimizer handles
-func (h *HTMLOptimizer) GetFileExtensions() []string {
-	return []string{".html", ".htm"}
 }

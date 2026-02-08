@@ -354,8 +354,10 @@ func uploadWithRetry(ctx context.Context, endpoint, filePath string, maxRetries 
 		if ctx.Err() != nil {
 			return "", ctx.Err()
 		}
-		if err == nil && (status < 500 && status != 429) {
-			return "", fmt.Errorf("non-retryable status %d", status)
+		// Don't retry client errors (4xx except 429) — they won't succeed on retry.
+		// putBlob returns non-nil err for non-2xx, so check status directly.
+		if status > 0 && status < 500 && status != 429 {
+			return "", fmt.Errorf("non-retryable status %d: %v", status, err)
 		}
 		select {
 		case <-time.After(backoff + time.Duration(attempt)*50*time.Millisecond):
@@ -432,10 +434,11 @@ func formatBytes(bytes int64) string {
 	if bytes < unit {
 		return fmt.Sprintf("%d B", bytes)
 	}
+	suffixes := "KMGTPE"
 	div, exp := int64(unit), 0
-	for n := bytes / unit; n >= unit; n /= unit {
+	for n := bytes / unit; n >= unit && exp < len(suffixes)-1; n /= unit {
 		div *= unit
 		exp++
 	}
-	return fmt.Sprintf("%.1f %cB", float64(bytes)/float64(div), "KMGTPE"[exp])
+	return fmt.Sprintf("%.1f %cB", float64(bytes)/float64(div), suffixes[exp])
 }

@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 	"time"
 
 	_ "modernc.org/sqlite" // SQLite driver
@@ -44,18 +45,18 @@ func NewManager() (*Manager, error) {
 		return nil, fmt.Errorf("failed to open projects database: %w", err)
 	}
 
+	// Set busy timeout FIRST — before any schema changes — so concurrent
+	// connections wait instead of failing immediately with SQLITE_BUSY.
+	if _, err := db.Exec("PRAGMA busy_timeout=5000"); err != nil {
+		_ = db.Close()
+		return nil, fmt.Errorf("failed to set busy timeout: %w", err)
+	}
+
 	// Enable WAL mode for better concurrent access
 	// WAL allows readers and writers to operate concurrently
 	if _, err := db.Exec("PRAGMA journal_mode=WAL"); err != nil {
 		_ = db.Close()
 		return nil, fmt.Errorf("failed to enable WAL mode: %w", err)
-	}
-
-	// Set busy timeout to wait up to 5 seconds for locks to clear
-	// This prevents immediate SQLITE_BUSY errors under contention
-	if _, err := db.Exec("PRAGMA busy_timeout=5000"); err != nil {
-		_ = db.Close()
-		return nil, fmt.Errorf("failed to set busy timeout: %w", err)
 	}
 
 	// Limit connections to prevent excessive file handle usage
@@ -178,8 +179,8 @@ func (m *Manager) applyMigration1() error {
 		return fmt.Errorf("failed to create tables: %w", err)
 	}
 
-	// Record migration version
-	_, err = tx.Exec("INSERT INTO schema_version (version, applied_at) VALUES (?, ?)", 1, time.Now())
+	// Record migration version (OR IGNORE for idempotency if concurrent connections race)
+	_, err = tx.Exec("INSERT OR IGNORE INTO schema_version (version, applied_at) VALUES (?, ?)", 1, time.Now())
 	if err != nil {
 		return fmt.Errorf("failed to record migration version: %w", err)
 	}
@@ -187,13 +188,23 @@ func (m *Manager) applyMigration1() error {
 	return tx.Commit()
 }
 
+// allowedTables is a whitelist of table names that can be used in PRAGMA queries.
+var allowedTables = map[string]bool{
+	"projects":    true,
+	"deployments": true,
+}
+
 // columnExists checks if a column exists in a table
 // If tx is provided, uses the transaction, otherwise uses the main db connection
 func (m *Manager) columnExists(tx *sql.Tx, table, column string) bool {
+	if !allowedTables[table] {
+		return false
+	}
+
 	var rows *sql.Rows
 	var err error
 
-	query := fmt.Sprintf("PRAGMA table_info(%s)", table)
+	query := fmt.Sprintf("PRAGMA table_info(%s)", table) // #nosec G201 - table name validated against whitelist
 	if tx != nil {
 		rows, err = tx.Query(query)
 	} else {
@@ -248,8 +259,8 @@ func (m *Manager) applyMigration2() error {
 		}
 	}
 
-	// Record migration version
-	if _, err := tx.Exec("INSERT INTO schema_version (version, applied_at) VALUES (?, ?)", 2, time.Now()); err != nil {
+	// Record migration version (OR IGNORE for idempotency if concurrent connections race)
+	if _, err := tx.Exec("INSERT OR IGNORE INTO schema_version (version, applied_at) VALUES (?, ?)", 2, time.Now()); err != nil {
 		return fmt.Errorf("failed to record migration version: %w", err)
 	}
 
@@ -672,8 +683,108 @@ func (m *Manager) RestoreProject(id int64) error {
 	return nil
 }
 
+// EpochInfo contains epoch and timing information for expiry calculation
+type EpochInfo struct {
+	TotalEpochs       int       // Sum of all successful deployment epochs
+	FirstDeploymentAt time.Time // Date of first successful deployment
+	LastDeploymentAt  time.Time // Date of last successful deployment
+	DeploymentCount   int       // Number of successful deployments
+}
+
+// GetEpochInfo retrieves epoch information from all successful deployments for a project.
+// This is used to calculate the correct storage expiry date by summing all epochs.
+func (m *Manager) GetEpochInfo(projectID int64) (*EpochInfo, error) {
+	info := &EpochInfo{}
+
+	// Get total epochs from all successful deployments
+	err := m.db.QueryRow(`
+		SELECT
+			COALESCE(SUM(epochs), 0) as total_epochs,
+			COUNT(*) as deployment_count
+		FROM deployments
+		WHERE project_id = ? AND success = 1
+	`, projectID).Scan(&info.TotalEpochs, &info.DeploymentCount)
+
+	if err != nil {
+		return nil, fmt.Errorf("failed to get epoch info: %w", err)
+	}
+
+	if info.DeploymentCount == 0 {
+		return info, nil
+	}
+
+	// Get first and last deployment dates as strings (SQLite stores datetime as text)
+	var firstDeployStr, lastDeployStr string
+	err = m.db.QueryRow(`
+		SELECT
+			MIN(created_at) as first_deploy,
+			MAX(created_at) as last_deploy
+		FROM deployments
+		WHERE project_id = ? AND success = 1
+	`, projectID).Scan(&firstDeployStr, &lastDeployStr)
+
+	if err != nil {
+		return nil, fmt.Errorf("failed to get deployment dates: %w", err)
+	}
+
+	// Parse datetime strings - try multiple formats
+	parseTime := func(s string) (time.Time, error) {
+		if s == "" {
+			return time.Time{}, fmt.Errorf("empty time string")
+		}
+
+		// Strip Go's monotonic clock reading (e.g., " m=+63.651456751")
+		if idx := strings.Index(s, " m="); idx != -1 {
+			s = s[:idx]
+		}
+
+		// Handle dual timezone format (e.g., "+0300 +03")
+		// Keep only the first timezone offset
+		parts := strings.Fields(s)
+		if len(parts) >= 3 {
+			// Check if last two parts look like timezone offsets
+			last := parts[len(parts)-1]
+			secondLast := parts[len(parts)-2]
+			if len(last) <= 4 && (strings.HasPrefix(last, "+") || strings.HasPrefix(last, "-")) {
+				if len(secondLast) >= 5 && (strings.HasPrefix(secondLast, "+") || strings.HasPrefix(secondLast, "-")) {
+					// Remove the shorter timezone
+					s = strings.Join(parts[:len(parts)-1], " ")
+				}
+			}
+		}
+
+		formats := []string{
+			time.RFC3339,
+			"2006-01-02 15:04:05.999999999 -0700",
+			"2006-01-02 15:04:05.999999 -0700",
+			"2006-01-02 15:04:05 -0700",
+			"2006-01-02T15:04:05Z07:00",
+			"2006-01-02 15:04:05.999999999-07:00",
+			"2006-01-02 15:04:05.999999999",
+			"2006-01-02 15:04:05",
+			"2006-01-02T15:04:05",
+		}
+		for _, format := range formats {
+			if t, err := time.Parse(format, s); err == nil {
+				return t, nil
+			}
+		}
+		return time.Time{}, fmt.Errorf("unable to parse time %q with any known format", s)
+	}
+
+	// Parse deployment dates — non-fatal if parsing fails (use zero time)
+	if t, err := parseTime(firstDeployStr); err == nil {
+		info.FirstDeploymentAt = t
+	}
+	if t, err := parseTime(lastDeployStr); err == nil {
+		info.LastDeploymentAt = t
+	}
+
+	return info, nil
+}
+
 // SetStatus sets the status of a project to the specified value.
-func (m *Manager) SetStatus(id int, status string) error {
+func (m *Manager) SetStatus(id int64, status string) error {
 	// Validate status
 	validStatuses := map[string]bool{
 		"draft":    true,

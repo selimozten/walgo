@@ -17,7 +17,11 @@ func (a *Adapter) Deploy(ctx context.Context, siteDir string, opts deployer.Depl
 	if err != nil {
 		return nil, err
 	}
-	return &deployer.Result{Success: out.Success, ObjectID: out.ObjectID, BrowseURLs: out.BrowseURLs}, nil
+	return &deployer.Result{
+		Success:    out.Success,
+		ObjectID:   out.ObjectID,
+		BrowseURLs: out.BrowseURLs,
+	}, nil
 }
 
 func (a *Adapter) Update(ctx context.Context, siteDir string, objectID string, opts deployer.DeployOptions) (*deployer.Result, error) {
@@ -25,7 +29,11 @@ func (a *Adapter) Update(ctx context.Context, siteDir string, objectID string, o
 	if err != nil {
 		return nil, err
 	}
-	return &deployer.Result{Success: out.Success, ObjectID: objectID, BrowseURLs: out.BrowseURLs}, nil
+	return &deployer.Result{
+		Success:    out.Success,
+		ObjectID:   objectID,
+		BrowseURLs: out.BrowseURLs,
+	}, nil
 }
 
 func (a *Adapter) Destroy(ctx context.Context, objectID string) error {

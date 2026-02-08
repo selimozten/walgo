@@ -9,17 +9,39 @@ import (
 	"runtime"
 	"strconv"
 	"strings"
+	"sync"
 
 	"github.com/selimozten/walgo/pkg/api"
-	wruntime "github.com/wailsapp/wails/v2/pkg/runtime"
 )
+
+// AIProgressState holds the current AI pipeline progress for polling.
+type AIProgressState struct {
+	IsActive     bool    `json:"isActive"`
+	Phase        string  `json:"phase"`
+	Message      string  `json:"message"`
+	PagePath     string  `json:"pagePath"`
+	Progress     float64 `json:"progress"`
+	Current      int     `json:"current"`
+	Total        int     `json:"total"`
+	Complete     bool    `json:"complete"`
+	Success      bool    `json:"success"`
+	SitePath     string  `json:"sitePath"`
+	TotalPages   int     `json:"totalPages"`
+	FilesCreated int     `json:"filesCreated"`
+	Error        string  `json:"error"`
+}
 
 // App represents the main desktop application structure.
 type App struct {
 	ctx           context.Context
-	serveCmd      *exec.Cmd // Track running Hugo server
+	mu            sync.Mutex // protects serveCmd, serverPort, serveSitePath
+	serveCmd      *exec.Cmd
 	serverPort    int
-	serveSitePath string // Track site path for cleanup
+	serveSitePath string
+	aiProgress    *AIProgressState
+	aiProgressMu  sync.Mutex
+	aiCancel      context.CancelFunc // cancels the running AI pipeline
+	aiDone        chan struct{}      // closed when the AI goroutine exits
 }
 
 // NewApp initializes and returns a new App instance.
@@ -34,6 +56,12 @@ func lookPath(name string) (string, error) {
 		return path, nil
 	}
 
+	// On Windows, binaries have .exe extension
+	binaryName := name
+	if runtime.GOOS == "windows" && filepath.Ext(name) == "" {
+		binaryName = name + ".exe"
+	}
+
 	// Check common binary directories
 	var extraDirs []string
 	switch runtime.GOOS {
@@ -42,13 +70,25 @@ func lookPath(name string) (string, error) {
 	case "linux":
 		extraDirs = []string{"/usr/local/bin", "/usr/bin", "/bin"}
 	case "windows":
-		// Windows installers typically add to PATH
-		return "", fmt.Errorf("%s not found in PATH", name)
+		home, _ := os.UserHomeDir()
+		if home != "" {
+			extraDirs = []string{
+				filepath.Join(home, ".walgo", "bin"),
+				filepath.Join(home, ".sui", "bin"),
+				filepath.Join(home, ".local", "bin"),
+			}
+		}
+		if localAppData := os.Getenv("LOCALAPPDATA"); localAppData != "" {
+			extraDirs = append(extraDirs, filepath.Join(localAppData, "Walgo"))
+		}
+		if programFiles := os.Getenv("ProgramFiles"); programFiles != "" {
+			extraDirs = append(extraDirs, filepath.Join(programFiles, "Walgo"))
+		}
 	}
 
 	// Check extra directories
 	for _, dir := range extraDirs {
-		candidatePath := filepath.Join(dir, name)
+		candidatePath := filepath.Join(dir, binaryName)
 		if info, err := os.Stat(candidatePath); err == nil && !info.IsDir() {
 			if runtime.GOOS == "windows" || info.Mode()&0111 != 0 {
 				return candidatePath, nil
@@ -56,12 +96,14 @@ func lookPath(name string) (string, error) {
 		}
 	}
 
-	// Check ~/.local/bin
-	if home, err := os.UserHomeDir(); err == nil {
-		localBin := filepath.Join(home, ".local", "bin", name)
-		if info, err := os.Stat(localBin); err == nil && !info.IsDir() {
-			if runtime.GOOS == "windows" || info.Mode()&0111 != 0 {
-				return localBin, nil
+	// Check ~/.local/bin (non-Windows, since Windows already checks it above)
+	if runtime.GOOS != "windows" {
+		if home, err := os.UserHomeDir(); err == nil {
+			localBin := filepath.Join(home, ".local", "bin", binaryName)
+			if info, err := os.Stat(localBin); err == nil && !info.IsDir() {
+				if info.Mode()&0111 != 0 {
+					return localBin, nil
+				}
 			}
 		}
 	}
@@ -79,19 +121,33 @@ func (a *App) startup(ctx context.Context) {
 
 // Minimize minimizes application window.
 func (a *App) Minimize() {
-	wruntime.WindowMinimise(a.ctx)
+	windowMinimise(a.ctx)
 }
 
 // Maximize toggles between maximize and restore states for window.
 func (a *App) Maximize() {
-	wruntime.WindowToggleMaximise(a.ctx)
+	windowToggleMaximise(a.ctx)
 }
 
 // Close stops any running server and terminates the application.
 func (a *App) Close() {
-	// Stop any running server first
+	a.cancelAI()
 	a.StopServe()
-	wruntime.Quit(a.ctx)
+	appQuit(a.ctx)
+}
+
+// beforeClose is called by Wails before the window closes.
+// It cancels any running AI pipeline so the defer cleanup runs,
+// then allows the close to proceed.
+func (a *App) beforeClose(_ context.Context) bool {
+	a.cancelAI()
+	return false // allow close
+}
+
+// shutdown is called by Wails when the application is shutting down.
+func (a *App) shutdown(_ context.Context) {
+	a.cancelAI()
+	a.StopServe()
 }
 
 // File Dialogs
@@ -99,10 +155,7 @@ func (a *App) Close() {
 // SelectDirectory opens a directory selection dialog and returns the chosen path.
 func (a *App) SelectDirectory(title string) (string, error) {
 	homeDir, _ := os.UserHomeDir()
-	return wruntime.OpenDirectoryDialog(a.ctx, wruntime.OpenDialogOptions{
-		Title:            title,
-		DefaultDirectory: homeDir,
-	})
+	return openDirectoryDialog(a.ctx, title, homeDir)
 }
 
 // Version Management
@@ -172,6 +225,29 @@ func (a *App) BuildSite(sitePath string) error {
 }
 
 // ====================
+// Theme Management
+// ====================
+
+// InstallThemeParams holds theme installation parameters
+type InstallThemeParams = api.InstallThemeParams
+
+// InstallThemeResult holds theme installation result
+type InstallThemeResult = api.InstallThemeResult
+
+// GetInstalledThemesResult holds list of installed themes
+type GetInstalledThemesResult = api.GetInstalledThemesResult
+
+// InstallTheme installs a Hugo theme from GitHub URL
+func (a *App) InstallTheme(params InstallThemeParams) InstallThemeResult {
+	return api.InstallTheme(params)
+}
+
+// GetInstalledThemes returns list of installed themes
+func (a *App) GetInstalledThemes(sitePath string) GetInstalledThemesResult {
+	return api.GetInstalledThemes(sitePath)
+}
+
+// ====================
 // AI Features
 // ====================
 
@@ -225,23 +301,8 @@ type ProviderCredentialsResult = api.ProviderCredentialsResult
 // AI Content Generation
 // ====================
 
-// GenerateContentParams holds content generation parameters (legacy - kept for compatibility)
-type GenerateContentParams struct {
-	SitePath     string `json:"sitePath"`
-	FilePath     string `json:"filePath"`
-	ContentType  string `json:"contentType"` // "post" or "page"
-	Topic        string `json:"topic"`
-	Context      string `json:"context"`
-	Instructions string `json:"instructions"` // New: simplified instructions
-}
-
-// GenerateContentResult holds the result of content generation
-type GenerateContentResult struct {
-	Success  bool   `json:"success"`
-	FilePath string `json:"filePath"`
-	Content  string `json:"content"`
-	Error    string `json:"error"`
-}
+type GenerateContentParams = api.GenerateContentParams
+type GenerateContentResult = api.GenerateContentResult
 
 // ContentStructure holds information about the content directory structure
 type ContentStructure = api.ContentStructure
@@ -253,21 +314,7 @@ func (a *App) GetContentStructure(sitePath string) ContentStructure {
 }
 
 func (a *App) GenerateContent(params GenerateContentParams) GenerateContentResult {
-	apiParams := api.GenerateContentParams{
-		SitePath:     params.SitePath,
-		FilePath:     params.FilePath,
-		ContentType:  params.ContentType,
-		Topic:        params.Topic,
-		Context:      params.Context,
-		Instructions: params.Instructions,
-	}
-	res := api.GenerateContent(apiParams)
-	return GenerateContentResult{
-		Success:  res.Success,
-		Content:  res.Content,
-		FilePath: res.FilePath,
-		Error:    res.Error,
-	}
+	return api.GenerateContent(params)
 }
 
 // UpdateContentParams holds content update parameters
@@ -377,42 +424,12 @@ func (a *App) ProjectNameExists(name string) (bool, error) {
 // Import
 // ====================
 
-// ImportObsidianParams holds import parameters
-type ImportObsidianParams struct {
-	VaultPath     string `json:"vaultPath"`
-	SiteName      string `json:"siteName"`      // Name for new site (defaults to vault name)
-	ParentDir     string `json:"parentDir"`     // Parent directory for site (defaults to current dir)
-	OutputDir     string `json:"outputDir"`     // Subdirectory in content for imported files
-	DryRun        bool   `json:"dryRun"`        // Preview without creating site
-	ConvertLinks  bool   `json:"convertLinks"`  // Convert wikilinks
-	LinkStyle     string `json:"linkStyle"`     // "markdown" (default) or "relref"
-	IncludeDrafts bool   `json:"includeDrafts"` // Include draft content
-}
-
-// ImportObsidianResult holds import results
-type ImportObsidianResult struct {
-	Success       bool   `json:"success"`
-	FilesImported int    `json:"filesImported"`
-	SitePath      string `json:"sitePath"` // Path to created site
-	Error         string `json:"error"`
-}
+type ImportObsidianParams = api.ImportObsidianParams
+type ImportObsidianResult = api.ImportObsidianResult
 
 // ImportObsidian creates a new Hugo site and imports content from Obsidian vault
 func (a *App) ImportObsidian(params ImportObsidianParams) ImportObsidianResult {
-	res := api.ImportObsidian(api.ImportObsidianParams{
-		VaultPath:    params.VaultPath,
-		SiteName:     params.SiteName,
-		ParentDir:    params.ParentDir,
-		OutputDir:    params.OutputDir,
-		DryRun:       params.DryRun,
-		ConvertLinks: params.ConvertLinks,
-	})
-	return ImportObsidianResult{
-		Success:       res.Success,
-		FilesImported: res.FilesImported,
-		SitePath:      res.SitePath,
-		Error:         res.Error,
-	}
+	return api.ImportObsidian(params)
 }
 
 // ====================
@@ -436,7 +453,6 @@ func (a *App) QuickStart(params QuickStartParams) QuickStartResult {
 type ServeParams = api.ServeParams
 type ServeResult = api.ServeResult
 
-// killExistingHugoProcesses finds and kills any existing 'hugo serve' processes
 // Serve starts local Hugo development server
 func (a *App) Serve(params ServeParams) ServeResult {
 	// Stop any existing server first
@@ -463,10 +479,20 @@ func (a *App) Serve(params ServeParams) ServeResult {
 		sitePath = cwd
 	}
 
+	// Build the site before serving
+	buildCmd := exec.Command(hugoPath, "--source", sitePath)
+	hideWindow(buildCmd)
+	if output, err := buildCmd.CombinedOutput(); err != nil {
+		return ServeResult{Error: fmt.Sprintf("build failed: %s", string(output))}
+	}
+
 	// Build hugo arguments
 	hugoArgs := []string{"server"}
 	if params.Drafts {
 		hugoArgs = append(hugoArgs, "-D")
+	}
+	if params.Expired {
+		hugoArgs = append(hugoArgs, "-E")
 	}
 	if params.Future {
 		hugoArgs = append(hugoArgs, "-F")
@@ -483,14 +509,19 @@ func (a *App) Serve(params ServeParams) ServeResult {
 	cmd := exec.Command(hugoPath, hugoArgs...)
 	cmd.Dir = sitePath
 
+	// Hide console window on Windows
+	hideWindow(cmd)
+
 	if err := cmd.Start(); err != nil {
 		return ServeResult{Error: fmt.Sprintf("failed to start hugo server: %v", err)}
 	}
 
 	// Track the running command, port, and site path
+	a.mu.Lock()
 	a.serveCmd = cmd
 	a.serverPort = port
 	a.serveSitePath = sitePath
+	a.mu.Unlock()
 
 	return ServeResult{
 		Success: true,
@@ -498,68 +529,28 @@ func (a *App) Serve(params ServeParams) ServeResult {
 	}
 }
 
-// getProductionBaseURLFromHugoToml reads the baseURL from hugo.toml or config.toml
-func getProductionBaseURLFromHugoToml(sitePath string) (string, error) {
-	// Try hugo.toml first
-	hugoTomlPath := filepath.Join(sitePath, "hugo.toml")
-	if baseURL, err := extractBaseURLFromTomlFile(hugoTomlPath); err == nil && baseURL != "" {
-		return baseURL, nil
-	}
-
-	// Try config.toml
-	configTomlPath := filepath.Join(sitePath, "config.toml")
-	if baseURL, err := extractBaseURLFromTomlFile(configTomlPath); err == nil && baseURL != "" {
-		return baseURL, nil
-	}
-
-	return "", fmt.Errorf("baseURL not found in hugo.toml or config.toml")
-}
-
-// extractBaseURLFromTomlFile extracts baseURL from a TOML file
-func extractBaseURLFromTomlFile(tomlPath string) (string, error) {
-	content, err := os.ReadFile(tomlPath)
-	if err != nil {
-		return "", err
-	}
-
-	// Simple parsing to extract baseURL (handles various formats)
-	lines := strings.Split(string(content), "\n")
-	for _, line := range lines {
-		line = strings.TrimSpace(line)
-		if strings.HasPrefix(line, "baseURL") || strings.HasPrefix(line, "baseurl") {
-			// Extract value after = sign
-			parts := strings.SplitN(line, "=", 2)
-			if len(parts) == 2 {
-				baseURL := strings.TrimSpace(parts[1])
-				// Remove quotes
-				baseURL = strings.Trim(baseURL, `"'`)
-				// Skip placeholder values
-				if baseURL != "" && !strings.Contains(baseURL, "example.") && !strings.Contains(baseURL, "localhost") {
-					return baseURL, nil
-				}
-			}
-		}
-	}
-
-	return "", fmt.Errorf("baseURL not found in %s", tomlPath)
-}
-
 // StopServe stops the running Hugo development server and cleans up localhost files
 func (a *App) StopServe() bool {
-	if a.serveCmd != nil && a.serveCmd.Process != nil {
+	a.mu.Lock()
+	defer a.mu.Unlock()
 
-		// Stop the server
-		a.serveCmd.Process.Kill()
-		a.serveCmd = nil
-		a.serveSitePath = ""
-		a.serverPort = 0
-		return true
+	if a.serveCmd == nil || a.serveCmd.Process == nil {
+		return false
 	}
-	return false
+
+	_ = a.serveCmd.Process.Kill()
+	_ = a.serveCmd.Wait() // reap the process to avoid zombies
+	a.serveCmd = nil
+	a.serveSitePath = ""
+	a.serverPort = 0
+	return true
 }
 
 // GetServerURL returns the current server URL
 func (a *App) GetServerURL() string {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+
 	if a.serverPort > 0 {
 		return fmt.Sprintf("http://localhost:%d", a.serverPort)
 	}
@@ -600,16 +591,27 @@ func (a *App) ArchiveProject(projectID int64) ArchiveProjectResult {
 	return api.ArchiveProject(projectID)
 }
 
+// ====================
+// Update Site (Re-deploy)
+// ====================
+
+// UpdateSiteParams holds update site parameters
+type UpdateSiteParams = api.UpdateSiteParams
+
+// UpdateSiteResult holds update site result
+type UpdateSiteResult = api.UpdateSiteResult
+
+// UpdateSite updates an existing project's site on Walrus (re-deploy)
+func (a *App) UpdateSite(params UpdateSiteParams) UpdateSiteResult {
+	return api.UpdateSite(params)
+}
+
 type SetStatusParams = api.SetStatusParams
 type SetStatusResult = api.SetStatusResult
 
 func (a *App) SetStatus(params SetStatusParams) SetStatusResult {
 	return api.SetStatus(params)
 }
-
-// ====================
-// Launch Wizard
-// ====================
 
 // LaunchStep represents a step in the launch wizard
 type LaunchStep = api.LaunchStep
@@ -646,23 +648,91 @@ func (a *App) LaunchWizard(params LaunchWizardParams) LaunchWizardResult {
 type AICreateSiteParams = api.AICreateSiteParams
 type AICreateSiteResult = api.AICreateSiteResult
 
-// AICreateSite creates a complete Hugo site with AI-generated content
-func (a *App) AICreateSite(params AICreateSiteParams) AICreateSiteResult {
-	// Create a progress handler that emits Wails runtime events
+// GetAIProgress returns the current AI pipeline progress state for polling.
+func (a *App) GetAIProgress() AIProgressState {
+	a.aiProgressMu.Lock()
+	defer a.aiProgressMu.Unlock()
+	if a.aiProgress == nil {
+		return AIProgressState{}
+	}
+	return *a.aiProgress
+}
+
+// AICreateSite creates a complete Hugo site with AI-generated content.
+// Runs the pipeline in a background goroutine. The frontend polls
+// GetAIProgress() to track progress and detect completion.
+// The pipeline is cancelled automatically if the app is closed.
+func (a *App) AICreateSite(params AICreateSiteParams) {
+	// Cancel any previous in-flight pipeline
+	a.cancelAI()
+
+	// Initialize progress state and cancellable context
+	ctx, cancel := context.WithCancel(context.Background())
+	done := make(chan struct{})
+
+	a.aiProgressMu.Lock()
+	a.aiProgress = &AIProgressState{IsActive: true}
+	a.aiCancel = cancel
+	a.aiDone = done
+	a.aiProgressMu.Unlock()
+
 	progressHandler := func(event api.ProgressEvent) {
-		// Emit progress event to frontend
-		wruntime.EventsEmit(a.ctx, "ai:progress", map[string]interface{}{
-			"phase":     event.Phase,
-			"eventType": event.EventType,
-			"message":   event.Message,
-			"pagePath":  event.PagePath,
-			"progress":  event.Progress,
-			"current":   event.Current,
-			"total":     event.Total,
-		})
+		a.aiProgressMu.Lock()
+		defer a.aiProgressMu.Unlock()
+		if a.aiProgress == nil {
+			return
+		}
+		a.aiProgress.Phase = event.Phase
+		a.aiProgress.PagePath = event.PagePath
+		a.aiProgress.Progress = event.Progress
+		a.aiProgress.Current = event.Current
+		a.aiProgress.Total = event.Total
+
+		// Show user-friendly messages for retries and errors
+		switch event.EventType {
+		case "retry":
+			a.aiProgress.Message = fmt.Sprintf("Retrying %s (rate limited, waiting...)", event.PagePath)
+		case "error":
+			a.aiProgress.Message = fmt.Sprintf("Failed: %s", event.PagePath)
+		default:
+			a.aiProgress.Message = event.Message
+		}
 	}
 
-	return api.AICreateSiteWithProgress(params, progressHandler)
+	go func() {
+		defer close(done)
+		result := api.AICreateSiteWithProgress(ctx, params, progressHandler)
+
+		a.aiProgressMu.Lock()
+		defer a.aiProgressMu.Unlock()
+		if a.aiProgress == nil {
+			a.aiProgress = &AIProgressState{}
+		}
+		a.aiProgress.Complete = true
+		a.aiProgress.Success = result.Success
+		a.aiProgress.SitePath = result.SitePath
+		a.aiProgress.TotalPages = result.TotalPages
+		a.aiProgress.FilesCreated = result.FilesCreated
+		a.aiProgress.Error = result.Error
+		a.aiProgress.IsActive = false
+		a.aiCancel = nil
+		a.aiDone = nil
+	}()
+}
+
+// cancelAI cancels any running AI pipeline and waits for it to finish.
+func (a *App) cancelAI() {
+	a.aiProgressMu.Lock()
+	cancel := a.aiCancel
+	done := a.aiDone
+	a.aiProgressMu.Unlock()
+
+	if cancel != nil {
+		cancel()
+	}
+	if done != nil {
+		<-done
+	}
 }
 
 // ====================
@@ -681,12 +751,9 @@ func (a *App) CheckSetupDeps() SetupDepsResult {
 // AI Credentials Management
 // ====================
 
-// RemoveAICredentials removes AI credentials for a specific provider or all
-func (a *App) RemoveAICredentials(provider string) error {
-	if provider == "" {
-		return api.CleanAIConfig()
-	}
-	// Remove specific provider - would need to add to api package
+// RemoveAICredentials removes all AI credentials.
+// The provider parameter is accepted for future per-provider support but currently ignored.
+func (a *App) RemoveAICredentials(_ string) error {
 	return api.CleanAIConfig()
 }
 
@@ -696,13 +763,12 @@ func (a *App) RemoveAICredentials(provider string) error {
 
 // OpenInBrowser opens a URL in the default browser
 func (a *App) OpenInBrowser(url string) {
-	wruntime.BrowserOpenURL(a.ctx, url)
+	browserOpenURL(a.ctx, url)
 }
 
-// OpenInFinder opens a path in Finder (macOS) or file explorer
+// OpenInFinder opens a path in Finder (macOS), Explorer (Windows), or file manager (Linux)
 func (a *App) OpenInFinder(path string) error {
-	cmd := exec.Command("open", path)
-	return cmd.Run()
+	return openFileExplorer(path)
 }
 
 // ====================
@@ -732,8 +798,13 @@ func (a *App) ListFiles(dirPath string) ListFilesResult {
 		Files:   []FileInfo{},
 	}
 
-	// Validate directory exists
-	info, err := os.Stat(dirPath)
+	safePath, err := validateFilePath(dirPath)
+	if err != nil {
+		result.Error = err.Error()
+		return result
+	}
+
+	info, err := os.Stat(safePath)
 	if err != nil {
 		result.Error = fmt.Sprintf("Directory not accessible: %v", err)
 		return result
@@ -745,7 +816,7 @@ func (a *App) ListFiles(dirPath string) ListFilesResult {
 	}
 
 	// Read directory
-	entries, err := os.ReadDir(dirPath)
+	entries, err := os.ReadDir(safePath)
 	if err != nil {
 		result.Error = fmt.Sprintf("Failed to read directory: %v", err)
 		return result
@@ -763,7 +834,7 @@ func (a *App) ListFiles(dirPath string) ListFilesResult {
 			continue
 		}
 
-		fullPath := filepath.Join(dirPath, entry.Name())
+		fullPath := filepath.Join(safePath, entry.Name())
 
 		files = append(files, FileInfo{
 			Name:     entry.Name(),
@@ -793,6 +864,13 @@ func (a *App) GetFolderStats(dirPath string) FolderStatsResult {
 	result := FolderStatsResult{
 		Success: false,
 	}
+
+	safePath, err := validateFilePath(dirPath)
+	if err != nil {
+		result.Error = err.Error()
+		return result
+	}
+	dirPath = safePath
 
 	// Validate directory exists
 	info, err := os.Stat(dirPath)
@@ -849,6 +927,27 @@ func countFilesRecursive(dirPath string) (fileCount int, folderCount int, totalS
 	return fileCount, folderCount, totalSize
 }
 
+// validateFilePath ensures the path resolves inside the user's home directory,
+// preventing path traversal attacks from the frontend.
+func validateFilePath(filePath string) (string, error) {
+	homeDir, err := os.UserHomeDir()
+	if err != nil {
+		return "", fmt.Errorf("cannot determine home directory: %w", err)
+	}
+	absPath, err := filepath.Abs(filepath.Clean(filePath))
+	if err != nil {
+		return "", fmt.Errorf("invalid path: %w", err)
+	}
+	absHome, err := filepath.Abs(homeDir)
+	if err != nil {
+		return "", fmt.Errorf("invalid home path: %w", err)
+	}
+	if !strings.HasPrefix(absPath, absHome+string(filepath.Separator)) && absPath != absHome {
+		return "", fmt.Errorf("access denied: path is outside home directory")
+	}
+	return absPath, nil
+}
+
 // ReadFileResult holds the result of reading a file
 type ReadFileResult struct {
 	Success bool   `json:"success"`
@@ -863,8 +962,13 @@ func (a *App) ReadFile(filePath string) ReadFileResult {
 		Content: "",
 	}
 
-	// Validate file exists
-	info, err := os.Stat(filePath)
+	safePath, err := validateFilePath(filePath)
+	if err != nil {
+		result.Error = err.Error()
+		return result
+	}
+
+	info, err := os.Stat(safePath)
 	if err != nil {
 		result.Error = fmt.Sprintf("File not accessible: %v", err)
 		return result
@@ -875,8 +979,7 @@ func (a *App) ReadFile(filePath string) ReadFileResult {
 		return result
 	}
 
-	// Read file content
-	content, err := os.ReadFile(filePath) // #nosec G304 - filePath comes from project directory
+	content, err := os.ReadFile(safePath) // #nosec G304 - path validated by validateFilePath
 	if err != nil {
 		result.Error = fmt.Sprintf("Failed to read file: %v", err)
 		return result
@@ -899,15 +1002,19 @@ func (a *App) WriteFile(filePath string, content string) WriteFileResult {
 		Success: false,
 	}
 
-	// Create directory if it doesn't exist
-	dir := filepath.Dir(filePath)
+	safePath, err := validateFilePath(filePath)
+	if err != nil {
+		result.Error = err.Error()
+		return result
+	}
+
+	dir := filepath.Dir(safePath)
 	if err := os.MkdirAll(dir, 0755); err != nil {
 		result.Error = fmt.Sprintf("Failed to create directory: %v", err)
 		return result
 	}
 
-	// Write file
-	if err := os.WriteFile(filePath, []byte(content), 0644); err != nil {
+	if err := os.WriteFile(safePath, []byte(content), 0644); err != nil {
 		result.Error = fmt.Sprintf("Failed to write file: %v", err)
 		return result
 	}
@@ -928,21 +1035,25 @@ func (a *App) DeleteFile(filePath string) DeleteFileResult {
 		Success: false,
 	}
 
-	// Check if file/directory exists
-	info, err := os.Stat(filePath)
+	safePath, err := validateFilePath(filePath)
+	if err != nil {
+		result.Error = err.Error()
+		return result
+	}
+
+	info, err := os.Stat(safePath)
 	if err != nil {
 		result.Error = fmt.Sprintf("File not accessible: %v", err)
 		return result
 	}
 
-	// Delete file or directory
 	if info.IsDir() {
-		if err := os.RemoveAll(filePath); err != nil {
+		if err := os.RemoveAll(safePath); err != nil {
 			result.Error = fmt.Sprintf("Failed to delete directory: %v", err)
 			return result
 		}
 	} else {
-		if err := os.Remove(filePath); err != nil {
+		if err := os.Remove(safePath); err != nil {
 			result.Error = fmt.Sprintf("Failed to delete file: %v", err)
 			return result
 		}
@@ -966,8 +1077,14 @@ func (a *App) CreateFile(filePath string, content string) CreateFileResult {
 		Path:    filePath,
 	}
 
+	safePath, err := validateFilePath(filePath)
+	if err != nil {
+		result.Error = err.Error()
+		return result
+	}
+
 	// If file exists, find a unique name by adding (1), (2), etc.
-	uniquePath := findUniquePath(filePath)
+	uniquePath := findUniquePath(safePath)
 	result.Path = uniquePath
 
 	// Create directory if it doesn't exist
@@ -1001,8 +1118,14 @@ func (a *App) CreateDirectory(dirPath string) CreateDirectoryResult {
 		Path:    dirPath,
 	}
 
+	safePath, err := validateFilePath(dirPath)
+	if err != nil {
+		result.Error = err.Error()
+		return result
+	}
+
 	// If directory exists, find a unique name by adding (1), (2), etc.
-	uniquePath := findUniquePath(dirPath)
+	uniquePath := findUniquePath(safePath)
 	result.Path = uniquePath
 
 	// Create directory
@@ -1031,15 +1154,22 @@ func (a *App) MoveFile(oldPath string, newPath string) MoveFileResult {
 		NewPath: newPath,
 	}
 
+	safeOldPath, err := validateFilePath(oldPath)
+	if err != nil {
+		result.Error = err.Error()
+		return result
+	}
+	safeNewPath, err := validateFilePath(newPath)
+	if err != nil {
+		result.Error = err.Error()
+		return result
+	}
+	oldPath = safeOldPath
+	newPath = safeNewPath
+
 	// Check if source exists
 	if _, err := os.Stat(oldPath); err != nil {
 		result.Error = fmt.Sprintf("Source not found: %v", err)
-		return result
-	}
-
-	// Check if destination already exists
-	if _, err := os.Stat(newPath); err == nil {
-		result.Error = "Destination already exists"
 		return result
 	}
 
@@ -1050,9 +1180,20 @@ func (a *App) MoveFile(oldPath string, newPath string) MoveFileResult {
 		return result
 	}
 
+	// Check if destination already exists right before rename to minimize race window
+	if _, err := os.Stat(newPath); err == nil {
+		result.Error = "Destination already exists"
+		return result
+	}
+
 	// Move/rename the file or directory
 	if err := os.Rename(oldPath, newPath); err != nil {
-		result.Error = fmt.Sprintf("Failed to move: %v", err)
+		// Handle race: another process may have created the destination
+		if _, statErr := os.Stat(newPath); statErr == nil {
+			result.Error = "Destination already exists"
+		} else {
+			result.Error = fmt.Sprintf("Failed to move: %v", err)
+		}
 		return result
 	}
 
@@ -1075,9 +1216,24 @@ func (a *App) RenameFile(oldPath string, newName string) RenameFileResult {
 		OldPath: oldPath,
 	}
 
+	safeOldPath, err := validateFilePath(oldPath)
+	if err != nil {
+		result.Error = err.Error()
+		return result
+	}
+	oldPath = safeOldPath
+
 	// Calculate new path
 	dir := filepath.Dir(oldPath)
 	newPath := filepath.Join(dir, newName)
+	result.NewPath = newPath
+
+	safeNewPath, err := validateFilePath(newPath)
+	if err != nil {
+		result.Error = err.Error()
+		return result
+	}
+	newPath = safeNewPath
 	result.NewPath = newPath
 
 	// Check if source exists
@@ -1117,6 +1273,19 @@ func (a *App) CopyFile(srcPath string, dstPath string) CopyFileResult {
 		SrcPath: srcPath,
 		DstPath: dstPath,
 	}
+
+	safeSrcPath, err := validateFilePath(srcPath)
+	if err != nil {
+		result.Error = err.Error()
+		return result
+	}
+	safeDstPath, err := validateFilePath(dstPath)
+	if err != nil {
+		result.Error = err.Error()
+		return result
+	}
+	srcPath = safeSrcPath
+	dstPath = safeDstPath
 
 	// Check if source exists
 	srcInfo, err := os.Stat(srcPath)
@@ -1222,7 +1391,13 @@ func (a *App) CheckDirectoryDepth(path string) CheckDirectoryDepthResult {
 		Success: false,
 	}
 
-	info, err := os.Stat(path)
+	validPath, err := validateFilePath(path)
+	if err != nil {
+		result.Error = fmt.Sprintf("Invalid path: %v", err)
+		return result
+	}
+
+	info, err := os.Stat(validPath)
 	if err != nil {
 		result.Error = fmt.Sprintf("Path not found: %v", err)
 		return result
@@ -1236,7 +1411,7 @@ func (a *App) CheckDirectoryDepth(path string) CheckDirectoryDepthResult {
 		return result
 	}
 
-	depth, err := getDirectoryDepth(path)
+	depth, err := getDirectoryDepth(validPath)
 	if err != nil {
 		result.Error = fmt.Sprintf("Failed to check depth: %v", err)
 		return result

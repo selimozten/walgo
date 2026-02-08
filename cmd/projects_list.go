@@ -60,6 +60,23 @@ func listProjects(network, status string) error {
 		fmt.Printf("   Deployments:  %d\n", proj.DeployCount)
 		fmt.Printf("   Last deploy:  %s\n", proj.LastDeployAt.Format("2006-01-02 15:04"))
 
+		// Show epoch and expiry info
+		epochInfo, err := pm.GetEpochInfo(proj.ID)
+		if err == nil && epochInfo != nil && epochInfo.TotalEpochs > 0 {
+			duration := projects.CalculateStorageDuration(epochInfo.TotalEpochs, proj.Network)
+			fmt.Printf("   Epochs:       %d (%s)\n", epochInfo.TotalEpochs, duration)
+
+			// Calculate and show expiry
+			if !epochInfo.FirstDeploymentAt.IsZero() {
+				expiryDate := calculateExpiryDate(epochInfo.FirstDeploymentAt, epochInfo.TotalEpochs, proj.Network)
+				expiryStr := formatExpiryDuration(expiryDate)
+				fmt.Printf("   Expires:      %s\n", expiryStr)
+			}
+		} else if proj.Epochs > 0 {
+			duration := projects.CalculateStorageDuration(proj.Epochs, proj.Network)
+			fmt.Printf("   Epochs:       %d (%s)\n", proj.Epochs, duration)
+		}
+
 		since := time.Since(proj.LastDeployAt)
 		if since < 24*time.Hour {
 			fmt.Printf("   Updated:      %s ago\n", formatDuration(since))

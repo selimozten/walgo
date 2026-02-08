@@ -6,12 +6,13 @@ theme = "hugo-book"
 
 canonifyURLs = false
 relativeURLs = false
-removePathAccents = true
+
+# Preserve mixed-case paths in documentation URLs
+disablePathToLower = true
 
 enableRobotsTXT = true
-summaryLength = 30
 
-# Docs: keep minimal
+# Docs: keep minimal — no taxonomy or RSS needed
 disableKinds = ["taxonomy", "term", "RSS"]
 
 [pagination]
@@ -25,25 +26,26 @@ disableKinds = ["taxonomy", "term", "RSS"]
 [minify]
   disableXML = true
   minifyOutput = true
+  # ⚠ Do NOT enable CSS minification — Hugo's minifier (tdewolff/minify) breaks
+  # var() spacing in multi-value properties (e.g. "var(--x) 1fr" → "var(--x)1fr").
+  # The walgo optimizer handles CSS minification correctly.
+  disableCSS = true
 
 [markup]
   [markup.goldmark.renderer]
-    unsafe = false
+    # Enable raw HTML in markdown (needed for mermaid/katex shortcodes)
+    unsafe = true
   [markup.highlight]
     noClasses = false
     lineNos = true
     guessSyntax = true
+    style = "base16-snazzy"
   [markup.tableOfContents]
-    startLevel = 2
+    startLevel = 1
     endLevel = 4
 
 [build]
   useResourceCacheWhen = "fallback"
-
-[imaging]
-  quality = 82
-  resampleFilter = "Lanczos"
-  anchor = "Smart"
 
 # Hugo Book theme params
 [params]
@@ -59,5 +61,7 @@ disableKinds = ["taxonomy", "term", "RSS"]
   BookSearch = true
   # Show table of contents on pages
   BookToC = true
-  # Disable comments (Disqus)
+  # Disable comments (Disqus) — not needed for decentralized sites
   BookComments = false
+  # Warn about broken internal links in markdown
+  BookPortableLinks = "warning"

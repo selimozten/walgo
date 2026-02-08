@@ -5,5 +5,6 @@ export { useSystemHealth } from './useSystemHealth';
 export { useEditProject } from './useEditProject';
 export { useSiteCreation } from './useSiteCreation';
 export { useVersionCheck } from './useVersionCheck';
+export type { ToolVersionInfo } from './useVersionCheck';
 export { useDependencyCheck } from './useDependencyCheck';
 

@@ -211,6 +211,7 @@ walgo doctor              # Diagnose environment issues
 
 - **GitHub Issues:** [Report bugs](https://github.com/selimozten/walgo/issues)
 - **GitHub Discussions:** [Ask questions](https://github.com/selimozten/walgo/discussions)
+- **Feedback Form:** [Submit feedback](https://tally.so/r/447YBO)
 
 ### External Resources
 

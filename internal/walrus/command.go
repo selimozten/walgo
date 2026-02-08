@@ -17,7 +17,6 @@ var (
 	execLookPath = deps.LookPath
 	execCommand  = exec.Command
 	verboseFlag  atomic.Bool // Thread-safe verbose mode flag
-	runPreflight = true
 	osStat       = os.Stat
 )
 

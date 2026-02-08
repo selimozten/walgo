@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import { useState, useEffect } from 'react';
 import { AnimatePresence, motion } from 'framer-motion';
 import {
   LayoutGrid,
@@ -7,7 +7,10 @@ import {
   Database,
   Sparkles,
   Activity,
+  MessageSquare,
+  LucideIcon,
 } from 'lucide-react';
+import { BrowserOpenURL } from '../wailsjs/runtime/runtime';
 import {
   Dashboard,
   AIConfig,
@@ -46,7 +49,7 @@ const NavItem = ({
   badge,
 }: {
   id: string;
-  icon: any;
+  icon: LucideIcon;
   label: string;
   activeTab: string;
   setActiveTab: (tab: string) => void;
@@ -83,8 +86,6 @@ function App() {
     type: 'success' | 'error' | 'info';
     message: string;
   } | null>(null);
-
-  // Modal state (for wallet operations only)
 
   // Processing state
   const [isProcessing, setIsProcessing] = useState(false);
@@ -132,7 +133,7 @@ function App() {
     try {
       const freshProjects = await ListProjects();
       const newProject = freshProjects?.find(
-        (p: any) => p.sitePath === createdSitePath || p.path === createdSitePath
+        (p) => p.sitePath === createdSitePath
       );
 
       if (newProject) {
@@ -158,13 +159,35 @@ function App() {
   };
 
 
+  // Network handler
+  const handleSwitchNetwork = async (network: string) => {
+    setIsProcessing(true);
+    try {
+      const result = await SwitchNetwork(network);
+      if (result.success) {
+        reloadWallet();
+        handleStatusChange({
+          type: 'success',
+          message: 'Network switched',
+        });
+      } else {
+        handleStatusChange({
+          type: 'error',
+          message: 'Network switch failed',
+        });
+      }
+    } finally {
+      setIsProcessing(false);
+    }
+  };
+
   // Wallet handlers
   const handleSwitchAccount = async (address: string) => {
     setIsProcessing(true);
     try {
       const result = await switchAddressHook(address);
       if (result.success) {
-        await reloadWallet();
+        reloadWallet();
         handleStatusChange({
           type: 'success',
           message: 'Account switched',
@@ -191,7 +214,7 @@ function App() {
       if (result.address) {
         const switchResult = await switchAddressHook(result.address);
         if (switchResult.success) {
-          await reloadWallet();
+          reloadWallet();
         }
       }
       handleStatusChange({
@@ -224,7 +247,7 @@ function App() {
       if (result.address) {
         const switchResult = await switchAddressHook(result.address);
         if (switchResult.success) {
-          await reloadWallet();
+          reloadWallet();
         }
       }
       handleStatusChange({
@@ -253,26 +276,7 @@ function App() {
             systemHealth={health}
             onNavigate={handleNavigate}
             onRefreshHealth={reloadHealth}
-            onSwitchNetwork={async (network) => {
-              setIsProcessing(true);
-              try {
-                const result = await SwitchNetwork(network);
-                if (result.success) {
-                  await reloadWallet();
-                  handleStatusChange({
-                    type: 'success',
-                    message: 'Network switched',
-                  });
-                } else {
-                  handleStatusChange({
-                    type: 'error',
-                    message: 'Network switch failed',
-                  });
-                }
-              } finally {
-                setIsProcessing(false);
-              }
-            }}
+            onSwitchNetwork={handleSwitchNetwork}
             onSwitchAccount={handleSwitchAccount}
             onCreateAccount={handleCreateAccount}
             onImportAccount={handleImportAccount}
@@ -344,10 +348,7 @@ function App() {
       case 'import':
         return (
           <Import
-            onSuccess={async () => {
-              await reloadProjects();
-              handleNavigate('edit');
-            }}
+            onSuccess={handleProjectCreated}
             onStatusChange={handleStatusChange}
           />
         );
@@ -399,27 +400,10 @@ function App() {
             walletInfo={walletInfo}
             addressList={addressList}
             aiConfigured={aiConfigured}
+            systemHealth={health}
             onNavigate={handleNavigate}
-            onSwitchNetwork={async (network) => {
-              setIsProcessing(true);
-              try {
-                const result = await SwitchNetwork(network);
-                if (result.success) {
-                  await reloadWallet();
-                  handleStatusChange({
-                    type: 'success',
-                    message: 'Network switched',
-                  });
-                } else {
-                  handleStatusChange({
-                    type: 'error',
-                    message: 'Network switch failed',
-                  });
-                }
-              } finally {
-                setIsProcessing(false);
-              }
-            }}
+            onRefreshHealth={reloadHealth}
+            onSwitchNetwork={handleSwitchNetwork}
             onSwitchAccount={handleSwitchAccount}
             onCreateAccount={handleCreateAccount}
             onImportAccount={handleImportAccount}
@@ -527,8 +511,18 @@ function App() {
           />
         </div>
 
-        {/* Version Info - Bottom of Sidebar */}
-        <div className="px-4 py-3 border-t border-white/10 bg-black/20">
+        {/* Version & Feedback - Bottom of Sidebar */}
+        <div className="px-4 py-3 border-t border-white/10 bg-black/20 space-y-3">
+          {/* Feedback Button */}
+          <button
+            onClick={() => BrowserOpenURL('https://tally.so/r/447YBO')}
+            className="w-full flex items-center justify-center gap-2 px-3 py-2 bg-gradient-to-r from-accent/20 to-blue-500/20 hover:from-accent/30 hover:to-blue-500/30 border border-accent/30 hover:border-accent/50 rounded-lg transition-all duration-200 group wails-nodrag"
+          >
+            <MessageSquare size={14} className="text-accent group-hover:scale-110 transition-transform" />
+            <span className="text-xs font-medium text-accent">Feedback</span>
+          </button>
+
+          {/* Version */}
           <div className="text-center">
             <div className="text-[10px] font-mono text-zinc-600 uppercase tracking-wider mb-1">
               Version

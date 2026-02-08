@@ -114,11 +114,10 @@ func TestUpdateCommandExecution(t *testing.T) {
 		defer func() { _ = os.Chdir(originalWd) }()
 
 		// Execute update without config
-		output, err := executeCommand(rootCmd, "update")
+		_, err := executeCommand(rootCmd, "update")
 		if err == nil {
-			t.Log("Expected error when no config file exists")
+			t.Error("Expected error when no config file exists")
 		}
-		_ = output
 	})
 
 	t.Run("Update without public directory", func(t *testing.T) {
@@ -132,7 +131,7 @@ func TestUpdateCommandExecution(t *testing.T) {
 		// Create config but no public directory
 		configContent := `
 walrus:
-  projectId: "0x1234567890"
+  projectID: "0x1234567890"
   network: testnet
 hugo:
   publishDir: public
@@ -142,11 +141,10 @@ hugo:
 		}
 
 		// Execute update
-		output, err := executeCommand(rootCmd, "update")
+		_, err := executeCommand(rootCmd, "update")
 		if err == nil {
-			t.Log("Expected error when public directory doesn't exist")
+			t.Error("Expected error when public directory doesn't exist")
 		}
-		_ = output
 	})
 
 	t.Run("Update without object ID", func(t *testing.T) {
@@ -178,11 +176,10 @@ hugo:
 		}
 
 		// Execute update without object ID
-		output, err := executeCommand(rootCmd, "update")
+		_, err := executeCommand(rootCmd, "update")
 		if err == nil {
-			t.Log("Expected error when no object ID exists")
+			t.Error("Expected error when no object ID exists")
 		}
-		_ = output
 	})
 
 	t.Run("Update with dry-run flag", func(t *testing.T) {
@@ -196,7 +193,7 @@ hugo:
 		// Create config with project ID
 		configContent := `
 walrus:
-  projectId: "0x1234567890abcdef"
+  projectID: "0x1234567890abcdef"
   network: testnet
 hugo:
   publishDir: public
@@ -263,7 +260,7 @@ hugo:
 		// Create config
 		configContent := `
 walrus:
-  projectId: "0x1234567890abcdef"
+  projectID: "0x1234567890abcdef"
   network: testnet
 hugo:
   publishDir: public

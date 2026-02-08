@@ -15,6 +15,7 @@ import (
 	"github.com/selimozten/walgo/internal/ai"
 	"github.com/selimozten/walgo/internal/compress"
 	"github.com/selimozten/walgo/internal/config"
+	"github.com/selimozten/walgo/internal/deployer"
 	sb "github.com/selimozten/walgo/internal/deployer/sitebuilder"
 	"github.com/selimozten/walgo/internal/deployment"
 	"github.com/selimozten/walgo/internal/deps"
@@ -22,9 +23,9 @@ import (
 	"github.com/selimozten/walgo/internal/obsidian"
 	"github.com/selimozten/walgo/internal/projects"
 	"github.com/selimozten/walgo/internal/sui"
-	"github.com/selimozten/walgo/internal/ui"
 	"github.com/selimozten/walgo/internal/utils"
 	"github.com/selimozten/walgo/internal/version"
+	"github.com/selimozten/walgo/internal/walrus"
 	"github.com/spf13/viper"
 )
 
@@ -65,8 +66,19 @@ func GetDefaultSitesDir() (string, error) {
 	return sitesDir, nil
 }
 
-// saveDraftProject saves a newly created site as a draft project
-// This allows users to manage and deploy the site later
+// safeCleanupDir removes a directory safely by resolving symlinks and verifying
+// the resolved path stays under the expected parent directory.
+func safeCleanupDir(sitePath, parentDir string) {
+	realPath, err := filepath.EvalSymlinks(sitePath)
+	if err != nil {
+		return // Can't resolve path, skip cleanup to be safe
+	}
+	if !strings.HasPrefix(realPath, parentDir+string(os.PathSeparator)) {
+		return // Path escaped parent directory, skip cleanup
+	}
+	os.RemoveAll(realPath)
+}
+
 func saveDraftProject(siteName, sitePath string) error {
 	manager, err := projects.NewManager()
 	if err != nil {
@@ -316,8 +328,7 @@ func InitSite(parentDir string, siteName string) InitSiteResult {
 	success := false
 	defer func() {
 		if !success && !dirExistedBefore {
-			// Clean up the directory if we created it and operation failed
-			os.RemoveAll(sitePath)
+			safeCleanupDir(sitePath, parentDir)
 		}
 	}()
 
@@ -378,6 +389,79 @@ func BuildSite(sitePath string) error {
 	}
 
 	return nil
+}
+
+// InstallThemeParams holds parameters for installing a theme
+type InstallThemeParams struct {
+	SitePath  string `json:"sitePath"`
+	GithubURL string `json:"githubUrl"`
+}
+
+// InstallThemeResult holds the result of theme installation
+type InstallThemeResult struct {
+	Success       bool     `json:"success"`
+	ThemeName     string   `json:"themeName"`
+	RemovedThemes []string `json:"removedThemes,omitempty"`
+	Error         string   `json:"error,omitempty"`
+}
+
+// InstallTheme installs a Hugo theme from a GitHub URL
+// If themes already exist, they are removed first
+func InstallTheme(params InstallThemeParams) InstallThemeResult {
+	result := InstallThemeResult{}
+
+	sitePath := params.SitePath
+	if sitePath == "" {
+		result.Error = "site path is required"
+		return result
+	}
+
+	if params.GithubURL == "" {
+		result.Error = "github URL is required"
+		return result
+	}
+
+	// Get existing themes before removal
+	existingThemes, _ := hugo.GetInstalledThemes(sitePath)
+	result.RemovedThemes = existingThemes
+
+	// Install theme
+	themeName, err := hugo.InstallThemeFromURL(sitePath, params.GithubURL)
+	if err != nil {
+		result.Error = err.Error()
+		return result
+	}
+
+	result.Success = true
+	result.ThemeName = themeName
+	return result
+}
+
+// GetInstalledThemesResult holds the list of installed themes
+type GetInstalledThemesResult struct {
+	Success bool     `json:"success"`
+	Themes  []string `json:"themes"`
+	Error   string   `json:"error,omitempty"`
+}
+
+// GetInstalledThemes returns the list of installed themes
+func GetInstalledThemes(sitePath string) GetInstalledThemesResult {
+	result := GetInstalledThemesResult{}
+
+	if sitePath == "" {
+		result.Error = "site path is required"
+		return result
+	}
+
+	themes, err := hugo.GetInstalledThemes(sitePath)
+	if err != nil {
+		result.Error = err.Error()
+		return result
+	}
+
+	result.Success = true
+	result.Themes = themes
+	return result
 }
 
 // NewContentParams holds parameters for creating new content
@@ -454,11 +538,12 @@ func NewContent(params NewContentParams) NewContentResult {
 	}
 }
 
+var validSlugRe = regexp.MustCompile(`^[a-zA-Z0-9_-]+$`)
+
 // isValidSlug validates slug format
 func isValidSlug(slug string) bool {
 	slug = strings.TrimSuffix(slug, ".md")
-	validSlug := regexp.MustCompile(`^[a-zA-Z0-9_-]+$`)
-	return validSlug.MatchString(slug) && len(slug) > 0 && len(slug) < 100
+	return validSlugRe.MatchString(slug) && len(slug) > 0 && len(slug) < 100
 }
 
 // =============================================================================
@@ -475,7 +560,7 @@ type VersionResult struct {
 // GetVersion returns current version information
 func GetVersion() VersionResult {
 	return VersionResult{
-		Version:   "0.3.3",
+		Version:   "0.3.4",
 		GitCommit: "dev",
 		BuildDate: "unknown",
 	}
@@ -509,7 +594,10 @@ func CheckUpdates() CheckUpdatesResult {
 		return result
 	}
 
-	body, _ := io.ReadAll(resp.Body)
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return result
+	}
 
 	var release struct {
 		TagName string `json:"tag_name"`
@@ -550,17 +638,26 @@ func checkNetworkConnectivity() bool {
 		Timeout: 3 * time.Second, // Short timeout to avoid blocking
 	}
 
-	// Try each endpoint, return true on first success
+	// Check endpoints in parallel; return true on first success
+	type result struct{ ok bool }
+	ch := make(chan result, len(endpoints))
 	for _, endpoint := range endpoints {
-		resp, err := client.Get(endpoint)
-		if err == nil {
-			resp.Body.Close()
-			if resp.StatusCode >= 200 && resp.StatusCode < 500 {
-				return true
+		go func(url string) {
+			resp, err := client.Get(url)
+			if err == nil {
+				resp.Body.Close()
+				ch <- result{ok: resp.StatusCode >= 200 && resp.StatusCode < 500}
+				return
 			}
-		}
+			ch <- result{ok: false}
+		}(endpoint)
 	}
 
+	for range endpoints {
+		if r := <-ch; r.ok {
+			return true
+		}
+	}
 	return false
 }
 
@@ -572,7 +669,8 @@ func checkNetworkConnectivity() bool {
 type QuickStartParams struct {
 	ParentDir string `json:"parentDir,omitempty"`
 	SiteName  string `json:"siteName"`
-	Name      string `json:"name,omitempty"` // Alias for SiteName (frontend compatibility)
+	Name      string `json:"name,omitempty"`     // Alias for SiteName (frontend compatibility)
+	SiteType  string `json:"siteType,omitempty"` // "biolink", "blog", "docs", "whitepaper" (default: "biolink")
 	SkipBuild bool   `json:"skipBuild"`
 }
 
@@ -585,10 +683,21 @@ type QuickStartResult struct {
 
 // QuickStart creates a new Hugo site with quickstart flow
 func QuickStart(params QuickStartParams) QuickStartResult {
+	// Check Hugo dependency first
+	if _, err := deps.LookPath("hugo"); err != nil {
+		return QuickStartResult{Error: "hugo is not installed or not found in PATH"}
+	}
+
 	siteName := params.SiteName
 	if siteName == "" {
 		siteName = params.Name // Use Name as fallback
 	}
+
+	// Validate site name before proceeding
+	if !utils.IsValidSiteName(siteName) {
+		return QuickStartResult{Error: "invalid site name: use only letters, numbers, hyphens and underscores"}
+	}
+
 	parentDir := params.ParentDir
 	if parentDir == "" {
 		// Use default walgo-sites directory in home
@@ -604,6 +713,17 @@ func QuickStart(params QuickStartParams) QuickStartResult {
 	sanitizedDirName := utils.SanitizeSiteName(siteName)
 	if sanitizedDirName != originalSiteName {
 		fmt.Printf("Directory name sanitized: '%s' -> '%s'\n", originalSiteName, sanitizedDirName)
+	}
+
+	// Map site type string to hugo.SiteType
+	siteType := hugo.SiteTypeBiolink
+	switch params.SiteType {
+	case "blog":
+		siteType = hugo.SiteTypeBlog
+	case "docs":
+		siteType = hugo.SiteTypeDocs
+	case "whitepaper":
+		siteType = hugo.SiteTypeWhitepaper
 	}
 
 	// Create site directory using sanitized name
@@ -626,8 +746,7 @@ func QuickStart(params QuickStartParams) QuickStartResult {
 	success := false
 	defer func() {
 		if !success && !dirExistedBefore {
-			// Clean up the directory if we created it and operation failed
-			os.RemoveAll(sitePath)
+			safeCleanupDir(sitePath, parentDir)
 		}
 	}()
 
@@ -642,119 +761,113 @@ func QuickStart(params QuickStartParams) QuickStartResult {
 	}
 
 	// Setup site - use ORIGINAL name for Hugo config
-	siteType := hugo.SiteTypeBlog
-	if err := hugo.SetupSiteConfigWithName(sitePath, siteType, originalSiteName); err != nil {
-		return QuickStartResult{Error: fmt.Sprintf("failed to set up config: %v", err)}
+	themeInfo := hugo.GetThemeInfo(siteType)
+
+	if siteType == hugo.SiteTypeBlog {
+		// Blog: use our embedded TOML template + archetypes
+		if err := hugo.SetupSiteConfigWithName(sitePath, siteType, originalSiteName); err != nil {
+			return QuickStartResult{Error: fmt.Sprintf("failed to set up config: %v", err)}
+		}
+
+		if err := hugo.SetupArchetypes(sitePath, themeInfo.DirName); err != nil {
+			return QuickStartResult{Error: fmt.Sprintf("failed to set up archetypes: %v", err)}
+		}
 	}
 
-	if err := hugo.SetupArchetypes(sitePath); err != nil {
-		return QuickStartResult{Error: fmt.Sprintf("failed to set up archetypes: %v", err)}
-	}
-
-	if err := hugo.SetupFavicon(sitePath); err != nil {
+	// Setup favicon (theme-aware placement)
+	if err := hugo.SetupFaviconForTheme(sitePath, themeInfo.DirName); err != nil {
 		return QuickStartResult{Error: fmt.Sprintf("failed to set up favicon: %v", err)}
 	}
 
 	// Install theme
-	_ = hugo.GetThemeInfo(siteType)
 	if err := hugo.InstallTheme(sitePath, siteType); err != nil {
 		return QuickStartResult{Error: fmt.Sprintf("failed to install theme: %v", err)}
 	}
 
+	// Docs theme overrides
+	if siteType == hugo.SiteTypeDocs {
+		if err := hugo.SetupDocsThemeOverrides(sitePath); err != nil {
+			fmt.Printf("Warning: Could not set up docs theme overrides: %v\n", err)
+		}
+	}
+
 	// Create sample content
-	contentDir := filepath.Join(sitePath, "content")
-	if err := os.MkdirAll(contentDir, 0755); err != nil {
-		return QuickStartResult{Error: fmt.Sprintf("failed to create content directory: %v", err)}
+	switch siteType {
+	case hugo.SiteTypeBlog:
+		// Blog: use inline quickstart content
+		contentDir := filepath.Join(sitePath, "content")
+		if err := os.MkdirAll(contentDir, 0755); err != nil {
+			return QuickStartResult{Error: fmt.Sprintf("failed to create content directory: %v", err)}
+		}
+
+		indexPath := filepath.Join(contentDir, "_index.md")
+		indexContent := "---\ntitle: \"" + originalSiteName + "\"\ndate: 2024-01-01T00:00:00Z\ndraft: false\n---\n\n" +
+			"# Welcome to " + originalSiteName + "\n\n" +
+			"Your decentralized website powered by **Walrus** - the cutting-edge decentralized storage network built on the Sui blockchain.\n\n" +
+			"## What is Walrus?\n\n" +
+			"Walrus is a decentralized storage and data availability protocol designed for large binary files (blobs). Built on Sui, it provides:\n\n" +
+			"- **Censorship Resistance**: Your content cannot be taken down or restricted\n" +
+			"- **High Availability**: Data is distributed across multiple storage nodes\n" +
+			"- **Cost Effective**: Optimized storage with efficient encoding\n" +
+			"- **Fast Access**: Quick retrieval through CDN-like distribution\n\n" +
+			"## About This Site\n\n" +
+			"This site is hosted entirely on the Walrus network, making it:\n\n" +
+			"\u2713 **Permanent** - Once published, it's always accessible\n" +
+			"\u2713 **Distributed** - No single point of failure\n" +
+			"\u2713 **Verifiable** - All content is cryptographically verified\n" +
+			"\u2713 **Fast** - Delivered through a global network\n\n" +
+			"## Getting Started\n\n" +
+			"### Edit Your Content\n\n" +
+			"Your site uses Hugo, a fast static site generator. All content is in Markdown format:\n\n" +
+			"- Edit this page: `content/_index.md`\n" +
+			"- Add new pages to the `content/` directory\n" +
+			"- Organize with subdirectories for complex sites\n\n" +
+			"### Preview Locally\n\n" +
+			"Test your changes before deploying:\n\n" +
+			"```bash\nwalgo serve\n```\n\n" +
+			"This starts a local server at `http://localhost:1313`\n\n" +
+			"### Deploy to Walrus\n\n" +
+			"When you're ready to publish:\n\n" +
+			"```bash\nwalgo launch\n```\n\n" +
+			"Follow the interactive wizard to:\n" +
+			"1. Configure your deployment\n" +
+			"2. Select network (testnet/mainnet)\n" +
+			"3. Set storage epochs\n" +
+			"4. Publish to Walrus\n\n" +
+			"## Next Steps\n\n" +
+			"1. **Customize Your Theme**: Edit `hugo.toml` to change colors, fonts, and layout\n" +
+			"2. **Add More Content**: Create new pages and blog posts\n" +
+			"3. **Explore Hugo**: Learn more at [gohugo.io](https://gohugo.io)\n" +
+			"4. **Join the Community**: Connect with other Walrus builders\n\n" +
+			"## Resources\n\n" +
+			"- **Walrus Documentation**: [docs.walrus.site](https://docs.walrus.site)\n" +
+			"- **Walgo CLI**: [github.com/selimozten/walgo](https://github.com/selimozten/walgo)\n" +
+			"- **Hugo Docs**: [gohugo.io/documentation](https://gohugo.io/documentation)\n" +
+			"- **Sui Network**: [sui.io](https://sui.io)\n\n" +
+			"---\n\n" +
+			"**Ready to build the decentralized web?** Start editing this file and make it your own!\n"
+		if err := os.WriteFile(indexPath, []byte(indexContent), 0644); err != nil {
+			return QuickStartResult{Error: fmt.Sprintf("failed to create homepage: %v", err)}
+		}
+
+	default:
+		// Docs, Biolink, Whitepaper: use exampleSite directly (including config)
+		if err := hugo.CopyExampleSiteWithConfig(sitePath, siteType, originalSiteName); err != nil {
+			fmt.Printf("Warning: Could not copy example site: %v\n", err)
+			// Create a minimal homepage as fallback
+			contentDir := filepath.Join(sitePath, "content")
+			if mkErr := os.MkdirAll(contentDir, 0755); mkErr == nil {
+				indexPath := filepath.Join(contentDir, "_index.md")
+				fallbackContent := "---\ntitle: \"" + originalSiteName + "\"\ndraft: false\n---\n\n# " + originalSiteName + "\n"
+				_ = os.WriteFile(indexPath, []byte(fallbackContent), 0644) // Best-effort fallback
+			}
+		}
 	}
 
-	// Create detailed homepage
-	indexPath := filepath.Join(contentDir, "_index.md")
-	indexContent := `---
-title: "` + originalSiteName + `"
-date: 2024-01-01T00:00:00Z
-draft: false
----
-
-# Welcome to ` + originalSiteName + `
-
-Your decentralized website powered by **Walrus** - the cutting-edge decentralized storage network built on the Sui blockchain.
-
-## What is Walrus?
-
-Walrus is a decentralized storage and data availability protocol designed for large binary files (blobs). Built on Sui, it provides:
-
-- **Censorship Resistance**: Your content cannot be taken down or restricted
-- **High Availability**: Data is distributed across multiple storage nodes
-- **Cost Effective**: Optimized storage with efficient encoding
-- **Fast Access**: Quick retrieval through CDN-like distribution
-
-## About This Site
-
-This site is hosted entirely on the Walrus network, making it:
-
-✓ **Permanent** - Once published, it's always accessible
-✓ **Distributed** - No single point of failure
-✓ **Verifiable** - All content is cryptographically verified
-✓ **Fast** - Delivered through a global network
-
-## Getting Started
-
-### Edit Your Content
-
-Your site uses Hugo, a fast static site generator. All content is in Markdown format:
-
-- Edit this page: ` + "`content/_index.md`" + `
-- Add new pages to the ` + "`content/`" + ` directory
-- Organize with subdirectories for complex sites
-
-### Preview Locally
-
-Test your changes before deploying:
-
-` + "```bash" + `
-walgo serve
-` + "```" + `
-
-This starts a local server at ` + "`http://localhost:1313`" + `
-
-### Deploy to Walrus
-
-When you're ready to publish:
-
-` + "```bash" + `
-walgo launch
-` + "```" + `
-
-Follow the interactive wizard to:
-1. Configure your deployment
-2. Select network (testnet/mainnet)
-3. Set storage epochs
-4. Publish to Walrus
-
-## Next Steps
-
-1. **Customize Your Theme**: Edit ` + "`hugo.toml`" + ` to change colors, fonts, and layout
-2. **Add More Content**: Create new pages and blog posts
-3. **Explore Hugo**: Learn more at [gohugo.io](https://gohugo.io)
-4. **Join the Community**: Connect with other Walrus builders
-
-## Resources
-
-- **Walrus Documentation**: [docs.walrus.site](https://docs.walrus.site)
-- **Walgo CLI**: [github.com/selimozten/walgo](https://github.com/selimozten/walgo)
-- **Hugo Docs**: [gohugo.io/documentation](https://gohugo.io/documentation)
-- **Sui Network**: [sui.io](https://sui.io)
-
----
-
-**Ready to build the decentralized web?** Start editing this file and make it your own! 🚀
-`
-	if err := os.WriteFile(indexPath, []byte(indexContent), 0644); err != nil {
-		return QuickStartResult{Error: fmt.Sprintf("failed to create homepage: %v", err)}
-	}
-
-	if err := BuildSite(sitePath); err != nil {
-		return QuickStartResult{Error: fmt.Sprintf("failed to build site: %v", err)}
+	if !params.SkipBuild {
+		if err := BuildSite(sitePath); err != nil {
+			return QuickStartResult{Error: fmt.Sprintf("failed to build site: %v", err)}
+		}
 	}
 
 	// Save as draft project for later deployment - use ORIGINAL name
@@ -816,23 +929,30 @@ func Serve(params ServeParams) ServeResult {
 
 // Project represents a Walrus site project
 type Project struct {
-	ID           int64              `json:"id"`
-	Name         string             `json:"name"`
-	Description  string             `json:"description"`
-	Category     string             `json:"category"`
-	ObjectID     string             `json:"objectId"`
-	Network      string             `json:"network"`
-	WalletAddr   string             `json:"wallet"`
-	SitePath     string             `json:"sitePath"`
-	ImageURL     string             `json:"imageUrl"`
-	SuiNS        string             `json:"suins"`
-	CreatedAt    string             `json:"createdAt"`
-	UpdatedAt    string             `json:"updatedAt"`
-	LastDeployAt string             `json:"lastDeployAt"`
-	Epochs       int                `json:"epochs"`
-	Status       string             `json:"status"`
-	DeployCount  int                `json:"deployCount"`
-	Deployments  []DeploymentRecord `json:"deployments,omitempty"`
+	ID            int64              `json:"id"`
+	Name          string             `json:"name"`
+	Description   string             `json:"description"`
+	Category      string             `json:"category"`
+	ObjectID      string             `json:"objectId"`
+	Network       string             `json:"network"`
+	WalletAddr    string             `json:"wallet"`
+	SitePath      string             `json:"sitePath"`
+	ImageURL      string             `json:"imageUrl"`
+	SuiNS         string             `json:"suins"`
+	CreatedAt     string             `json:"createdAt"`
+	UpdatedAt     string             `json:"updatedAt"`
+	LastDeployAt  string             `json:"lastDeployAt"`
+	FirstDeployAt string             `json:"firstDeployAt,omitempty"`
+	Epochs        int                `json:"epochs"`
+	TotalEpochs   int                `json:"totalEpochs,omitempty"`
+	GasFee        string             `json:"gasFee,omitempty"`
+	ExpiresAt     string             `json:"expiresAt,omitempty"`
+	ExpiresIn     string             `json:"expiresIn,omitempty"`
+	Status        string             `json:"status"`
+	DeployCount   int                `json:"deployCount"`
+	Size          int64              `json:"size,omitempty"`
+	FileCount     int                `json:"fileCount,omitempty"`
+	Deployments   []DeploymentRecord `json:"deployments,omitempty"`
 	// Tool status for deployment
 	SuiReady    bool `json:"suiReady,omitempty"`
 	WalrusReady bool `json:"walrusReady,omitempty"`
@@ -868,32 +988,62 @@ func ListProjects() ([]Project, error) {
 		return nil, fmt.Errorf("failed to list projects: %w", err)
 	}
 
+	// Check tool status once (outside loop for performance)
+	suiReady, _ := deps.LookPath("sui")
+	walrusReady, _ := deps.LookPath("walrus")
+	siteBuilder, _ := deps.LookPath("site-builder")
+	hugoReady, _ := deps.LookPath("hugo")
+
 	// Convert to API Project type
 	result := make([]Project, len(projs))
 	for i, p := range projs {
-		// Check tool status
-		suiReady, _ := deps.LookPath("sui")
-		walrusReady, _ := deps.LookPath("walrus")
-		siteBuilder, _ := deps.LookPath("site-builder")
-		hugoReady, _ := deps.LookPath("hugo")
+		// Get epoch info for accurate expiry calculation
+		var totalEpochs int
+		var firstDeployAt string
+		var expiresAt string
+		var expiresIn string
+
+		epochInfo, err := pm.GetEpochInfo(p.ID)
+		if err == nil && epochInfo != nil && epochInfo.TotalEpochs > 0 {
+			totalEpochs = epochInfo.TotalEpochs
+			if !epochInfo.FirstDeploymentAt.IsZero() {
+				firstDeployAt = epochInfo.FirstDeploymentAt.Format(time.RFC3339)
+				// Calculate expiry date
+				expiryDate := calculateExpiryDate(epochInfo.FirstDeploymentAt, epochInfo.TotalEpochs, p.Network)
+				expiresAt = expiryDate.Format(time.RFC3339)
+				expiresIn = formatExpiryDuration(expiryDate)
+			}
+		} else if p.Epochs > 0 && !p.LastDeployAt.IsZero() {
+			// Fallback to project epochs if epoch info not available
+			totalEpochs = p.Epochs
+			firstDeployAt = p.LastDeployAt.Format(time.RFC3339)
+			expiryDate := calculateExpiryDate(p.LastDeployAt, p.Epochs, p.Network)
+			expiresAt = expiryDate.Format(time.RFC3339)
+			expiresIn = formatExpiryDuration(expiryDate)
+		}
 
 		result[i] = Project{
-			ID:           p.ID,
-			Name:         p.Name,
-			Description:  p.Description,
-			Category:     p.Category,
-			ObjectID:     p.ObjectID,
-			Network:      p.Network,
-			WalletAddr:   p.WalletAddr,
-			SitePath:     p.SitePath,
-			ImageURL:     p.ImageURL,
-			SuiNS:        p.SuiNS,
-			CreatedAt:    p.CreatedAt.Format(time.RFC3339),
-			UpdatedAt:    p.UpdatedAt.Format(time.RFC3339),
-			LastDeployAt: p.LastDeployAt.Format(time.RFC3339),
-			Epochs:       p.Epochs,
-			Status:       p.Status,
-			DeployCount:  p.DeployCount,
+			ID:            p.ID,
+			Name:          p.Name,
+			Description:   p.Description,
+			Category:      p.Category,
+			ObjectID:      p.ObjectID,
+			Network:       p.Network,
+			WalletAddr:    p.WalletAddr,
+			SitePath:      p.SitePath,
+			ImageURL:      p.ImageURL,
+			SuiNS:         p.SuiNS,
+			CreatedAt:     p.CreatedAt.Format(time.RFC3339),
+			UpdatedAt:     p.UpdatedAt.Format(time.RFC3339),
+			LastDeployAt:  p.LastDeployAt.Format(time.RFC3339),
+			FirstDeployAt: firstDeployAt,
+			Epochs:        p.Epochs,
+			TotalEpochs:   totalEpochs,
+			GasFee:        p.GasFee,
+			ExpiresAt:     expiresAt,
+			ExpiresIn:     expiresIn,
+			Status:        p.Status,
+			DeployCount:   p.DeployCount,
 			// Tool status
 			SuiReady:    suiReady != "",
 			WalrusReady: walrusReady != "",
@@ -946,25 +1096,298 @@ func GetProject(projectID int64) (*Project, error) {
 		})
 	}
 
+	// Get epoch info for accurate expiry calculation
+	var totalEpochs int
+	var firstDeployAt string
+	var expiresAt string
+	var expiresIn string
+
+	epochInfo, err := pm.GetEpochInfo(projectID)
+	if err == nil && epochInfo != nil && epochInfo.TotalEpochs > 0 {
+		totalEpochs = epochInfo.TotalEpochs
+		if !epochInfo.FirstDeploymentAt.IsZero() {
+			firstDeployAt = epochInfo.FirstDeploymentAt.Format(time.RFC3339)
+			// Calculate expiry date
+			expiryDate := calculateExpiryDate(epochInfo.FirstDeploymentAt, epochInfo.TotalEpochs, proj.Network)
+			expiresAt = expiryDate.Format(time.RFC3339)
+			expiresIn = formatExpiryDuration(expiryDate)
+		}
+	} else if proj.Epochs > 0 && !proj.LastDeployAt.IsZero() {
+		// Fallback to project epochs if epoch info not available
+		totalEpochs = proj.Epochs
+		firstDeployAt = proj.LastDeployAt.Format(time.RFC3339)
+		expiryDate := calculateExpiryDate(proj.LastDeployAt, proj.Epochs, proj.Network)
+		expiresAt = expiryDate.Format(time.RFC3339)
+		expiresIn = formatExpiryDuration(expiryDate)
+	}
+
+	// Calculate site size and file count from public directory
+	var siteSize int64
+	var fileCount int
+	publicDir := filepath.Join(proj.SitePath, "public")
+	if _, err := os.Stat(publicDir); err == nil {
+		_ = filepath.Walk(publicDir, func(path string, info os.FileInfo, walkErr error) error {
+			if walkErr != nil || info.IsDir() {
+				return nil
+			}
+			siteSize += info.Size()
+			fileCount++
+			return nil
+		})
+	}
+
 	return &Project{
-		ID:           proj.ID,
-		Name:         proj.Name,
-		Description:  proj.Description,
-		Category:     proj.Category,
-		ObjectID:     proj.ObjectID,
-		Network:      proj.Network,
-		WalletAddr:   proj.WalletAddr,
-		SitePath:     proj.SitePath,
-		ImageURL:     proj.ImageURL,
-		SuiNS:        proj.SuiNS,
-		CreatedAt:    proj.CreatedAt.Format(time.RFC3339),
-		UpdatedAt:    proj.UpdatedAt.Format(time.RFC3339),
-		LastDeployAt: proj.LastDeployAt.Format(time.RFC3339),
-		Epochs:       proj.Epochs,
-		Status:       proj.Status,
-		DeployCount:  proj.DeployCount,
-		Deployments:  deployments,
+		ID:            proj.ID,
+		Name:          proj.Name,
+		Description:   proj.Description,
+		Category:      proj.Category,
+		ObjectID:      proj.ObjectID,
+		Network:       proj.Network,
+		WalletAddr:    proj.WalletAddr,
+		SitePath:      proj.SitePath,
+		ImageURL:      proj.ImageURL,
+		SuiNS:         proj.SuiNS,
+		CreatedAt:     proj.CreatedAt.Format(time.RFC3339),
+		UpdatedAt:     proj.UpdatedAt.Format(time.RFC3339),
+		LastDeployAt:  proj.LastDeployAt.Format(time.RFC3339),
+		FirstDeployAt: firstDeployAt,
+		Epochs:        proj.Epochs,
+		TotalEpochs:   totalEpochs,
+		GasFee:        proj.GasFee,
+		ExpiresAt:     expiresAt,
+		ExpiresIn:     expiresIn,
+		Status:        proj.Status,
+		DeployCount:   proj.DeployCount,
+		Size:          siteSize,
+		FileCount:     fileCount,
+		Deployments:   deployments,
 	}, nil
+}
+
+// Epoch durations per network (approximate).
+const (
+	MainnetDaysPerEpoch = 14 // ~2 weeks per epoch on mainnet
+	TestnetDaysPerEpoch = 1  // ~1 day per epoch on testnet
+)
+
+// calculateExpiryDate calculates when the storage will expire based on first deployment
+func calculateExpiryDate(firstDeploy time.Time, epochs int, network string) time.Time {
+	var daysPerEpoch int
+	if network == "mainnet" {
+		daysPerEpoch = MainnetDaysPerEpoch
+	} else {
+		daysPerEpoch = TestnetDaysPerEpoch
+	}
+
+	totalDays := epochs * daysPerEpoch
+	return firstDeploy.Add(time.Duration(totalDays) * 24 * time.Hour)
+}
+
+// formatExpiryDuration formats the time until expiry in a human-readable format
+func formatExpiryDuration(expiryDate time.Time) string {
+	now := time.Now()
+	diff := expiryDate.Sub(now)
+
+	if diff < 0 {
+		return "Expired"
+	}
+
+	days := int(diff.Hours() / 24)
+	hours := int(diff.Hours()) % 24
+
+	if days == 0 {
+		if hours == 0 {
+			return "Expiring soon"
+		}
+		return fmt.Sprintf("%d hours", hours)
+	}
+
+	if days == 1 {
+		if hours > 0 {
+			return fmt.Sprintf("1 day, %d hours", hours)
+		}
+		return "1 day"
+	}
+
+	if days >= 7 {
+		weeks := days / 7
+		remainingDays := days % 7
+		if remainingDays > 0 {
+			return fmt.Sprintf("%d weeks, %d days", weeks, remainingDays)
+		}
+		return fmt.Sprintf("%d weeks", weeks)
+	}
+
+	return fmt.Sprintf("%d days", days)
+}
+
+// UpdateSiteParams holds update site parameters
+type UpdateSiteParams struct {
+	ProjectID int64 `json:"projectId"`
+	Epochs    int   `json:"epochs,omitempty"` // Optional, defaults to current epochs
+}
+
+// UpdateSiteResult holds update site result
+type UpdateSiteResult struct {
+	Success  bool     `json:"success"`
+	ObjectID string   `json:"objectId"`
+	GasFee   string   `json:"gasFee"`
+	Message  string   `json:"message"`
+	Error    string   `json:"error"`
+	Logs     []string `json:"logs,omitempty"`
+}
+
+// UpdateSite updates an existing project's site on Walrus (re-deploy)
+func UpdateSite(params UpdateSiteParams) UpdateSiteResult {
+	result := UpdateSiteResult{
+		Logs: []string{},
+	}
+
+	pm, err := projects.NewManager()
+	if err != nil {
+		result.Error = fmt.Sprintf("failed to create project manager: %v", err)
+		return result
+	}
+	defer pm.Close()
+
+	// Get project
+	proj, err := pm.GetProject(params.ProjectID)
+	if err != nil || proj == nil {
+		result.Error = "project not found"
+		return result
+	}
+
+	// Use provided epochs or fall back to current
+	epochs := params.Epochs
+	if epochs <= 0 {
+		epochs = proj.Epochs
+		if epochs <= 0 {
+			epochs = 1
+		}
+	}
+
+	result.Logs = append(result.Logs, fmt.Sprintf("🔄 Updating project: %s", proj.Name))
+	result.Logs = append(result.Logs, fmt.Sprintf("📡 Network: %s", proj.Network))
+	result.Logs = append(result.Logs, fmt.Sprintf("⏱  Epochs: %d", epochs))
+
+	// Load config
+	walgoCfg, err := config.LoadConfigFrom(proj.SitePath)
+	if err != nil {
+		result.Error = fmt.Sprintf("failed to load config: %v", err)
+		return result
+	}
+
+	// Build site first
+	result.Logs = append(result.Logs, "🔨 Building site...")
+	if err := hugo.BuildSite(proj.SitePath); err != nil {
+		result.Error = fmt.Sprintf("failed to build site: %v", err)
+		return result
+	}
+
+	publishDir := filepath.Join(proj.SitePath, walgoCfg.HugoConfig.PublishDir)
+	if _, err := os.Stat(publishDir); os.IsNotExist(err) {
+		result.Error = "publish directory not found"
+		return result
+	}
+
+	// Calculate site size for gas estimation
+	var siteSize int64
+	if walkErr := filepath.Walk(publishDir, func(path string, info os.FileInfo, err error) error {
+		if err != nil {
+			return nil // Skip files with errors, continue walking
+		}
+		if !info.IsDir() {
+			siteSize += info.Size()
+		}
+		return nil
+	}); walkErr != nil {
+		result.Error = fmt.Sprintf("failed to calculate site size: %v", walkErr)
+		return result
+	}
+
+	result.Logs = append(result.Logs, "🚀 Pushing changes to Walrus...")
+
+	// Perform update using site-builder
+	d := sb.New()
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Minute)
+	defer cancel()
+
+	output, err := d.Update(ctx, publishDir, proj.ObjectID, deployer.DeployOptions{
+		Epochs:    epochs,
+		Verbose:   true,
+		WalrusCfg: walgoCfg.WalrusConfig,
+	})
+
+	if err != nil {
+		// Record failed deployment
+		deployment := &projects.DeploymentRecord{
+			ProjectID: proj.ID,
+			ObjectID:  proj.ObjectID,
+			Network:   proj.Network,
+			Epochs:    epochs,
+			Success:   false,
+			Error:     err.Error(),
+		}
+		_ = pm.RecordDeployment(deployment)
+		result.Error = fmt.Sprintf("update failed: %v", err)
+		return result
+	}
+
+	if !output.Success {
+		result.Error = "update failed: operation unsuccessful"
+		return result
+	}
+
+	// Try to get actual gas from blockchain, fallback to estimate
+	var gasFee string
+	gasInfo, err := walrus.GetLatestTransactionGas(proj.WalletAddr, proj.Network)
+	if err == nil && gasInfo != nil {
+		if gasInfo.TotalWAL > 0 && gasInfo.TotalGasSUI > 0 {
+			gasFee = fmt.Sprintf("%.6f WAL + %.6f SUI", gasInfo.TotalWAL, gasInfo.TotalGasSUI)
+		} else if gasInfo.TotalWAL > 0 {
+			gasFee = fmt.Sprintf("%.6f WAL", gasInfo.TotalWAL)
+		} else if gasInfo.TotalGasSUI > 0 {
+			gasFee = fmt.Sprintf("%.6f SUI", gasInfo.TotalGasSUI)
+		}
+	}
+	if gasFee == "" {
+		gasFee = projects.EstimateGasFeeWithEpochs(proj.Network, siteSize, epochs)
+	}
+
+	// Update project
+	proj.Epochs = epochs
+	proj.LastDeployAt = time.Now()
+	proj.GasFee = gasFee
+
+	if err := pm.UpdateProject(proj); err != nil {
+		result.Error = fmt.Sprintf("failed to update project record: %v", err)
+		return result
+	}
+
+	// Record successful deployment
+	deployment := &projects.DeploymentRecord{
+		ProjectID: proj.ID,
+		ObjectID:  proj.ObjectID,
+		Network:   proj.Network,
+		Epochs:    epochs,
+		GasFee:    gasFee,
+		Success:   true,
+	}
+	if err := pm.RecordDeployment(deployment); err != nil {
+		result.Logs = append(result.Logs, fmt.Sprintf("⚠️  Warning: Failed to record deployment: %v", err))
+	}
+
+	result.Success = true
+	result.ObjectID = proj.ObjectID
+	result.GasFee = gasFee
+	result.Message = "Site updated successfully"
+	result.Logs = append(result.Logs, "✅ Update completed successfully!")
+	result.Logs = append(result.Logs, fmt.Sprintf("📦 Object ID: %s", proj.ObjectID))
+	if gasFee != "" {
+		result.Logs = append(result.Logs, fmt.Sprintf("💰 Gas Fee: %s", gasFee))
+	}
+
+	return result
 }
 
 // DeleteProjectParams holds delete project parameters
@@ -978,6 +1401,7 @@ type DeleteProjectResult struct {
 	Message          string `json:"message"`
 	Error            string `json:"error"`
 	OnChainDestroyed bool   `json:"onChainDestroyed"`
+	EstimatedGasCost string `json:"estimatedGasCost,omitempty"`
 }
 
 // DeleteProject deletes a project by ID (includes on-chain destruction if objectId exists)
@@ -998,6 +1422,11 @@ func DeleteProject(params DeleteProjectParams) DeleteProjectResult {
 	if err != nil {
 		result.Error = fmt.Sprintf("failed to get project: %v", err)
 		return result
+	}
+
+	// Include estimated gas cost for on-chain destruction
+	if proj.ObjectID != "" {
+		result.EstimatedGasCost = projects.EstimateDestroyCost(proj.Network)
 	}
 
 	// If project has an object ID, destroy it on-chain first
@@ -1176,7 +1605,7 @@ func ArchiveProject(projectID int64) ArchiveProjectResult {
 
 // SetStatusParams holds parameters for setting project status
 type SetStatusParams struct {
-	ProjectID int    `json:"projectId"`
+	ProjectID int64  `json:"projectId"`
 	Status    string `json:"status"` // "draft", "active", or "archived"
 }
 
@@ -1422,9 +1851,18 @@ func GetAIConfig() (*AIConfigResult, error) {
 
 // UpdateAIConfig updates AI configuration and removes other providers
 func UpdateAIConfig(params AIConfigureParams) error {
+	if params.APIKey == "" {
+		return fmt.Errorf("API key is required")
+	}
+	if params.Provider == "" {
+		return fmt.Errorf("provider is required")
+	}
+
 	// When saving new provider credentials, remove all other providers first
 	if params.Provider != "" {
-		_ = ai.RemoveProviderCredentials(params.Provider)
+		if err := ai.RemoveProviderCredentials(params.Provider); err != nil {
+			fmt.Printf("Warning: failed to remove old credentials for %s: %v\n", params.Provider, err)
+		}
 	}
 	return ai.SetProviderCredentials(params.Provider, params.APIKey, params.BaseURL, params.Model)
 }
@@ -1509,7 +1947,7 @@ func GetContentStructure(sitePath string) ContentStructure {
 
 // GenerateContent creates new content using AI
 func GenerateContent(params GenerateContentParams) GenerateContentResult {
-	client, _, _, err := ai.LoadClient(0)
+	client, _, _, err := ai.LoadClient(ai.LongRequestTimeout)
 	if err != nil {
 		return GenerateContentResult{Error: fmt.Sprintf("failed to load AI client: %v", err)}
 	}
@@ -1531,8 +1969,9 @@ func GenerateContent(params GenerateContentParams) GenerateContentResult {
 		}
 
 		// Apply content fixer to ensure YAML frontmatter is correct
-		siteType := hugo.DetermineSiteTypeFromPath(params.SitePath)
-		fixer := ai.NewContentFixer(params.SitePath, ai.SiteType(siteType))
+		siteType := hugo.DetectSiteType(params.SitePath)
+		themeName := hugo.GetThemeName(params.SitePath)
+		fixer := ai.NewContentFixerWithTheme(params.SitePath, siteType, themeName)
 		if err := fixer.FixAll(); err != nil {
 			// Warning only, don't fail the generation
 			fmt.Fprintf(os.Stderr, "Warning: Content fix failed: %v\n", err)
@@ -1549,17 +1988,15 @@ func GenerateContent(params GenerateContentParams) GenerateContentResult {
 		}
 	}
 
-	isBlogContent := strings.Contains(strings.ToLower(params.ContentType), "post") ||
-		strings.Contains(strings.ToLower(params.ContentType), "blog") ||
-		strings.Contains(strings.ToLower(params.ContentType), "article") ||
-		strings.Contains(strings.ToLower(params.ContentType), "news")
-
-	var systemPrompt string
-	if isBlogContent {
-		systemPrompt = ai.SystemPromptBlogPost
-	} else {
-		systemPrompt = ai.SystemPromptPageGeneration
+	// Build dynamic system prompt with theme context
+	themeName := hugo.GetThemeName(params.SitePath)
+	themeContext := ""
+	if themeName != "" {
+		if dynamicContext := ai.BuildDynamicThemeContext(params.SitePath, themeName); dynamicContext != "" {
+			themeContext = dynamicContext
+		}
 	}
+	systemPrompt := ai.ComposePageGeneratorPrompt(themeContext)
 
 	userPrompt := ai.BuildUserPrompt(params.Topic, params.Context)
 
@@ -1568,8 +2005,8 @@ func GenerateContent(params GenerateContentParams) GenerateContentResult {
 		return GenerateContentResult{Error: fmt.Sprintf("generating content: %v", err)}
 	}
 
-	// Apply content fixer to ensure YAML frontmatter is correct
-	fixer := ai.NewContentFixer(params.SitePath, ai.SiteType(hugo.DetermineSiteTypeFromPath(params.SitePath)))
+	// Apply content fixer to ensure YAML frontmatter is correct (reuse themeName from above)
+	fixer := ai.NewContentFixerWithTheme(params.SitePath, hugo.DetectSiteType(params.SitePath), themeName)
 	if err := fixer.FixAll(); err != nil {
 		return GenerateContentResult{Error: fmt.Sprintf("failed to fix YAML frontmatter: %v", err)}
 	}
@@ -1600,7 +2037,7 @@ type UpdateContentResult struct {
 
 // UpdateContent updates existing content using AI
 func UpdateContent(params UpdateContentParams) UpdateContentResult {
-	client, _, _, err := ai.LoadClient(0)
+	client, _, _, err := ai.LoadClient(ai.LongRequestTimeout)
 	if err != nil {
 		return UpdateContentResult{Error: fmt.Sprintf("failed to load AI client: %v", err)}
 	}
@@ -1625,8 +2062,9 @@ func UpdateContent(params UpdateContentParams) UpdateContentResult {
 
 	// Apply content fixer to ensure YAML frontmatter is correct
 	if params.SitePath != "" {
-		siteType := hugo.DetermineSiteTypeFromPath(params.SitePath)
-		fixer := ai.NewContentFixer(params.SitePath, ai.SiteType(siteType))
+		siteType := hugo.DetectSiteType(params.SitePath)
+		themeName := hugo.GetThemeName(params.SitePath)
+		fixer := ai.NewContentFixerWithTheme(params.SitePath, siteType, themeName)
 		if err := fixer.FixAll(); err != nil {
 			return UpdateContentResult{Error: fmt.Sprintf("failed to fix YAML frontmatter: %v", err)}
 		}
@@ -1832,7 +2270,7 @@ func LaunchWizard(params LaunchWizardParams) LaunchWizardResult {
 type AICreateSiteParams struct {
 	ParentDir   string `json:"parentDir,omitempty"`
 	SiteName    string `json:"siteName"`
-	SiteType    string `json:"siteType"` // "blog", "portfolio", "docs", "business"
+	SiteType    string `json:"siteType"` // "blog", "docs"
 	Description string `json:"description,omitempty"`
 	Audience    string `json:"audience,omitempty"`
 }
@@ -1847,9 +2285,22 @@ type AICreateSiteResult struct {
 	Error        string       `json:"error"`
 }
 
-// AICreateSiteWithProgress creates a site with a custom progress handler (for desktop app)
-func AICreateSiteWithProgress(params AICreateSiteParams, progressHandler ProgressHandler) AICreateSiteResult {
+// AICreateSiteWithProgress creates a site with a custom progress handler (for desktop app).
+// The provided context allows the caller to cancel the pipeline (e.g. on app shutdown).
+func AICreateSiteWithProgress(ctx context.Context, params AICreateSiteParams, progressHandler ProgressHandler) AICreateSiteResult {
 	result := AICreateSiteResult{}
+
+	// Check Hugo dependency first
+	if _, err := deps.LookPath("hugo"); err != nil {
+		result.Error = "hugo is not installed or not found in PATH"
+		return result
+	}
+
+	// Validate site name before proceeding
+	if !utils.IsValidSiteName(params.SiteName) {
+		result.Error = "invalid site name: use only letters, numbers, hyphens and underscores"
+		return result
+	}
 
 	// Keep original site name for database and Hugo config
 	originalSiteName := params.SiteName
@@ -1894,12 +2345,11 @@ func AICreateSiteWithProgress(params AICreateSiteParams, progressHandler Progres
 	success := false
 	defer func() {
 		if !success && !dirExistedBefore {
-			// Clean up the directory if we created it and operation failed
-			os.RemoveAll(sitePath)
+			safeCleanupDir(sitePath, parentDir)
 		}
 	}()
 
-	client, _, _, err := ai.LoadClient(0)
+	client, _, _, err := ai.LoadClient(ai.LongRequestTimeout)
 	if err != nil {
 		result.Error = fmt.Sprintf("failed to load AI client: %v", err)
 		return result
@@ -1910,12 +2360,8 @@ func AICreateSiteWithProgress(params AICreateSiteParams, progressHandler Progres
 	switch params.SiteType {
 	case "blog":
 		siteType = ai.SiteTypeBlog
-	case "portfolio":
-		siteType = ai.SiteTypePortfolio
 	case "docs":
 		siteType = ai.SiteTypeDocs
-	case "business":
-		siteType = ai.SiteTypeBusiness
 	default:
 		siteType = ai.SiteTypeBlog
 	}
@@ -1932,34 +2378,27 @@ func AICreateSiteWithProgress(params AICreateSiteParams, progressHandler Progres
 
 	// Setup Hugo site - use ORIGINAL name
 	hugoSiteType := hugo.SiteType(siteType)
+	themeInfo := hugo.GetThemeInfo(hugoSiteType)
+
 	if err := hugo.SetupSiteConfigWithName(sitePath, hugoSiteType, originalSiteName); err != nil {
 		result.Error = fmt.Sprintf("failed to set up config: %v", err)
 		return result
 	}
 
-	if err := hugo.SetupArchetypes(sitePath); err != nil {
-		// Warning but not fatal
+	if err := hugo.SetupArchetypes(sitePath, themeInfo.DirName); err != nil {
+		result.Error = fmt.Sprintf("failed to set up archetypes: %v", err)
+		return result
 	}
 
-	if err := hugo.SetupFaviconForTheme(sitePath, hugoSiteType); err != nil {
-		// Warning but not fatal
+	if err := hugo.SetupFaviconForTheme(sitePath, themeInfo.DirName); err != nil {
+		result.Error = fmt.Sprintf("failed to set up favicon: %v", err)
+		return result
 	}
-
-	themeInfo := hugo.GetThemeInfo(hugoSiteType)
 	if err := hugo.InstallTheme(sitePath, hugoSiteType); err != nil {
-		// Warning but not fatal
+		result.Error = fmt.Sprintf("failed to install theme: %v", err)
+		return result
 	}
 
-	if hugoSiteType == hugo.SiteTypeBusiness {
-		if err := hugo.SetupBusinessThemeOverrides(sitePath); err != nil {
-			return AICreateSiteResult{Error: fmt.Sprintf("failed to set up theme overrides: %v", err)}
-		}
-	}
-	if hugoSiteType == hugo.SiteTypePortfolio {
-		if err := hugo.SetupPortfolioThemeOverrides(sitePath); err != nil {
-			return AICreateSiteResult{Error: fmt.Sprintf("failed to set up theme overrides: %v", err)}
-		}
-	}
 	if hugoSiteType == hugo.SiteTypeDocs {
 		if err := hugo.SetupDocsThemeOverrides(sitePath); err != nil {
 			return AICreateSiteResult{Error: fmt.Sprintf("failed to set up theme overrides: %v", err)}
@@ -1970,6 +2409,13 @@ func AICreateSiteWithProgress(params AICreateSiteParams, progressHandler Progres
 	pipelineConfig := ai.DefaultPipelineConfig()
 	pipelineConfig.ContentDir = filepath.Join(sitePath, "content")
 	pipelineConfig.PlanPath = filepath.Join(sitePath, ".walgo", "plan.json")
+
+	// Desktop app (progressHandler != nil) uses sequential mode for reliable
+	// progress tracking and to avoid rate-limit storms on typical API keys.
+	if progressHandler != nil {
+		pipelineConfig.ParallelMode = ai.ParallelModeSequential
+	}
+
 	pipeline := ai.NewPipeline(client, pipelineConfig)
 
 	// Use custom progress handler if provided, otherwise use console handler
@@ -1999,9 +2445,9 @@ func AICreateSiteWithProgress(params AICreateSiteParams, progressHandler Progres
 		Description: params.Description,
 		Audience:    params.Audience,
 		Theme:       themeInfo.Name,
+		SitePath:    sitePath, // For dynamic theme analysis
 	}
 
-	ctx := context.Background()
 	pipelineResult, err := pipeline.Run(ctx, input)
 	if err != nil {
 		result.Error = fmt.Sprintf("pipeline error: %v", err)
@@ -2019,27 +2465,16 @@ func AICreateSiteWithProgress(params AICreateSiteParams, progressHandler Progres
 				return AICreateSiteResult{Error: fmt.Sprintf("failed to apply menu: %v", err)}
 			}
 		}
+		// Get theme name for dynamic theme support
+		themeName := pipelineResult.Plan.Theme
+		if themeName == "" {
+			themeName = hugo.GetThemeName(sitePath)
+		}
+
 		switch siteType {
-		case ai.SiteTypeBusiness:
-			fmt.Printf("\n%s Validating and fixing content for Ananke theme...\n", ui.GetIcons().Gear)
-			fixer := ai.NewContentFixer(sitePath, siteType)
-			if err := fixer.FixAll(); err != nil {
-				return AICreateSiteResult{Error: fmt.Sprintf("failed to fix content: %v", err)}
-			} else {
-				fmt.Printf("Content validated and fixed\n")
-			}
-
-			issues := ai.ValidateBusinessContent(sitePath)
-			if len(issues) > 0 {
-				fmt.Printf("Remaining issues:\n")
-				for _, issue := range issues {
-					fmt.Printf("      - %s\n", issue)
-				}
-			}
-
 		case ai.SiteTypeBlog:
-			fmt.Printf("\nValidating and fixing content for Ananke theme...\n")
-			fixer := ai.NewContentFixer(sitePath, siteType)
+			fmt.Printf("\nValidating and fixing content for theme...\n")
+			fixer := ai.NewContentFixerWithTheme(sitePath, siteType, themeName)
 			if err := fixer.FixAll(); err != nil {
 				return AICreateSiteResult{Error: fmt.Sprintf("failed to fix content: %v", err)}
 			} else {
@@ -2054,36 +2489,13 @@ func AICreateSiteWithProgress(params AICreateSiteParams, progressHandler Progres
 				}
 			}
 
-		case ai.SiteTypePortfolio:
-			if err := hugo.UpdatePortfolioParams(sitePath, pipelineResult.Plan.Description, pipelineResult.Plan.Audience); err != nil {
-				return AICreateSiteResult{Error: fmt.Sprintf("failed to update portfolio params: %v", err)}
-			} else {
-				fmt.Printf("Updated portfolio params\n")
-			}
-
-			fmt.Printf("\nValidating and fixing content for Ananke theme...\n")
-			fixer := ai.NewContentFixer(sitePath, siteType)
-			if err := fixer.FixAll(); err != nil {
-				return AICreateSiteResult{Error: fmt.Sprintf("failed to fix content: %v", err)}
-			} else {
-				fmt.Printf("Content validated and fixed\n")
-			}
-
-			issues := ai.ValidatePortfolioContent(sitePath)
-			if len(issues) > 0 {
-				fmt.Printf("Remaining issues:\n")
-				for _, issue := range issues {
-					fmt.Printf("      - %s\n", issue)
-				}
-			}
-
 		case ai.SiteTypeDocs:
 			if err := hugo.UpdateDocsParams(sitePath, pipelineResult.Plan.Description); err != nil {
 				return AICreateSiteResult{Error: fmt.Sprintf("failed to update docs params: %v", err)}
 			}
 
-			fmt.Printf("\nValidating and fixing content for Hugo Book theme...\n")
-			fixer := ai.NewContentFixer(sitePath, siteType)
+			fmt.Printf("\nValidating and fixing content for theme...\n")
+			fixer := ai.NewContentFixerWithTheme(sitePath, siteType, themeName)
 			if err := fixer.FixAll(); err != nil {
 				return AICreateSiteResult{Error: fmt.Sprintf("failed to fix content: %v", err)}
 			} else {
@@ -2097,6 +2509,7 @@ func AICreateSiteWithProgress(params AICreateSiteParams, progressHandler Progres
 					fmt.Printf("      - %s\n", issue)
 				}
 			}
+
 		}
 	}
 
@@ -2125,7 +2538,7 @@ func AICreateSiteWithProgress(params AICreateSiteParams, progressHandler Progres
 
 // AICreateSite creates a complete Hugo site with AI-generated content (CLI version with console output)
 func AICreateSite(params AICreateSiteParams) AICreateSiteResult {
-	return AICreateSiteWithProgress(params, nil)
+	return AICreateSiteWithProgress(context.Background(), params, nil)
 }
 
 // =============================================================================

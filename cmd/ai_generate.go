@@ -5,7 +5,6 @@ import (
 	"context"
 	"fmt"
 	"os"
-	"strings"
 
 	"github.com/selimozten/walgo/internal/ai"
 	"github.com/selimozten/walgo/internal/hugo"
@@ -79,8 +78,10 @@ Examples:
 		fmt.Println("  - Generate an about page for my portfolio")
 		fmt.Println()
 		fmt.Print("Your instructions: ")
-		instructions, _ := reader.ReadString('\n')
-		instructions = strings.TrimSpace(instructions)
+		instructions, err := readLine(reader)
+		if err != nil {
+			return fmt.Errorf("reading instructions: %w", err)
+		}
 
 		if instructions == "" {
 			return fmt.Errorf("instructions cannot be empty")
@@ -107,7 +108,8 @@ Examples:
 
 		// Apply content fixer to ensure YAML frontmatter is correct
 		fmt.Printf("\n%s Fixing YAML frontmatter...\n", icons.Spinner)
-		fixer := ai.NewContentFixer(sitePath, ai.SiteType(hugo.DetermineSiteTypeFromPath(sitePath)))
+		themeName := hugo.GetThemeName(sitePath)
+		fixer := ai.NewContentFixerWithTheme(sitePath, hugo.DetectSiteType(sitePath), themeName)
 		if err := fixer.FixAll(); err != nil {
 			fmt.Fprintf(os.Stderr, "%s Warning: Content fix failed: %v\n", icons.Warning, err)
 		} else {

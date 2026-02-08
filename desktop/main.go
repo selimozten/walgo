@@ -2,6 +2,8 @@ package main
 
 import (
 	"embed"
+	"fmt"
+	"os"
 	"runtime"
 
 	"github.com/wailsapp/wails/v2"
@@ -35,8 +37,10 @@ func main() {
 		AssetServer: &assetserver.Options{
 			Assets: assets,
 		},
-		BackgroundColour: &options.RGBA{R: 27, G: 38, B: 54, A: 1},
+		BackgroundColour: &options.RGBA{R: 27, G: 38, B: 54, A: 255},
 		OnStartup:        app.startup,
+		OnBeforeClose:    app.beforeClose,
+		OnShutdown:       app.shutdown,
 		Bind: []interface{}{
 			app,
 		},
@@ -49,7 +53,8 @@ func main() {
 	err := wails.Run(appOptions)
 
 	if err != nil {
-		println("Error:", err.Error())
+		fmt.Fprintf(os.Stderr, "Error: %s\n", err.Error())
+		os.Exit(1)
 	}
 }
 
@@ -84,10 +89,13 @@ func configurePlatformOptions(appOptions *options.App) {
 
 	case "linux":
 		// Linux-specific configuration
+		// Note: Frameless windows have limited support on Linux (especially Wayland)
+		// We keep frameless=true but provide custom window controls
 		appOptions.Linux = &linux.Options{
 			Icon:                nil, // Uses icon from wails.json
 			WindowIsTranslucent: false,
-			WebviewGpuPolicy:    linux.WebviewGpuPolicyAlways,
+			WebviewGpuPolicy:    linux.WebviewGpuPolicyOnDemand, // Better compatibility
+			ProgramName:         "Walgo",                        // For window manager
 		}
 
 	default:

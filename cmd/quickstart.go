@@ -1,9 +1,11 @@
 package cmd
 
 import (
+	"bufio"
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 
 	"github.com/selimozten/walgo/internal/config"
 	"github.com/selimozten/walgo/internal/deps"
@@ -20,9 +22,10 @@ var quickstartCmd = &cobra.Command{
 	Long: `Creates a new Hugo site, adds sample content, and builds it.
 
 This command will:
-1. Initialize a new Hugo site
-2. Add sample content
-3. Build the site
+1. Ask which site type to create
+2. Initialize a new Hugo site with the chosen theme
+3. Add sample content (blog) or copy theme example site (docs, biolink, whitepaper)
+4. Build the site
 
 Example:
   walgo quickstart my-blog
@@ -46,6 +49,38 @@ Example:
 		fmt.Printf("%s Walgo Quick Start\n", icons.Rocket)
 		fmt.Println("━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
 		fmt.Printf("%s Creating site: %s\n\n", icons.Package, siteName)
+
+		// Ask user to select site type
+		reader := bufio.NewReader(os.Stdin)
+		fmt.Println("Site type:")
+		fmt.Println("  1) Biolink")
+		fmt.Println("  2) Blog")
+		fmt.Println("  3) Docs")
+		fmt.Println("  4) Whitepaper")
+		fmt.Print("Select [1]: ")
+		siteTypeChoice, err := reader.ReadString('\n')
+		if err != nil {
+			return fmt.Errorf("reading site type: %w", err)
+		}
+		siteTypeChoice = strings.TrimSpace(siteTypeChoice)
+		if siteTypeChoice == "" {
+			siteTypeChoice = "1"
+		}
+
+		var siteType hugo.SiteType
+		switch siteTypeChoice {
+		case "1":
+			siteType = hugo.SiteTypeBiolink
+		case "2":
+			siteType = hugo.SiteTypeBlog
+		case "3":
+			siteType = hugo.SiteTypeDocs
+		case "4":
+			siteType = hugo.SiteTypeWhitepaper
+		default:
+			return fmt.Errorf("invalid site type: %s", siteTypeChoice)
+		}
+		fmt.Println()
 
 		// [1/4] Check dependencies
 		fmt.Println("  [1/4] Checking dependencies...")
@@ -81,8 +116,20 @@ Example:
 		success := false
 		defer func() {
 			if !success && !dirExistedBefore {
-				// Clean up the directory if we created it and operation failed
-				os.RemoveAll(sitePath)
+				// Resolve symlinks before removal to avoid deleting unexpected targets
+				realPath, err := filepath.EvalSymlinks(sitePath)
+				if err != nil {
+					return // Can't resolve path, skip cleanup to be safe
+				}
+				// Verify resolved path is still under the working directory
+				cwd, err := os.Getwd()
+				if err != nil {
+					return
+				}
+				if !strings.HasPrefix(realPath, cwd+string(os.PathSeparator)) {
+					return // Path escaped working directory, skip cleanup
+				}
+				os.RemoveAll(realPath)
 			}
 		}()
 
@@ -102,32 +149,31 @@ Example:
 		// [3/4] Set up site (config, archetypes, theme)
 		fmt.Println("\n  [3/4] Setting up site...")
 
-		// Blog is the default site type - use Ananke theme
-		siteType := hugo.SiteTypeBlog
 		themeInfo := hugo.GetThemeInfo(siteType)
 
-		// Setup hugo.toml with blog configuration and site name
-		if err := hugo.SetupSiteConfigWithName(sitePath, siteType, siteName); err != nil {
-			fmt.Fprintf(os.Stderr, "        %s Warning: Could not set up config: %v\n", icons.Warning, err)
-		} else {
-			fmt.Printf("        %s Config set up (blog)\n", icons.Check)
+		if siteType == hugo.SiteTypeBlog {
+			// Blog: use our embedded TOML template + archetypes
+			if err := hugo.SetupSiteConfigWithName(sitePath, siteType, siteName); err != nil {
+				fmt.Fprintf(os.Stderr, "        %s Warning: Could not set up config: %v\n", icons.Warning, err)
+			} else {
+				fmt.Printf("        %s Config set up (%s)\n", icons.Check, siteType)
+			}
+
+			if err := hugo.SetupArchetypes(sitePath, themeInfo.DirName); err != nil {
+				fmt.Fprintf(os.Stderr, "        %s Warning: Could not set up archetypes: %v\n", icons.Warning, err)
+			} else {
+				fmt.Printf("        %s Archetypes set up\n", icons.Check)
+			}
 		}
 
-		// Setup archetypes
-		if err := hugo.SetupArchetypes(sitePath); err != nil {
-			fmt.Fprintf(os.Stderr, "        %s Warning: Could not set up archetypes: %v\n", icons.Warning, err)
-		} else {
-			fmt.Printf("        %s Archetypes set up\n", icons.Check)
-		}
-
-		// Setup favicon
-		if err := hugo.SetupFavicon(sitePath); err != nil {
+		// Setup favicon (theme-aware placement)
+		if err := hugo.SetupFaviconForTheme(sitePath, themeInfo.DirName); err != nil {
 			fmt.Fprintf(os.Stderr, "        %s Warning: Could not set up favicon: %v\n", icons.Warning, err)
 		} else {
 			fmt.Printf("        %s Favicon set up\n", icons.Check)
 		}
 
-		// Install theme (Ananke for blog)
+		// Install theme
 		fmt.Printf("        %s Installing theme %s...\n", icons.Spinner, themeInfo.Name)
 		if err := hugo.InstallTheme(sitePath, siteType); err != nil {
 			fmt.Fprintf(os.Stderr, "        %s Warning: Could not install theme: %v\n", icons.Warning, err)
@@ -135,12 +181,10 @@ Example:
 			fmt.Printf("        %s Theme %s installed\n", icons.Check, themeInfo.Name)
 		}
 
-		// Setup theme-specific overrides (e.g., favicon fix for business theme)
-		if siteType == hugo.SiteTypeBusiness {
-			if err := hugo.SetupBusinessThemeOverrides(sitePath); err != nil {
-				fmt.Fprintf(os.Stderr, "        %s Warning: Could not set up theme overrides: %v\n", icons.Warning, err)
-			} else {
-				fmt.Printf("        %s Theme overrides set up\n", icons.Check)
+		// Docs theme overrides
+		if siteType == hugo.SiteTypeDocs {
+			if err := hugo.SetupDocsThemeOverrides(sitePath); err != nil {
+				fmt.Fprintf(os.Stderr, "        %s Warning: Could not set up docs theme overrides: %v\n", icons.Warning, err)
 			}
 		}
 
@@ -151,13 +195,15 @@ Example:
 			fmt.Println("\n  Creating sample content...")
 		}
 
-		contentDir := filepath.Join(sitePath, "content")
-		if err := os.MkdirAll(contentDir, 0755); err != nil {
-			fmt.Fprintf(os.Stderr, "        %s Warning: Could not create content directory: %v\n", icons.Warning, err)
-		} else {
-			// Create homepage with detailed content
-			indexPath := filepath.Join(contentDir, "_index.md")
-			indexContent := `---
+		switch siteType {
+		case hugo.SiteTypeBlog:
+			// Blog: use inline quickstart content
+			contentDir := filepath.Join(sitePath, "content")
+			if err := os.MkdirAll(contentDir, 0755); err != nil {
+				fmt.Fprintf(os.Stderr, "        %s Warning: Could not create content directory: %v\n", icons.Warning, err)
+			} else {
+				indexPath := filepath.Join(contentDir, "_index.md")
+				indexContent := `---
 title: "` + siteName + `"
 date: 2024-01-01T00:00:00Z
 draft: false
@@ -180,10 +226,10 @@ Walrus is a decentralized storage and data availability protocol designed for la
 
 This site is hosted entirely on the Walrus network, making it:
 
-✓ **Permanent** - Once published, it's always accessible
-✓ **Distributed** - No single point of failure
-✓ **Verifiable** - All content is cryptographically verified
-✓ **Fast** - Delivered through a global network
+` + "✓" + ` **Permanent** - Once published, it's always accessible
+` + "✓" + ` **Distributed** - No single point of failure
+` + "✓" + ` **Verifiable** - All content is cryptographically verified
+` + "✓" + ` **Fast** - Delivered through a global network
 
 ## Getting Started
 
@@ -237,10 +283,29 @@ Follow the interactive wizard to:
 
 **Ready to build the decentralized web?** Start editing this file and make it your own! ` + icons.Rocket + `
 `
-			if err := os.WriteFile(indexPath, []byte(indexContent), 0644); err != nil {
-				fmt.Fprintf(os.Stderr, "        %s Warning: Could not create homepage: %v\n", icons.Warning, err)
+				if err := os.WriteFile(indexPath, []byte(indexContent), 0644); err != nil {
+					fmt.Fprintf(os.Stderr, "        %s Warning: Could not create homepage: %v\n", icons.Warning, err)
+				} else {
+					fmt.Printf("        %s Homepage created\n", icons.Check)
+				}
+			}
+
+		default:
+			// Docs, Biolink, Whitepaper: use exampleSite directly (including config)
+			if err := hugo.CopyExampleSiteWithConfig(sitePath, siteType, siteName); err != nil {
+				fmt.Fprintf(os.Stderr, "        %s Warning: Could not copy example site: %v\n", icons.Warning, err)
+				// Create a minimal homepage as fallback
+				contentDir := filepath.Join(sitePath, "content")
+				if mkErr := os.MkdirAll(contentDir, 0755); mkErr == nil {
+					indexPath := filepath.Join(contentDir, "_index.md")
+					fallbackContent := "---\ntitle: \"" + siteName + "\"\ndraft: false\n---\n\n# " + siteName + "\n"
+					if wErr := os.WriteFile(indexPath, []byte(fallbackContent), 0644); wErr != nil {
+						fmt.Fprintf(os.Stderr, "        %s Warning: Could not create fallback homepage: %v\n", icons.Warning, wErr)
+					}
+				}
+				fmt.Printf("        %s Created minimal homepage (fallback)\n", icons.Check)
 			} else {
-				fmt.Printf("        %s Homepage created\n", icons.Check)
+				fmt.Printf("        %s Example site content copied\n", icons.Check)
 			}
 		}
 

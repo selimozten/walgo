@@ -3,12 +3,12 @@ package walrus
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"fmt"
 	"io"
 	"math"
 	"net/http"
-	"os/exec"
 	"regexp"
 	"strconv"
 	"strings"
@@ -227,12 +227,14 @@ func GetStorageInfo(walrusBin string) (*StorageInfo, error) {
 	}
 
 	// Get the context from Sui active environment
-	context := GetWalrusContext()
+	walrusCtx := GetWalrusContext()
 
-	cmd := exec.Command(walrusBin, "info", "--json", "--context", context)
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+	cmd := execCommandContext(ctx, walrusBin, "info", "--json", "--context", walrusCtx)
 	output, err := cmd.CombinedOutput()
 	if err != nil {
-		return nil, fmt.Errorf("failed to run walrus info --json --context %s: %w", context, err)
+		return nil, fmt.Errorf("failed to run walrus info --json --context %s: %w", walrusCtx, err)
 	}
 
 	return ParseStorageInfoJSON(output)
@@ -309,34 +311,39 @@ func ParseStorageInfoJSON(output []byte) (*StorageInfo, error) {
 	return info, nil
 }
 
-// CalculateEncodedSize calculates the encoded blob size after Reed-Solomon encoding
-// The encoded size is approximately 5-8x the original size depending on blob size
-// Smaller blobs have higher overhead due to fixed metadata
-func CalculateEncodedSize(originalSize int64) int64 {
-	// Reed-Solomon (RS2) encoding expands data
-	// The expansion factor varies: ~8x for small files, ~5x for large files
-	// Based on walrus info examples:
-	// - 16 MiB -> 134 MiB (~8.4x)
-	// - 512 MiB -> 2.31 GiB (~4.6x)
-	// - 13.6 GiB -> 61.2 GiB (~4.5x)
-
-	// Use a sliding scale for encoding multiplier
-	var encodingMultiplier float64
+// encodingMultiplierForSize returns the estimated Reed-Solomon expansion factor
+// based on blob size. Smaller blobs have higher overhead due to fixed metadata.
+// Based on walrus info examples:
+//   - 16 MiB -> 134 MiB (~8.4x)
+//   - 512 MiB -> 2.31 GiB (~4.6x)
+//   - 13.6 GiB -> 61.2 GiB (~4.5x)
+func encodingMultiplierForSize(originalSize int64) float64 {
 	sizeMiB := float64(originalSize) / (1024 * 1024)
 
-	if sizeMiB < 1 {
-		encodingMultiplier = 10.0 // Very small files have high overhead
-	} else if sizeMiB < 16 {
-		encodingMultiplier = 8.5
-	} else if sizeMiB < 100 {
-		encodingMultiplier = 6.0
-	} else if sizeMiB < 500 {
-		encodingMultiplier = 5.0
-	} else {
-		encodingMultiplier = 4.5
+	switch {
+	case sizeMiB < 1:
+		return 10.0 // Very small files have high overhead
+	case sizeMiB < 16:
+		return 8.5
+	case sizeMiB < 100:
+		return 6.0
+	case sizeMiB < 500:
+		return 5.0
+	default:
+		return 4.5
 	}
+}
 
-	return int64(float64(originalSize) * encodingMultiplier)
+// CalculateEncodedSize calculates the encoded blob size after Reed-Solomon encoding.
+// The encoded size is approximately 5-8x the original size depending on blob size.
+func CalculateEncodedSize(originalSize int64) int64 {
+	return int64(float64(originalSize) * encodingMultiplierForSize(originalSize))
+}
+
+// calculateEncodedSizeWithMultiplier calculates the encoded blob size using the
+// given multiplier from live walrus data instead of the heuristic sliding scale.
+func calculateEncodedSizeWithMultiplier(originalSize int64, multiplier float64) int64 {
+	return int64(float64(originalSize) * multiplier)
 }
 
 // DryRunResult represents the JSON output from 'walrus store --dry-run --json'
@@ -357,9 +364,11 @@ func GetEncodedSizeFromDryRun(filePath string, walrusBin string) (int64, error) 
 	}
 
 	// Get the context from Sui active environment
-	context := GetWalrusContext()
+	walrusCtx := GetWalrusContext()
 
-	cmd := exec.Command(walrusBin, "store", "--dry-run", "--json", "--context", context, filePath)
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+	cmd := execCommandContext(ctx, walrusBin, "store", "--dry-run", "--json", "--context", walrusCtx, filePath)
 	output, err := cmd.CombinedOutput()
 	if err != nil {
 		return 0, fmt.Errorf("dry-run failed: %w", err)
@@ -476,8 +485,14 @@ func CalculateCost(options CostOptions) (*CostBreakdown, error) {
 	}
 
 	// Calculate encoded size in MiB (storage units)
-	// Reed-Solomon encoding expands data by ~5-8x depending on size
-	encodedSizeBytes := CalculateEncodedSize(options.SiteSize)
+	// Use live encoding multiplier from walrus info when available,
+	// otherwise fall back to the size-based heuristic.
+	var encodedSizeBytes int64
+	if storageInfo.EncodingMultiplier > 0 {
+		encodedSizeBytes = calculateEncodedSizeWithMultiplier(options.SiteSize, storageInfo.EncodingMultiplier)
+	} else {
+		encodedSizeBytes = CalculateEncodedSize(options.SiteSize)
+	}
 	storageUnitSize := storageInfo.StorageUnitSize
 	if storageUnitSize <= 0 {
 		storageUnitSize = 1048576 // Default 1 MiB
@@ -662,19 +677,20 @@ func formatBytes(bytes int64) string {
 	if bytes < unit {
 		return fmt.Sprintf("%d B", bytes)
 	}
+	suffixes := "KMGTPE"
 	div, exp := int64(unit), 0
-	for n := bytes / unit; n >= unit; n /= unit {
+	for n := bytes / unit; n >= unit && exp < len(suffixes)-1; n /= unit {
 		div *= unit
 		exp++
 	}
-	return fmt.Sprintf("%.2f %ciB", float64(bytes)/float64(div), "KMGTPE"[exp])
+	return fmt.Sprintf("%.2f %ciB", float64(bytes)/float64(div), suffixes[exp])
 }
 
-// FormatCostSummary creates a user-friendly summary
-func FormatCostSummary(totalCost float64, fileCount int, epochs int) string {
+// FormatCostSummary creates a user-friendly summary with separate WAL and SUI amounts.
+func FormatCostSummary(walCost, suiCost float64, fileCount int, epochs int) string {
 	return fmt.Sprintf(
-		"Estimated: %.4f for %d files stored for %d epochs",
-		totalCost, fileCount, epochs,
+		"Estimated: %.4f WAL + %.4f SUI for %d files stored for %d epochs",
+		walCost, suiCost, fileCount, epochs,
 	)
 }
 
@@ -693,18 +709,4 @@ func EstimateCostSimple(siteSize int64, epochs int, network string) string {
 		breakdown.TotalWAL, breakdown.GasCostSUI,
 		breakdown.MinTotalWAL, breakdown.MaxTotalWAL,
 		breakdown.MinTotalSUI, breakdown.MaxTotalSUI)
-}
-
-// EstimateUpdateCostSimple provides update cost as a string
-func EstimateUpdateCostSimple(newFiles int, changedSize int64, epochs int, network string) string {
-	breakdown, err := CalculateUpdateCost(changedSize, newFiles, epochs, network)
-	if err != nil {
-		return "Unable to estimate cost"
-	}
-
-	if breakdown.TotalWAL == 0 {
-		return fmt.Sprintf("~%.6f SUI (metadata only)", breakdown.GasCostSUI)
-	}
-
-	return fmt.Sprintf("~%.4f WAL + ~%.4f SUI", breakdown.TotalWAL, breakdown.GasCostSUI)
 }

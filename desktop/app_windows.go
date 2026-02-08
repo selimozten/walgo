@@ -8,12 +8,29 @@ import (
 	"os/exec"
 	"strconv"
 	"strings"
+	"syscall"
 )
+
+// hideWindow sets Windows-specific flags to hide console window for a command
+func hideWindow(cmd *exec.Cmd) {
+	cmd.SysProcAttr = &syscall.SysProcAttr{
+		HideWindow:    true,
+		CreationFlags: 0x08000000, // CREATE_NO_WINDOW
+	}
+}
+
+// openFileExplorer opens a path in Windows Explorer
+func openFileExplorer(path string) error {
+	cmd := exec.Command("explorer", path)
+	// Don't hide window for explorer - it's supposed to be visible
+	return cmd.Start() // Use Start() so we don't wait for explorer to close
+}
 
 // killExistingHugoProcesses kills any existing Hugo serve processes (Windows)
 func killExistingHugoProcesses() error {
 	// Use tasklist to find hugo processes
 	cmd := exec.Command("tasklist", "/FO", "CSV", "/NH")
+	hideWindow(cmd)
 	output, err := cmd.Output()
 	if err != nil {
 		return fmt.Errorf("failed to list processes: %w", err)
@@ -39,6 +56,7 @@ func killExistingHugoProcesses() error {
 
 			// Kill the process using taskkill
 			killCmd := exec.Command("taskkill", "/F", "/PID", strconv.Itoa(pid))
+			hideWindow(killCmd)
 			if err := killCmd.Run(); err != nil {
 				fmt.Printf("⚠️  Warning: Could not kill Hugo process %d: %v\n", pid, err)
 			} else {
@@ -48,7 +66,7 @@ func killExistingHugoProcesses() error {
 	}
 
 	if len(killedPIDs) > 0 {
-		fmt.Printf("ℹ️  Killed %d existing Hugo serve process(es)\n", len(killedPIDs))
+		fmt.Printf("Killed %d existing Hugo serve process(es)\n", len(killedPIDs))
 		for _, pid := range killedPIDs {
 			fmt.Printf("  - PID: %d\n", pid)
 		}

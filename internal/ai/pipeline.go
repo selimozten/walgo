@@ -10,8 +10,6 @@ import (
 	"time"
 )
 
-// Pipeline orchestrates the complete site generation workflow from planning to content generation.
-
 // Pipeline orchestrates the complete site generation workflow.
 type Pipeline struct {
 	client    *Client
@@ -311,8 +309,14 @@ func (p *Pipeline) getPlanPath() string {
 	if filepath.IsAbs(p.config.PlanPath) {
 		return p.config.PlanPath
 	}
-	// Assume current working directory
-	cwd, _ := os.Getwd()
+	cwd, err := os.Getwd()
+	if err != nil {
+		// Fallback to home directory if cwd is unavailable
+		if home, homeErr := os.UserHomeDir(); homeErr == nil {
+			return filepath.Join(home, p.config.PlanPath)
+		}
+		return p.config.PlanPath
+	}
 	return filepath.Join(cwd, p.config.PlanPath)
 }
 

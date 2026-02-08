@@ -32,12 +32,7 @@ Examples:
 }
 
 // applyMenuToConfig applies Hugo menu configuration from the site plan.
-func applyMenuToConfig(plan *ai.SitePlan) error {
-	sitePath, getwdErr := os.Getwd()
-	if getwdErr != nil {
-		return fmt.Errorf("failed to get current directory: %w", getwdErr)
-	}
-
+func applyMenuToConfig(plan *ai.SitePlan, sitePath string) error {
 	hugoTomlPath := filepath.Join(sitePath, "hugo.toml")
 	if _, err := os.Stat(hugoTomlPath); os.IsNotExist(err) {
 		hugoTomlPath = filepath.Join(sitePath, "config.toml")
@@ -71,7 +66,15 @@ func init() {
 
 	aiPipelineCmd.Flags().BoolVarP(&aiPipelineVerbose, "verbose", "v", false, "Show verbose output")
 	aiPipelineCmd.Flags().BoolVar(&aiPipelineDryRun, "dry-run", false, "Plan and generate without writing files")
+	aiPipelineCmd.Flags().StringVar(&aiPipelineParallel, "parallel", "auto", "Parallel mode: auto, sequential, parallel")
+	aiPipelineCmd.Flags().IntVar(&aiPipelineConcurrent, "concurrent", 5, "Max concurrent page generations (default: 5)")
+	aiPipelineCmd.Flags().IntVar(&aiPipelineRPM, "rpm", 30, "Rate limit: requests per minute (default: 30)")
+
 	aiPlanCmd.Flags().BoolVarP(&aiPipelineVerbose, "verbose", "v", false, "Show verbose output")
+
 	aiResumeCmd.Flags().BoolVarP(&aiPipelineVerbose, "verbose", "v", false, "Show verbose output")
 	aiResumeCmd.Flags().BoolVar(&aiPipelineDryRun, "dry-run", false, "Generate without writing files")
+	aiResumeCmd.Flags().StringVar(&aiPipelineParallel, "parallel", "auto", "Parallel mode: auto, sequential, parallel")
+	aiResumeCmd.Flags().IntVar(&aiPipelineConcurrent, "concurrent", 5, "Max concurrent page generations (default: 5)")
+	aiResumeCmd.Flags().IntVar(&aiPipelineRPM, "rpm", 30, "Rate limit: requests per minute (default: 30)")
 }

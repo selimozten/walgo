@@ -4,7 +4,7 @@ import {api} from '../models';
 import {main} from '../models';
 import {ai} from '../models';
 
-export function AICreateSite(arg1:api.AICreateSiteParams):Promise<api.AICreateSiteResult>;
+export function AICreateSite(arg1:api.AICreateSiteParams):Promise<void>;
 
 export function ArchiveProject(arg1:number):Promise<api.ArchiveProjectResult>;
 
@@ -38,9 +38,11 @@ export function EditProject(arg1:api.EditProjectParams):Promise<api.EditProjectR
 
 export function EstimateGasFee(arg1:api.GasEstimateParams):Promise<api.GasEstimateResult>;
 
-export function GenerateContent(arg1:main.GenerateContentParams):Promise<main.GenerateContentResult>;
+export function GenerateContent(arg1:api.GenerateContentParams):Promise<api.GenerateContentResult>;
 
 export function GetAIConfig():Promise<api.AIConfigResult>;
+
+export function GetAIProgress():Promise<main.AIProgressState>;
 
 export function GetAddressList():Promise<api.AddressListResult>;
 
@@ -49,6 +51,8 @@ export function GetContentStructure(arg1:string):Promise<ai.ContentStructure>;
 export function GetDefaultSitesDir():Promise<string>;
 
 export function GetFolderStats(arg1:string):Promise<main.FolderStatsResult>;
+
+export function GetInstalledThemes(arg1:string):Promise<api.GetInstalledThemesResult>;
 
 export function GetProject(arg1:number):Promise<api.Project>;
 
@@ -64,9 +68,11 @@ export function GetWalletInfo():Promise<api.WalletInfo>;
 
 export function ImportAddress(arg1:api.ImportAddressParams):Promise<api.ImportAddressResult>;
 
-export function ImportObsidian(arg1:main.ImportObsidianParams):Promise<main.ImportObsidianResult>;
+export function ImportObsidian(arg1:api.ImportObsidianParams):Promise<api.ImportObsidianResult>;
 
 export function InitSite(arg1:string,arg2:string):Promise<api.InitSiteResult>;
+
+export function InstallTheme(arg1:api.InstallThemeParams):Promise<api.InstallThemeResult>;
 
 export function LaunchWizard(arg1:api.LaunchWizardParams):Promise<api.LaunchWizardResult>;
 
@@ -111,6 +117,8 @@ export function SwitchNetwork(arg1:string):Promise<api.SwitchNetworkResult>;
 export function UpdateAIConfig(arg1:api.AIConfigureParams):Promise<void>;
 
 export function UpdateContent(arg1:api.UpdateContentParams):Promise<api.UpdateContentResult>;
+
+export function UpdateSite(arg1:api.UpdateSiteParams):Promise<api.UpdateSiteResult>;
 
 export function UpdateTools(arg1:api.UpdateToolsParams):Promise<api.UpdateToolsResult>;
 

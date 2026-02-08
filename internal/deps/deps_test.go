@@ -154,7 +154,7 @@ func TestInstallInstructions(t *testing.T) {
 			instructions := InstallInstructions(tt.network)
 
 			// Verify suiup curl command is present
-			if !strings.Contains(instructions, "curl -sSfL https://suiup.io | sh") {
+			if !strings.Contains(instructions, "curl -sSfL https://raw.githubusercontent.com/Mystenlabs/suiup/main/install.sh | sh") {
 				t.Error("expected suiup curl command in instructions")
 			}
 
@@ -549,7 +549,7 @@ func TestRunSuiupNotInstalled(t *testing.T) {
 	}
 
 	// Error should mention installation instructions
-	if !strings.Contains(err.Error(), "curl -sSfL https://suiup.io | sh") {
+	if !strings.Contains(err.Error(), "curl -sSfL https://raw.githubusercontent.com/Mystenlabs/suiup/main/install.sh | sh") {
 		t.Errorf("error should mention installation instructions, got: %v", err)
 	}
 }
@@ -753,7 +753,7 @@ func TestInstallInstructionsContainsAllSteps(t *testing.T) {
 	instructions := InstallInstructions("testnet")
 
 	requiredContent := []string{
-		"curl -sSfL https://suiup.io | sh",
+		"curl -sSfL https://raw.githubusercontent.com/Mystenlabs/suiup/main/install.sh | sh",
 		"suiup install sui@testnet",
 		"suiup install walrus@testnet",
 		"suiup install site-builder@mainnet",
@@ -1110,7 +1110,7 @@ func TestInstallInstructionsWithDifferentNetworks(t *testing.T) {
 			instructions := InstallInstructions(network)
 
 			// Should always contain the suiup install command
-			if !strings.Contains(instructions, "curl -sSfL https://suiup.io") {
+			if !strings.Contains(instructions, "curl -sSfL https://raw.githubusercontent.com/Mystenlabs/suiup/main/install.sh") {
 				t.Error("should contain suiup install curl command")
 			}
 

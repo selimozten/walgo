@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useRef, useMemo, useReducer } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import {
   FolderOpen,
@@ -25,19 +25,118 @@ import {
   Calendar,
   HardDrive,
   Files,
+  Palette,
 } from "lucide-react";
 import { LoadingOverlay } from "../components/ui";
 import { TreeNode, ContextMenu } from "../components/file-tree";
-import { DeploymentModal, LaunchModal, AIGenerateModal, AIUpdateModal, InstallInstructionsModal } from "../components/modals";
+import { DeploymentModal, LaunchModal, AIGenerateModal, AIUpdateModal, InstallInstructionsModal, ThemeModal } from "../components/modals";
 import type { DeploymentParams, DeploymentResult } from "../components/modals/DeploymentModal";
 import type { LaunchConfig } from "../components/modals/LaunchModal";
-import { itemVariants, buttonVariants, iconButtonVariants } from "../utils/constants";
-import { cn, renderMarkdown } from "../utils";
+import { buttonVariants } from "../utils/constants";
+import { cn, renderMarkdown, formatFileSize } from "../utils";
 import { useEditProject, useDependencyCheck } from "../hooks";
 import { ListFiles } from "../../wailsjs/go/main/App";
-import { Project, SystemHealth } from "../types";
+import { SystemHealth, FileTreeNode } from "../types";
 
 const SAVE_STATUS_DURATION = 5000; // ms - increased for better visibility
+
+// --- Editor UI State Reducer ---
+type ModalName = 'newItem' | 'launch' | 'deployment' | 'aiGenerate' | 'aiUpdate' | 'theme' | 'autoInstall' | 'delete' | 'projectActions';
+
+interface EditorUIState {
+  modals: Record<ModalName, boolean>;
+  viewMode: 'split' | 'editor' | 'preview';
+  sidebarCollapsed: boolean;
+  showPropertiesPanel: boolean;
+  isRootDragOver: boolean;
+  newItemType: 'file' | 'folder';
+  newItemName: string;
+  contextMenuParentNode: FileTreeNode | null;
+  fileToDelete: FileTreeNode | null;
+  rootContextMenu: { x: number; y: number } | null;
+}
+
+type EditorUIAction =
+  | { type: 'OPEN_MODAL'; modal: ModalName }
+  | { type: 'CLOSE_MODAL'; modal: ModalName }
+  | { type: 'TOGGLE_MODAL'; modal: ModalName }
+  | { type: 'SET_VIEW_MODE'; mode: EditorUIState['viewMode'] }
+  | { type: 'TOGGLE_SIDEBAR' }
+  | { type: 'SET_PROPERTIES_PANEL'; value: boolean }
+  | { type: 'SET_ROOT_DRAG_OVER'; value: boolean }
+  | { type: 'SET_NEW_ITEM'; itemType: 'file' | 'folder'; parentNode?: FileTreeNode | null }
+  | { type: 'SET_NEW_ITEM_NAME'; name: string }
+  | { type: 'CLOSE_NEW_ITEM_MODAL' }
+  | { type: 'SET_FILE_TO_DELETE'; file: FileTreeNode | null }
+  | { type: 'SET_ROOT_CONTEXT_MENU'; position: { x: number; y: number } | null };
+
+const initialUIState: EditorUIState = {
+  modals: {
+    newItem: false,
+    launch: false,
+    deployment: false,
+    aiGenerate: false,
+    aiUpdate: false,
+    theme: false,
+    autoInstall: false,
+    delete: false,
+    projectActions: false,
+  },
+  viewMode: 'split',
+  sidebarCollapsed: false,
+  showPropertiesPanel: false,
+  isRootDragOver: false,
+  newItemType: 'file',
+  newItemName: '',
+  contextMenuParentNode: null,
+  fileToDelete: null,
+  rootContextMenu: null,
+};
+
+function editorUIReducer(state: EditorUIState, action: EditorUIAction): EditorUIState {
+  switch (action.type) {
+    case 'OPEN_MODAL':
+      return { ...state, modals: { ...state.modals, [action.modal]: true } };
+    case 'CLOSE_MODAL':
+      return { ...state, modals: { ...state.modals, [action.modal]: false } };
+    case 'TOGGLE_MODAL':
+      return { ...state, modals: { ...state.modals, [action.modal]: !state.modals[action.modal] } };
+    case 'SET_VIEW_MODE':
+      return { ...state, viewMode: action.mode };
+    case 'TOGGLE_SIDEBAR':
+      return { ...state, sidebarCollapsed: !state.sidebarCollapsed };
+    case 'SET_PROPERTIES_PANEL':
+      return { ...state, showPropertiesPanel: action.value };
+    case 'SET_ROOT_DRAG_OVER':
+      return { ...state, isRootDragOver: action.value };
+    case 'SET_NEW_ITEM':
+      return {
+        ...state,
+        modals: { ...state.modals, newItem: true },
+        newItemType: action.itemType,
+        contextMenuParentNode: action.parentNode ?? null,
+      };
+    case 'SET_NEW_ITEM_NAME':
+      return { ...state, newItemName: action.name };
+    case 'CLOSE_NEW_ITEM_MODAL':
+      return {
+        ...state,
+        modals: { ...state.modals, newItem: false },
+        newItemName: '',
+        contextMenuParentNode: null,
+      };
+    case 'SET_FILE_TO_DELETE':
+      return {
+        ...state,
+        fileToDelete: action.file,
+        modals: { ...state.modals, delete: action.file !== null },
+      };
+    case 'SET_ROOT_CONTEXT_MENU':
+      return { ...state, rootContextMenu: action.position };
+    default:
+      return state;
+  }
+}
 
 interface EditProps {
   aiConfigured?: boolean;
@@ -86,31 +185,60 @@ export const Edit: React.FC<EditProps> = ({
     reset,
   } = useEditProject();
 
-  const [showProjectActionsMenu, setShowProjectActionsMenu] = useState(false);
-  const [viewMode, setViewMode] = useState<"split" | "editor" | "preview">("split");
+  // UI state managed by reducer (modals, view mode, sidebar, new item form, etc.)
+  const [ui, dispatch] = useReducer(editorUIReducer, initialUIState);
+
+  // Destructure reducer state for convenient access
+  const { viewMode, sidebarCollapsed, showPropertiesPanel, isRootDragOver,
+    newItemType, newItemName, contextMenuParentNode, fileToDelete, rootContextMenu } = ui;
+  const showProjectActionsMenu = ui.modals.projectActions;
+  const showNewItemModal = ui.modals.newItem;
+  const showLaunchModal = ui.modals.launch;
+  const showDeploymentModal = ui.modals.deployment;
+  const showAIGenerateModal = ui.modals.aiGenerate;
+  const showAIUpdateModal = ui.modals.aiUpdate;
+  const showThemeModal = ui.modals.theme;
+  const showAutoInstallModal = ui.modals.autoInstall;
+  const showDeleteModal = ui.modals.delete;
+
+  // Dispatch helpers matching old setter signatures
+  const setShowProjectActionsMenu = (v: boolean) => dispatch(v ? { type: 'OPEN_MODAL', modal: 'projectActions' } : { type: 'CLOSE_MODAL', modal: 'projectActions' });
+  const setShowLaunchModal = (v: boolean) => dispatch(v ? { type: 'OPEN_MODAL', modal: 'launch' } : { type: 'CLOSE_MODAL', modal: 'launch' });
+  const setShowDeploymentModal = (v: boolean) => dispatch(v ? { type: 'OPEN_MODAL', modal: 'deployment' } : { type: 'CLOSE_MODAL', modal: 'deployment' });
+  const setShowAIGenerateModal = (v: boolean) => dispatch(v ? { type: 'OPEN_MODAL', modal: 'aiGenerate' } : { type: 'CLOSE_MODAL', modal: 'aiGenerate' });
+  const setShowAIUpdateModal = (v: boolean) => dispatch(v ? { type: 'OPEN_MODAL', modal: 'aiUpdate' } : { type: 'CLOSE_MODAL', modal: 'aiUpdate' });
+  const setShowThemeModal = (v: boolean) => dispatch(v ? { type: 'OPEN_MODAL', modal: 'theme' } : { type: 'CLOSE_MODAL', modal: 'theme' });
+  const setShowAutoInstallModal = (v: boolean) => dispatch(v ? { type: 'OPEN_MODAL', modal: 'autoInstall' } : { type: 'CLOSE_MODAL', modal: 'autoInstall' });
+  const setShowDeleteModal = (v: boolean) => dispatch(v ? { type: 'OPEN_MODAL', modal: 'delete' } : { type: 'CLOSE_MODAL', modal: 'delete' });
+  const setViewMode = (mode: EditorUIState['viewMode']) => dispatch({ type: 'SET_VIEW_MODE', mode });
+  const setShowPropertiesPanel = (v: boolean | ((prev: boolean) => boolean)) => {
+    const value = typeof v === 'function' ? v(ui.showPropertiesPanel) : v;
+    dispatch({ type: 'SET_PROPERTIES_PANEL', value });
+  };
+  const setIsRootDragOver = (v: boolean) => dispatch({ type: 'SET_ROOT_DRAG_OVER', value: v });
+  const setNewItemName = (name: string) => dispatch({ type: 'SET_NEW_ITEM_NAME', name });
+  const setFileToDelete = (file: FileTreeNode | null) => dispatch({ type: 'SET_FILE_TO_DELETE', file });
+  const setRootContextMenu = (pos: { x: number; y: number } | null) => dispatch({ type: 'SET_ROOT_CONTEXT_MENU', position: pos });
+
+  // Auto-switch to editor-only mode for non-markdown files
+  useEffect(() => {
+    if (selectedFile && !selectedFile.isDir) {
+      const isMarkdown = selectedFile.name.endsWith('.md') || selectedFile.name.endsWith('.markdown');
+      if (!isMarkdown && viewMode !== 'editor') {
+        setViewMode('editor');
+      }
+    }
+  }, [selectedFile]);
+
+  // Remaining independent states
   const [savingStatus, setSavingStatus] = useState("");
-  const [showNewItemModal, setShowNewItemModal] = useState(false);
-  const [newItemType, setNewItemType] = useState<"file" | "folder">("file");
-  const [newItemName, setNewItemName] = useState("");
   const [isCreating, setIsCreating] = useState(false);
-  const [showLaunchModal, setShowLaunchModal] = useState(false);
-  const [showDeploymentModal, setShowDeploymentModal] = useState(false);
   const [isDeployed, setIsDeployed] = useState(false);
   const [launchConfig, setLaunchConfig] = useState<LaunchConfig | null>(null);
-  const [showAIGenerateModal, setShowAIGenerateModal] = useState(false);
-  const [showAIUpdateModal, setShowAIUpdateModal] = useState(false);
-  const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
-  const [showAutoInstallModal, setShowAutoInstallModal] = useState(false);
-  const [contextMenuParentNode, setContextMenuParentNode] = useState<any>(null);
-  const [isRootDragOver, setIsRootDragOver] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
-  const previousSearchQuery = React.useRef('');
-  const [showDeleteModal, setShowDeleteModal] = useState(false);
-  const [fileToDelete, setFileToDelete] = useState<any>(null);
-  const [showPropertiesPanel, setShowPropertiesPanel] = useState(false);
+  const previousSearchQuery = useRef('');
   const [folderStats, setFolderStats] = useState<{ fileCount: number; folderCount: number; totalSize: number } | null>(null);
   const [loadingStats, setLoadingStats] = useState(false);
-  const [rootContextMenu, setRootContextMenu] = useState<{ x: number; y: number } | null>(null);
   const [cursorPosition, setCursorPosition] = useState({ line: 1, column: 1 });
 
   // Dependency check
@@ -121,13 +249,11 @@ export const Edit: React.FC<EditProps> = ({
   });
 
   // Project path utility - compute once and reuse
-  const projectPath = React.useMemo(() => project?.path || project?.sitePath, [project]);
+  const projectPath = useMemo(() => project?.path || project?.sitePath, [project]);
 
   // Helper to close new item modal and reset state
   const closeNewItemModal = () => {
-    setShowNewItemModal(false);
-    setNewItemName('');
-    setContextMenuParentNode(null);
+    dispatch({ type: 'CLOSE_NEW_ITEM_MODAL' });
   };
 
   // Load project from localStorage when component mounts or becomes visible
@@ -162,7 +288,7 @@ export const Edit: React.FC<EditProps> = ({
     }
   };
 
-  const handleDeleteFile = async (file: any) => {
+  const handleDeleteFile = async (file: FileTreeNode) => {
     setFileToDelete(file);
     setShowDeleteModal(true);
   };
@@ -175,19 +301,15 @@ export const Edit: React.FC<EditProps> = ({
     setFileToDelete(null);
   };
 
-  const handleNewFileFromContext = (parentNode: any) => {
-    setContextMenuParentNode(parentNode);
-    setNewItemType("file");
-    setShowNewItemModal(true);
+  const handleNewFileFromContext = (parentNode: FileTreeNode) => {
+    dispatch({ type: 'SET_NEW_ITEM', itemType: 'file', parentNode });
   };
 
-  const handleNewFolderFromContext = (parentNode: any) => {
-    setContextMenuParentNode(parentNode);
-    setNewItemType("folder");
-    setShowNewItemModal(true);
+  const handleNewFolderFromContext = (parentNode: FileTreeNode) => {
+    dispatch({ type: 'SET_NEW_ITEM', itemType: 'folder', parentNode });
   };
 
-  const handleRename = async (node: any, newName: string) => {
+  const handleRename = async (node: FileTreeNode, newName: string) => {
     const result = await renameFile(node, newName);
     if (result.success && onStatusChange) {
       onStatusChange({
@@ -245,7 +367,7 @@ export const Edit: React.FC<EditProps> = ({
     }
   };
 
-  const handlePaste = async (targetFolder: any) => {
+  const handlePaste = async (targetFolder: FileTreeNode) => {
     const result = await pasteFromClipboard(targetFolder);
     if (result.success && onStatusChange) {
       const itemType = clipboard?.node.isDir ? 'Folder' : 'File';
@@ -262,7 +384,7 @@ export const Edit: React.FC<EditProps> = ({
     }
   };
 
-  const handleDuplicate = async (node: any) => {
+  const handleDuplicate = async (node: FileTreeNode) => {
     if (!node) return;
 
     try {
@@ -304,7 +426,7 @@ export const Edit: React.FC<EditProps> = ({
     }
   };
 
-  const checkDepth = async (node: any): Promise<boolean> => {
+  const checkDepth = async (node: FileTreeNode): Promise<boolean> => {
     if (!node || !node.isDir) return false;
 
     try {
@@ -342,7 +464,7 @@ export const Edit: React.FC<EditProps> = ({
         const result = await ListFiles(dirPath);
         if (!result || !result.files) return [];
 
-        const children: any[] = [];
+        const children: FileTreeNode[] = [];
         for (const file of result.files) {
           if (file.isDir) {
             const subChildren = await loadAllChildren(file.path);
@@ -374,7 +496,7 @@ export const Edit: React.FC<EditProps> = ({
         const result = await ListFiles(dirPath);
         if (!result || !result.files) return [];
 
-        const matches: any[] = [];
+        const matches: FileTreeNode[] = [];
 
         for (const file of result.files) {
           const nameMatches = file.name.toLowerCase().includes(lowerQuery);
@@ -418,7 +540,7 @@ export const Edit: React.FC<EditProps> = ({
     return { results: searchResults, foldersToExpand };
   };
 
-  const [searchResults, setSearchResults] = useState<any[]>([]);
+  const [searchResults, setSearchResults] = useState<FileTreeNode[]>([]);
   const [searchFolders, setSearchFolders] = useState<Set<string>>(new Set());
   const [isSearching, setIsSearching] = useState(false);
 
@@ -503,7 +625,7 @@ export const Edit: React.FC<EditProps> = ({
       // Don't handle shortcuts when typing in input fields (except for Escape)
       if (isInputField && e.key !== 'Escape') return;
 
-      const isMac = navigator.platform.toUpperCase().indexOf('MAC') >= 0;
+      const isMac = /mac/i.test(navigator.userAgent);
       const cmdOrCtrl = isMac ? e.metaKey : e.ctrlKey;
 
       // Ctrl/Cmd+C: Copy
@@ -654,7 +776,7 @@ export const Edit: React.FC<EditProps> = ({
 
         // Then serve
         onStatusChange?.({ type: 'info', message: 'Starting server...' });
-        const { Serve, GetServerURL, OpenInBrowser } = await import('../../wailsjs/go/main/App');
+        const { Serve } = await import('../../wailsjs/go/main/App');
         await Serve({
           sitePath: projectPath,
           port: 1313,
@@ -664,23 +786,19 @@ export const Edit: React.FC<EditProps> = ({
         });
         setServerRunning(true);
 
-        // Get URL and open browser
-        setTimeout(async () => {
-          try {
-            const url = await GetServerURL();
-            if (url) {
-              await OpenInBrowser(url);
-              onStatusChange?.({
-                type: 'success',
-                message: `Server running: ${url}`,
-              });
-            }
-          } catch (err) {
-            console.error('Failed to get server URL:', err);
-          }
-        }, 1500);
+        const url = 'http://localhost:1313';
+        onStatusChange?.({
+          type: 'success',
+          message: `Server running: ${url}`,
+        });
+
+        // Open browser after Hugo has time to start listening
+        const { BrowserOpenURL } = await import('../../wailsjs/runtime/runtime');
+        setTimeout(() => {
+          BrowserOpenURL(url);
+        }, 2000);
       }
-    } catch (err: any) {
+    } catch (err) {
       onStatusChange?.({
         type: 'error',
         message: `Server error: ${err?.toString() || 'Unknown error'}`,
@@ -698,7 +816,7 @@ export const Edit: React.FC<EditProps> = ({
     try {
       const { OpenInFinder } = await import('../../wailsjs/go/main/App');
       await OpenInFinder(projectPath);
-    } catch (err: any) {
+    } catch (err) {
       onStatusChange?.({
         type: 'error',
         message: `Failed to open: ${err?.toString()}`,
@@ -715,9 +833,56 @@ export const Edit: React.FC<EditProps> = ({
     }
 
     try {
+      // Check if this is an update (project already deployed)
+      if (isDeployed && project?.id) {
+        // Use UpdateSite for existing deployments
+        const { UpdateSite } = await import('../../wailsjs/go/main/App');
+
+        const result = await UpdateSite({
+          projectId: project.id,
+          epochs: params.epochs,
+        });
+
+        // Build logs from UpdateSite result
+        const logs: string[] = result.logs || [];
+
+        if (result.success && result.objectId) {
+          // Refresh projects list
+          if (onProjectUpdate) {
+            await onProjectUpdate();
+          }
+
+          logs.push("");
+          logs.push("═══════════════════════════════════════");
+          logs.push(`📋 Site Object ID: ${result.objectId}`);
+          if (result.gasFee) {
+            logs.push(`💰 Gas Fee: ${result.gasFee}`);
+          }
+          logs.push("═══════════════════════════════════════");
+
+          return {
+            success: true,
+            objectId: result.objectId,
+            logs,
+          };
+        } else {
+          logs.push("");
+          logs.push("❌ Update failed");
+          if (result.error) {
+            logs.push(`Error: ${result.error}`);
+          }
+
+          return {
+            success: false,
+            error: result.error || "Update failed",
+            logs,
+          };
+        }
+      }
+
+      // New deployment - use LaunchWizard
       const { LaunchWizard } = await import('../../wailsjs/go/main/App');
 
-      // Call the actual LaunchWizard API
       const result = await LaunchWizard({
         sitePath: projectPath,
         network: params.network,
@@ -731,11 +896,11 @@ export const Edit: React.FC<EditProps> = ({
 
       // Build comprehensive logs from steps
       const logs: string[] = [];
-      
+
       if (result.steps && result.steps.length > 0) {
         logs.push("📊 Deployment Progress:");
         logs.push("");
-        
+
         result.steps.forEach((step, idx) => {
           if (step.status === "success") {
             logs.push(`✓ [${idx + 1}/${result.steps.length}] ${step.name}`);
@@ -746,7 +911,7 @@ export const Edit: React.FC<EditProps> = ({
           } else {
             logs.push(`  [${idx + 1}/${result.steps.length}] ${step.name}`);
           }
-          
+
           if (step.message) {
             // Split multi-line messages
             const messages = step.message.split('\n');
@@ -756,11 +921,11 @@ export const Edit: React.FC<EditProps> = ({
               }
             });
           }
-          
+
           if (step.error) {
             logs.push(`    ⚠️  Error: ${step.error}`);
           }
-          
+
           logs.push("");
         });
       }
@@ -768,18 +933,18 @@ export const Edit: React.FC<EditProps> = ({
       if (result.success && result.objectId) {
         // Update project state
         setIsDeployed(true);
-        
+
         // Refresh projects list
         if (onProjectUpdate) {
           await onProjectUpdate();
         }
-        
+
         logs.push("═══════════════════════════════════════");
         logs.push(`📋 Site Object ID: ${result.objectId}`);
         logs.push("═══════════════════════════════════════");
         logs.push("");
         logs.push("✅ Deployment completed successfully!");
-        
+
         return {
           success: true,
           objectId: result.objectId,
@@ -790,7 +955,7 @@ export const Edit: React.FC<EditProps> = ({
         if (result.error) {
           logs.push(`Error: ${result.error}`);
         }
-        
+
         return {
           success: false,
           error: result.error || "Deployment failed",
@@ -812,13 +977,7 @@ export const Edit: React.FC<EditProps> = ({
     return validSlug.test(slug) && slug.length > 0 && slug.length < 100;
   };
 
-  const formatFileSize = (bytes: number | undefined): string => {
-    if (bytes === undefined || bytes === 0) return '0 B';
-    const k = 1024;
-    const sizes = ['B', 'KB', 'MB', 'GB'];
-    const i = Math.floor(Math.log(bytes) / Math.log(k));
-    return Math.round((bytes / Math.pow(k, i)) * 100) / 100 + ' ' + sizes[i];
-  };
+
 
   const formatDate = (timestamp: number | undefined): string => {
     if (!timestamp) return 'Unknown';
@@ -1037,7 +1196,7 @@ Start writing your content here...
                 <div className="relative">
                   <button
                     onClick={() =>
-                      setShowProjectActionsMenu(!showProjectActionsMenu)
+                      dispatch({ type: 'TOGGLE_MODAL', modal: 'projectActions' })
                     }
                     className="p-2 bg-white/5 hover:bg-white/10 text-zinc-400 hover:text-white border border-white/10 rounded-sm transition-all"
                   >
@@ -1070,8 +1229,7 @@ Start writing your content here...
                         </button>
                         <button
                           onClick={() => {
-                            setNewItemType("file");
-                            setShowNewItemModal(true);
+                            dispatch({ type: 'SET_NEW_ITEM', itemType: 'file' });
                             setShowProjectActionsMenu(false);
                           }}
                           className="w-full px-4 py-2.5 text-left text-xs font-mono text-zinc-300 hover:bg-white/5 hover:text-white transition-all flex items-center gap-3 border-t border-white/5"
@@ -1081,8 +1239,7 @@ Start writing your content here...
                         </button>
                         <button
                           onClick={() => {
-                            setNewItemType("folder");
-                            setShowNewItemModal(true);
+                            dispatch({ type: 'SET_NEW_ITEM', itemType: 'folder' });
                             setShowProjectActionsMenu(false);
                           }}
                           className="w-full px-4 py-2.5 text-left text-xs font-mono text-zinc-300 hover:bg-white/5 hover:text-white transition-all flex items-center gap-3 border-t border-white/5"
@@ -1114,13 +1271,23 @@ Start writing your content here...
                           }}
                           className={cn(
                             "w-full px-4 py-2.5 text-left text-xs font-mono transition-all flex items-center gap-3 border-t border-white/5",
-                            aiConfigured 
-                              ? "text-purple-400 hover:bg-purple-500/10" 
+                            aiConfigured
+                              ? "text-purple-400 hover:bg-purple-500/10"
                               : "text-zinc-600 hover:bg-zinc-800/50"
                           )}
                         >
                           <Sparkles size={14} />
                           AI Generate
+                        </button>
+                        <button
+                          onClick={() => {
+                            setShowThemeModal(true);
+                            setShowProjectActionsMenu(false);
+                          }}
+                          className="w-full px-4 py-2.5 text-left text-xs font-mono text-pink-400 hover:bg-pink-500/10 transition-all flex items-center gap-3 border-t border-white/5"
+                        >
+                          <Palette size={14} />
+                          Change Theme
                         </button>
                         <button
                           onClick={() => {
@@ -1184,7 +1351,7 @@ Start writing your content here...
             {project ? (
               filteredFiles.length > 0 ? (
                 <>
-                  {filteredFiles.map((node: any) => (
+                  {filteredFiles.map((node: FileTreeNode) => (
                     <TreeNode
                       key={node.path}
                       node={node}
@@ -1259,15 +1426,11 @@ Start writing your content here...
               }}
               onClose={() => setRootContextMenu(null)}
               onNewFile={(node) => {
-                setContextMenuParentNode(node);
-                setNewItemType('file');
-                setShowNewItemModal(true);
+                dispatch({ type: 'SET_NEW_ITEM', itemType: 'file', parentNode: node });
                 setRootContextMenu(null);
               }}
               onNewFolder={(node) => {
-                setContextMenuParentNode(node);
-                setNewItemType('folder');
-                setShowNewItemModal(true);
+                dispatch({ type: 'SET_NEW_ITEM', itemType: 'folder', parentNode: node });
                 setRootContextMenu(null);
               }}
               hasClipboard={!!clipboard}
@@ -1383,7 +1546,7 @@ Start writing your content here...
         {/* Collapse Button - Outside card, at the edge */}
         {!sidebarCollapsed && (
           <button
-            onClick={() => setSidebarCollapsed(true)}
+            onClick={() => dispatch({ type: 'TOGGLE_SIDEBAR' })}
             className="absolute -right-3.5 top-1/2 -translate-y-1/2 z-50 w-7 h-16 bg-zinc-800/95 hover:bg-zinc-700 border border-white/10 rounded-lg flex items-center justify-center transition-all shadow-xl opacity-0 group-hover:opacity-100"
             style={{ 
               backdropFilter: 'blur(8px)',
@@ -1399,7 +1562,7 @@ Start writing your content here...
       {/* Expand Button - Shows when sidebar is collapsed */}
       {sidebarCollapsed && (
         <button
-          onClick={() => setSidebarCollapsed(false)}
+          onClick={() => dispatch({ type: 'TOGGLE_SIDEBAR' })}
           className="absolute left-3 top-1/2 -translate-y-1/2 z-40 w-7 h-16 bg-zinc-800/95 hover:bg-zinc-700 border border-white/10 rounded-lg flex items-center justify-center transition-all shadow-xl hover:w-9"
           style={{ 
             backdropFilter: 'blur(8px)',
@@ -1814,6 +1977,7 @@ Start writing your content here...
         network={project?.network}
         currentObjectId={project?.objectId}
         deployedWallet={project?.wallet}
+        currentEpochs={project?.epochs}
         onClose={() => {
           setShowDeploymentModal(false);
           setLaunchConfig(null);
@@ -1866,6 +2030,22 @@ Start writing your content here...
             await onRefreshHealth();
           }
         }}
+      />
+
+      {/* Theme Modal */}
+      <ThemeModal
+        isOpen={showThemeModal}
+        onClose={() => setShowThemeModal(false)}
+        sitePath={projectPath || ""}
+        onSuccess={(themeName) => {
+          if (onStatusChange) {
+            onStatusChange({
+              type: 'success',
+              message: `Theme '${themeName}' installed. Run Build to apply changes.`
+            });
+          }
+        }}
+        onStatusChange={onStatusChange}
       />
 
       {/* Delete Confirmation Modal */}
@@ -2004,7 +2184,7 @@ Start writing your content here...
                           'Unknown'
                         )
                       ) : (
-                        formatFileSize(selectedFile.size)
+                        formatFileSize(selectedFile.size ?? 0)
                       )}
                     </p>
                   </div>

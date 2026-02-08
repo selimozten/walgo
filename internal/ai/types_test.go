@@ -11,12 +11,14 @@ func TestSiteType_IsValid(t *testing.T) {
 		expected bool
 	}{
 		{SiteTypeBlog, true},
-		{SiteTypePortfolio, true},
 		{SiteTypeDocs, true},
-		{SiteTypeBusiness, true},
+		{SiteTypeBiolink, true},
+		{SiteTypeWhitepaper, true},
 		{SiteType("invalid"), false},
 		{SiteType(""), false},
 		{SiteType("BLOG"), false}, // Case sensitive
+		{SiteType("portfolio"), false},
+		{SiteType("business"), false},
 	}
 
 	for _, tt := range tests {
@@ -37,10 +39,10 @@ func TestValidSiteTypes(t *testing.T) {
 	}
 
 	expectedTypes := map[SiteType]bool{
-		SiteTypeBlog:      true,
-		SiteTypePortfolio: true,
-		SiteTypeDocs:      true,
-		SiteTypeBusiness:  true,
+		SiteTypeBlog:       true,
+		SiteTypeDocs:       true,
+		SiteTypeBiolink:    true,
+		SiteTypeWhitepaper: true,
 	}
 
 	for _, st := range types {
@@ -281,15 +283,16 @@ func TestDefaultPipelineConfig(t *testing.T) {
 }
 
 func TestMinimumPageSet(t *testing.T) {
+	// Only homepage is required — AI decides all other pages
 	tests := []struct {
 		siteType SiteType
 		minPages int
 	}{
-		{SiteTypeBlog, 6},
-		{SiteTypePortfolio, 8},
-		{SiteTypeDocs, 8},
-		{SiteTypeBusiness, 8},
-		{SiteType("unknown"), 3}, // Default
+		{SiteTypeBlog, 1},
+		{SiteTypeDocs, 1},
+		{SiteTypeBiolink, 1},
+		{SiteTypeWhitepaper, 1},
+		{SiteType("unknown"), 1},
 	}
 
 	for _, tt := range tests {
@@ -303,15 +306,16 @@ func TestMinimumPageSet(t *testing.T) {
 }
 
 func TestMinimumPageCount(t *testing.T) {
+	// Only homepage is required — AI decides all other pages
 	tests := []struct {
 		siteType SiteType
 		expected int
 	}{
-		{SiteTypeBlog, 6},
-		{SiteTypePortfolio, 8},
-		{SiteTypeDocs, 8},
-		{SiteTypeBusiness, 8},
-		{SiteType("unknown"), 3},
+		{SiteTypeBlog, 1},
+		{SiteTypeDocs, 1},
+		{SiteTypeBiolink, 1},
+		{SiteTypeWhitepaper, 1},
+		{SiteType("unknown"), 1},
 	}
 
 	for _, tt := range tests {
@@ -324,110 +328,22 @@ func TestMinimumPageCount(t *testing.T) {
 	}
 }
 
-func TestMinimumPageSet_BlogNewPages(t *testing.T) {
-	blogPages := MinimumPageSet(SiteTypeBlog)
-	requiredBlogPaths := []string{
-		"content/_index.md",
-		"content/about.md",
-		"content/contact.md",
-		"content/posts/welcome/index.md",
-		"content/posts/getting-started/index.md",
-		"content/posts/latest-insights/index.md",
-		"content/posts/case-study/index.md",
-	}
+func TestMinimumPageSet_EssentialPages(t *testing.T) {
+	// Only homepage is strictly required — AI decides the rest
+	siteTypes := []SiteType{SiteTypeBlog, SiteTypeDocs, SiteTypeBiolink, SiteTypeWhitepaper}
 
-	for _, path := range requiredBlogPaths {
-		found := false
-		for _, p := range blogPages {
-			if p == path {
-				found = true
-				break
+	for _, siteType := range siteTypes {
+		t.Run(string(siteType), func(t *testing.T) {
+			pages := MinimumPageSet(siteType)
+
+			if len(pages) != 1 {
+				t.Errorf("%s: expected 1 page, got %d", siteType, len(pages))
 			}
-		}
-		if !found {
-			t.Errorf("blog should include %s", path)
-		}
-	}
-}
 
-func TestMinimumPageSet_PortfolioNewPages(t *testing.T) {
-	portfolioPages := MinimumPageSet(SiteTypePortfolio)
-	requiredPortfolioPaths := []string{
-		"content/_index.md",
-		"content/about.md",
-		"content/contact.md",
-		"content/projects/_index.md",
-		"content/projects/project-1.md",
-		"content/projects/project-2.md",
-		"content/projects/featured-work.md",
-		"content/projects/tech-stack.md",
-	}
-
-	for _, path := range requiredPortfolioPaths {
-		found := false
-		for _, p := range portfolioPages {
-			if p == path {
-				found = true
-				break
+			if pages[0] != "content/_index.md" {
+				t.Errorf("%s: expected content/_index.md, got %s", siteType, pages[0])
 			}
-		}
-		if !found {
-			t.Errorf("portfolio should include %s", path)
-		}
-	}
-}
-
-func TestMinimumPageSet_BusinessNewPages(t *testing.T) {
-	businessPages := MinimumPageSet(SiteTypeBusiness)
-	requiredBusinessPaths := []string{
-		"content/_index.md",
-		"content/about.md",
-		"content/contact.md",
-		"content/services/_index.md",
-		"content/services/service-1.md",
-		"content/services/service-2.md",
-		"content/case-studies/index.md",
-		"content/testimonials/index.md",
-	}
-
-	for _, path := range requiredBusinessPaths {
-		found := false
-		for _, p := range businessPages {
-			if p == path {
-				found = true
-				break
-			}
-		}
-		if !found {
-			t.Errorf("business should include %s", path)
-		}
-	}
-}
-
-func TestMinimumPageSet_DocsNewPages(t *testing.T) {
-	docsPages := MinimumPageSet(SiteTypeDocs)
-	requiredDocsPaths := []string{
-		"content/_index.md",
-		"content/docs/_index.md",
-		"content/docs/intro/index.md",
-		"content/docs/install/index.md",
-		"content/docs/usage/index.md",
-		"content/docs/faq/index.md",
-		"content/docs/quick-start/index.md",
-		"content/docs/best-practices/index.md",
-	}
-
-	for _, path := range requiredDocsPaths {
-		found := false
-		for _, p := range docsPages {
-			if p == path {
-				found = true
-				break
-			}
-		}
-		if !found {
-			t.Errorf("docs should include %s", path)
-		}
+		})
 	}
 }
 
@@ -435,12 +351,13 @@ func TestGetDefaultTheme(t *testing.T) {
 	tests := []struct {
 		siteType     SiteType
 		expectedName string
+		hasRepoURL   bool
 	}{
-		{SiteTypeBlog, "Ananke"},
-		{SiteTypePortfolio, "Ananke"},
-		{SiteTypeDocs, "Book"},
-		{SiteTypeBusiness, "Ananke"},
-		{SiteType("unknown"), "Ananke"}, // Defaults to blog theme
+		{SiteTypeBlog, "Ananke", true},
+		{SiteTypeDocs, "Book", true},
+		{SiteTypeBiolink, "Walgo Biolink", true},
+		{SiteTypeWhitepaper, "Walgo Whitepaper", true},
+		{SiteType("unknown"), "Ananke", true}, // Defaults to blog theme
 	}
 
 	for _, tt := range tests {
@@ -448,6 +365,9 @@ func TestGetDefaultTheme(t *testing.T) {
 			theme := GetDefaultTheme(tt.siteType)
 			if theme.Name != tt.expectedName {
 				t.Errorf("GetDefaultTheme(%s).Name = %s, want %s", tt.siteType, theme.Name, tt.expectedName)
+			}
+			if tt.hasRepoURL && theme.RepoURL == "" {
+				t.Errorf("GetDefaultTheme(%s).RepoURL is empty, want non-empty", tt.siteType)
 			}
 		})
 	}
@@ -475,7 +395,7 @@ func TestGetThemeDirName(t *testing.T) {
 
 func TestDefaultThemes(t *testing.T) {
 	// Verify all required site types have themes
-	requiredTypes := []SiteType{SiteTypeBlog, SiteTypePortfolio, SiteTypeDocs, SiteTypeBusiness}
+	requiredTypes := []SiteType{SiteTypeBlog, SiteTypeDocs, SiteTypeBiolink, SiteTypeWhitepaper}
 
 	for _, st := range requiredTypes {
 		theme, exists := DefaultThemes[st]
@@ -485,9 +405,6 @@ func TestDefaultThemes(t *testing.T) {
 		}
 		if theme.Name == "" {
 			t.Errorf("DefaultThemes[%s].Name is empty", st)
-		}
-		if theme.RepoURL == "" {
-			t.Errorf("DefaultThemes[%s].RepoURL is empty", st)
 		}
 		if theme.License == "" {
 			t.Errorf("DefaultThemes[%s].License is empty", st)
@@ -587,13 +504,13 @@ func TestSiteTypeConstants(t *testing.T) {
 	if SiteTypeBlog != "blog" {
 		t.Errorf("expected SiteTypeBlog = 'blog', got %s", SiteTypeBlog)
 	}
-	if SiteTypePortfolio != "portfolio" {
-		t.Errorf("expected SiteTypePortfolio = 'portfolio', got %s", SiteTypePortfolio)
-	}
 	if SiteTypeDocs != "docs" {
 		t.Errorf("expected SiteTypeDocs = 'docs', got %s", SiteTypeDocs)
 	}
-	if SiteTypeBusiness != "business" {
-		t.Errorf("expected SiteTypeBusiness = 'business', got %s", SiteTypeBusiness)
+	if SiteTypeBiolink != "biolink" {
+		t.Errorf("expected SiteTypeBiolink = 'biolink', got %s", SiteTypeBiolink)
+	}
+	if SiteTypeWhitepaper != "whitepaper" {
+		t.Errorf("expected SiteTypeWhitepaper = 'whitepaper', got %s", SiteTypeWhitepaper)
 	}
 }

@@ -11,8 +11,6 @@ import (
 )
 
 // Planner manages the planning phase of the AI content generation pipeline.
-
-// Planner manages the planning phase of the AI content generation pipeline.
 type Planner struct {
 	client *Client
 	config PipelineConfig
@@ -33,9 +31,18 @@ func (p *Planner) Plan(ctx context.Context, input *PlannerInput) (*SitePlan, err
 		return nil, NewPlannerError(input, err, "invalid input")
 	}
 
-	// Build the prompt
+	// Build the prompt with dynamic theme analysis if sitePath is available
 	systemPrompt := SystemPromptSitePlanner
-	userPrompt := BuildSitePlannerPrompt(input.SiteName, string(input.SiteType), input.Description, input.Audience, input.Tone, input.BaseURL)
+	userPrompt := BuildSitePlannerPromptWithTheme(
+		input.SiteName,
+		string(input.SiteType),
+		input.Description,
+		input.Audience,
+		input.Tone,
+		input.BaseURL,
+		input.SitePath,
+		input.Theme,
+	)
 
 	// Apply timeout
 	if p.config.PlannerTimeout > 0 {
@@ -145,6 +152,7 @@ func (p *Planner) convertAIPlanToSitePlan(aiPlan *AIPlanResponse, input *Planner
 		Description: input.Description,
 		Audience:    input.Audience,
 		Theme:       input.Theme,
+		SitePath:    input.SitePath, // For dynamic theme analysis during generation
 		BaseURL:     input.BaseURL,
 		Tone:        input.Tone,
 		Status:      PlanStatusPending,
@@ -319,35 +327,26 @@ func (p *Planner) validatePlan(plan *SitePlan) error {
 	}
 
 	// Verify section index files exist for multi-page sections
-	sectionsNeedingIndex := map[string][]string{
-		"posts":    {},
-		"docs":     {},
-		"services": {},
-		"projects": {},
-	}
+	sectionPageCount := map[string]int{}
+	sectionHasIndex := map[string]bool{}
 
-	for section, sectionPages := range sectionsNeedingIndex {
-		hasSection := false
-		for _, page := range plan.Pages {
-			if strings.HasPrefix(strings.ToLower(page.Path), "content/"+section+"/") {
-				hasSection = true
-				break
-			}
-		}
-
-		if hasSection && len(sectionPages) > 0 {
-			hasIndex := false
-			for _, page := range plan.Pages {
-				indexPath := fmt.Sprintf("content/%s/_index.md", section)
-				if strings.ToLower(page.Path) == indexPath {
-					hasIndex = true
-					break
+	for _, page := range plan.Pages {
+		lower := strings.ToLower(page.Path)
+		for _, section := range []string{"posts", "docs", "services", "projects"} {
+			prefix := "content/" + section + "/"
+			if strings.HasPrefix(lower, prefix) {
+				sectionPageCount[section]++
+				if strings.HasSuffix(lower, "/_index.md") {
+					sectionHasIndex[section] = true
 				}
 			}
-			if !hasIndex {
-				return NewValidationError("pages", nil,
-					fmt.Sprintf("section '%s' has multiple pages but missing section index file (content/%s/_index.md)", section, section))
-			}
+		}
+	}
+
+	for section, count := range sectionPageCount {
+		if count > 1 && !sectionHasIndex[section] {
+			return NewValidationError("pages", nil,
+				fmt.Sprintf("section '%s' has %d pages but missing section index file (content/%s/_index.md)", section, count, section))
 		}
 	}
 

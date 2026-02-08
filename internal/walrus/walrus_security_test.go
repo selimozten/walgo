@@ -47,8 +47,9 @@ func TestObjectIDValidation(t *testing.T) {
 		objectID string
 		wantErr  bool
 	}{
-		{"valid hex with 0x", "0x1234567890abcdef", false},
-		{"valid hex without 0x", "1234567890ABCDEF", false},
+		{"valid hex with 0x", "0xe674c144119a37a0ed9cef26a962c3fdfbdbfd86a3b3db562ee81d5542a4eccf", false},
+		{"valid hex without 0x", "e674c144119a37a0ed9cef26a962c3fdfbdbfd86a3b3db562ee81d5542a4eccf", false},
+		{"too short hex", "0x1234567890abcdef", true},
 		{"empty", "", true},
 		{"command injection", "; rm -rf /", true},
 		{"path traversal", "../../../etc/passwd", true},

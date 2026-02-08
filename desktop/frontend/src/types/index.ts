@@ -11,9 +11,11 @@ export interface DeploymentHistory {
     timestamp: string;
     objectId: string;
     network: string;
+    epochs?: number;
     size?: number;
     status: 'success' | 'failed';
     wallet?: string;
+    gasFee?: string; // Actual gas cost (e.g., "0.001234 WAL + 0.061646 SUI")
 }
 
 export interface Project {
@@ -28,8 +30,15 @@ export interface Project {
     status?: 'draft' | 'active' | 'archived' | string;
     network?: 'mainnet' | 'testnet' | string;
     objectId?: string;
+    epochs?: number; // Last deployment epochs
+    totalEpochs?: number; // Sum of all deployment epochs (for accurate expiry)
+    expiresAt?: string; // Calculated expiry date (RFC3339)
+    expiresIn?: string; // Human-readable expiry duration (e.g., "2 weeks, 3 days")
+    gasFee?: string; // Actual gas cost from last deployment (e.g., "0.001234 WAL + 0.061646 SUI")
     deployments?: number;
     lastDeploy?: string;
+    lastDeployAt?: string; // From API
+    firstDeployAt?: string; // First deployment date (for accurate expiry)
     updatedAt?: string;
     createdAt?: string;
     lastModified?: string;
@@ -104,17 +113,4 @@ export interface SiteType {
     description: string;
 }
 
-export interface ContentFileType {
-    value: string;
-    label: string;
-    description: string;
-}
-
-export interface EditViewMode {
-    mode: 'split' | 'editor' | 'preview';
-}
-
-export interface AIMode {
-    mode: 'generate' | 'update';
-}
 

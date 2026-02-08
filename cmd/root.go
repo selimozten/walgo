@@ -1,12 +1,28 @@
 package cmd
 
 import (
+	"bufio"
 	"fmt"
+	"io"
 	"os"
+	"strings"
 
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
 )
+
+// readLine reads a line from the reader, trimming whitespace.
+// Returns an error if stdin is closed or broken.
+func readLine(reader *bufio.Reader) (string, error) {
+	line, err := reader.ReadString('\n')
+	if err != nil && err != io.EOF {
+		return "", fmt.Errorf("failed to read input: %w", err)
+	}
+	if err == io.EOF && line == "" {
+		return "", io.EOF
+	}
+	return strings.TrimSpace(line), nil
+}
 
 var cfgFile string
 

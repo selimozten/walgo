@@ -1,0 +1,146 @@
+baseURL = "/"
+title = "{{SITE_NAME}}"
+languageCode = "en-us"
+theme = "walgo-whitepaper"
+
+canonifyURLs = false
+relativeURLs = false
+enableRobotsTXT = true
+
+# Whitepaper is a single document — disable unneeded features
+disableKinds = ["taxonomy", "term", "RSS"]
+
+[pagination]
+  pagerSize = 1000
+
+[outputs]
+  home = ["HTML"]
+  section = ["HTML"]
+  page = ["HTML"]
+
+[minify]
+  disableXML = true
+  minifyOutput = true
+  # ⚠ Do NOT enable CSS minification — Hugo's minifier (tdewolff/minify) breaks
+  # var() spacing in multi-value properties (e.g. "var(--x) 1fr" → "var(--x)1fr").
+  # The walgo optimizer handles CSS minification correctly.
+  disableCSS = true
+
+[markup]
+  [markup.goldmark.renderer]
+    unsafe = false
+  [markup.highlight]
+    noClasses = false
+    lineNos = true
+    guessSyntax = true
+    style = "github-dark"
+  [markup.tableOfContents]
+    startLevel = 2
+    endLevel = 4
+
+[build]
+  useResourceCacheWhen = "fallback"
+
+# =============================================================================
+# Theme Parameters — all fields are optional with sensible defaults
+# =============================================================================
+[params]
+  # --- Identity ---
+  projectName = "{{SITE_NAME}}"
+  tagline = ""
+  logo = "/favicon.svg"               # Header logo (small, top-left)
+  favicon = "/favicon.svg"
+
+  # --- Document info ---
+  version = "1.0.0"
+  date = ""
+  authors = []
+  license = ""
+
+  # --- Cover page ---
+  # coverLogo = "/images/cover-logo.png"   # Cover page logo (large, center) — falls back to logo
+  # coverLogoHeight = "120px"              # Cover logo max-height (default: 80px)
+  ctaText = "Read Whitepaper"
+  abstractTitle = "Abstract"
+
+  # --- Appearance ---
+  defaultTheme = "dark"
+  accentColor = "#7C5CFC"
+  customFonts = true
+  fontFamily = "Inter"
+  monoFont = "JetBrains Mono"
+
+  # --- Feature toggles ---
+  showReadingTime = true
+  showLastUpdated = true
+  showSectionNumbers = true
+  showProgressBar = true
+  showFullDocumentView = true
+
+  # --- Social links (optional — uncomment to use) ---
+  # github   = "https://github.com/username/project"
+  # website  = "https://example.com"
+  # twitter  = "https://x.com/username"
+  # discord  = "https://discord.gg/yourserver"
+  # telegram = "https://t.me/yourchannel"
+
+# =============================================================================
+# PDF download (header button, optional)
+# =============================================================================
+# [params.pdf]
+#   enabled = true
+#   url = "/whitepaper.pdf"
+
+# =============================================================================
+# Contract Addresses (footer, with copy button + optional explorer link)
+# =============================================================================
+# [params.contracts.sui]
+#   label = "Sui"
+#   address = "0x1234...abcd"
+#   explorer = "https://suiscan.xyz/mainnet/object/"
+# [params.contracts.ethereum]
+#   label = "ETH"
+#   address = "0xabcd...1234"
+#   explorer = "https://etherscan.io/address/"
+
+# =============================================================================
+# Menu (sidebar navigation)
+# Weights control the order. URLs must match content paths in content/whitepaper/.
+# =============================================================================
+[menu]
+  [[menu.whitepaper]]
+    name = "Abstract"
+    url = "/whitepaper/01-abstract/"
+    weight = 1
+  [[menu.whitepaper]]
+    name = "Introduction"
+    url = "/whitepaper/02-introduction/"
+    weight = 2
+  [[menu.whitepaper]]
+    name = "Problem"
+    url = "/whitepaper/03-problem/"
+    weight = 3
+  [[menu.whitepaper]]
+    name = "Solution"
+    url = "/whitepaper/04-solution/"
+    weight = 4
+  [[menu.whitepaper]]
+    name = "Architecture"
+    url = "/whitepaper/05-architecture/"
+    weight = 5
+  [[menu.whitepaper]]
+    name = "Tokenomics"
+    url = "/whitepaper/06-tokenomics/"
+    weight = 6
+  [[menu.whitepaper]]
+    name = "Roadmap"
+    url = "/whitepaper/07-roadmap/"
+    weight = 7
+  [[menu.whitepaper]]
+    name = "Conclusion"
+    url = "/whitepaper/08-conclusion/"
+    weight = 8
+  [[menu.whitepaper]]
+    name = "References"
+    url = "/whitepaper/09-references/"
+    weight = 9

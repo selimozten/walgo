@@ -191,8 +191,11 @@ func GetIcon(name string) string {
 }
 
 // ReadLine reads a line of input from the reader and returns the trimmed result.
-// Returns an error if reading fails (e.g., EOF, I/O error).
+// Returns an error if reading fails (e.g., EOF, I/O error) or if reader is nil.
 func ReadLine(reader *bufio.Reader) (string, error) {
+	if reader == nil {
+		return "", fmt.Errorf("reader is nil")
+	}
 	input, err := reader.ReadString('\n')
 	if err != nil && err != io.EOF {
 		return "", fmt.Errorf("failed to read input: %w", err)

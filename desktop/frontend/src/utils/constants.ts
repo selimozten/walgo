@@ -1,4 +1,4 @@
-import { SiteType, ContentFileType } from '../types';
+import { SiteType } from '../types';
 
 // Animation variants for Framer Motion
 export const containerVariants = {
@@ -40,31 +40,12 @@ export const iconButtonVariants = {
     }
 };
 
-// Card animation variants (for clickable cards)
-export const cardVariants = {
-    hover: { 
-        scale: 1.01,
-        y: -2,
-        transition: { duration: 0.2 }
-    },
-    tap: { 
-        scale: 0.99,
-        y: 0,
-        transition: { duration: 0.1 }
-    }
-};
-
 // Site types for AI creation
 export const SITE_TYPES: SiteType[] = [
     {
         value: 'blog',
         label: 'Blog',
         description: 'Personal or professional blog with posts'
-    },
-    {
-        value: 'portfolio',
-        label: 'Portfolio',
-        description: 'Showcase your work and skills'
     },
     {
         value: 'documentation',
@@ -101,14 +82,6 @@ export const KEY_SCHEMES = [
     { value: 'secp256k1', label: 'secp256k1' }
 ];
 
-// Project status filters
-export const PROJECT_STATUS_FILTERS = [
-    { value: 'all', label: 'All Projects' },
-    { value: 'draft', label: 'Draft' },
-    { value: 'active', label: 'Active' },
-    { value: 'archived', label: 'Archived' }
-];
-
 // Import methods
 export const IMPORT_METHODS = [
     { value: 'mnemonic', label: 'Mnemonic Phrase' },
@@ -118,7 +91,6 @@ export const IMPORT_METHODS = [
 
 // Pagination
 export const PROJECTS_PER_PAGE = 6;
-export const ITEMS_PER_PAGE_OPTIONS = [6, 12, 24, 48];
 
 // System health check interval (ms)
 export const HEALTH_CHECK_INTERVAL = 30000;

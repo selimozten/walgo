@@ -5,7 +5,6 @@ import (
 	"io/fs"
 	"os"
 	"path/filepath"
-	"regexp"
 	"strings"
 	"time"
 
@@ -151,7 +150,11 @@ func copyAttachment(srcPath, vaultPath, staticDir, attachmentDir string) error {
 		return fmt.Errorf("failed to get relative path: %w", err)
 	}
 
-	destPath := filepath.Join(staticDir, relPath)
+	destPath := filepath.Clean(filepath.Join(staticDir, relPath))
+	if !strings.HasPrefix(destPath, filepath.Clean(staticDir)+string(os.PathSeparator)) &&
+		destPath != filepath.Clean(staticDir) {
+		return fmt.Errorf("path traversal detected: %s escapes static directory", relPath)
+	}
 	destDir := filepath.Dir(destPath)
 
 	// #nosec G301 - attachment directory needs standard permissions
@@ -208,8 +211,12 @@ func processMarkdownFile(srcPath, vaultPath, hugoContentDir string, cfg config.O
 		convertedContent = ensureFrontmatter(convertedContent, relPath, cfg.FrontmatterFormat)
 	}
 
-	// Create destination path
-	destPath := filepath.Join(hugoContentDir, relPath)
+	// Create destination path and validate it stays within target directory
+	destPath := filepath.Clean(filepath.Join(hugoContentDir, relPath))
+	if !strings.HasPrefix(destPath, filepath.Clean(hugoContentDir)+string(os.PathSeparator)) &&
+		destPath != filepath.Clean(hugoContentDir) {
+		return fmt.Errorf("path traversal detected: %s escapes content directory", relPath)
+	}
 	destDir := filepath.Dir(destPath)
 
 	// Create directory structure if needed
@@ -225,41 +232,6 @@ func processMarkdownFile(srcPath, vaultPath, hugoContentDir string, cfg config.O
 	}
 
 	return nil
-}
-
-// convertWikilinks transforms Obsidian [[wikilinks]] to Hugo-compatible markdown links.
-func convertWikilinks(content, attachmentDir string) string {
-	// Regex for [[link]] or [[link|display text]]
-	wikilinkRegex := regexp.MustCompile(`\[\[([^|\]]+)(\|([^\]]*))?\]\]`)
-
-	return wikilinkRegex.ReplaceAllStringFunc(content, func(match string) string {
-		submatch := wikilinkRegex.FindStringSubmatch(match)
-		if len(submatch) < 2 {
-			return match
-		}
-
-		target := strings.TrimSpace(submatch[1])
-		displayText := target
-
-		// If there's a display text (|text), use it
-		if len(submatch) >= 4 && submatch[3] != "" {
-			displayText = strings.TrimSpace(submatch[3])
-		}
-
-		// Handle attachments
-		if isAttachment(target) {
-			return fmt.Sprintf("![%s](/%s/%s)", displayText, attachmentDir, filepath.Base(target))
-		}
-
-		// Handle regular page links
-		// Convert to Hugo-style link (assuming content structure)
-		linkPath := strings.ToLower(strings.ReplaceAll(target, " ", "-"))
-		if !strings.HasSuffix(linkPath, ".md") {
-			linkPath += ".md"
-		}
-
-		return fmt.Sprintf("[%s]({{< relref \"%s\" >}})", displayText, linkPath)
-	})
 }
 
 // ensureFrontmatter adds Hugo frontmatter if it is not present in the file.

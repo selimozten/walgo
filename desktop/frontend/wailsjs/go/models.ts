@@ -1,5 +1,31 @@
 export namespace ai {
 	
+	export class ContentFileInfo {
+	    Path: string;
+	    Title: string;
+	    Description: string;
+	    Date: string;
+	    Draft: boolean;
+	    Tags: string[];
+	    Extra: Record<string, string>;
+	    BundleType: string;
+	
+	    static createFrom(source: any = {}) {
+	        return new ContentFileInfo(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.Path = source["Path"];
+	        this.Title = source["Title"];
+	        this.Description = source["Description"];
+	        this.Date = source["Date"];
+	        this.Draft = source["Draft"];
+	        this.Tags = source["Tags"];
+	        this.Extra = source["Extra"];
+	        this.BundleType = source["BundleType"];
+	    }
+	}
 	export class ContentTypeInfo {
 	    Name: string;
 	    Path: string;
@@ -18,8 +44,100 @@ export namespace ai {
 	        this.Files = source["Files"];
 	    }
 	}
+	export class ThemeLayoutInfo {
+	    Name: string;
+	    SupportedSections: string[];
+	    FrontmatterFields: string[];
+	    Description: string;
+	
+	    static createFrom(source: any = {}) {
+	        return new ThemeLayoutInfo(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.Name = source["Name"];
+	        this.SupportedSections = source["SupportedSections"];
+	        this.FrontmatterFields = source["FrontmatterFields"];
+	        this.Description = source["Description"];
+	    }
+	}
+	export class MenuInfo {
+	    Name: string;
+	    URL: string;
+	    Weight: number;
+	
+	    static createFrom(source: any = {}) {
+	        return new MenuInfo(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.Name = source["Name"];
+	        this.URL = source["URL"];
+	        this.Weight = source["Weight"];
+	    }
+	}
+	export class SiteConfigInfo {
+	    Title: string;
+	    BaseURL: string;
+	    Language: string;
+	    Theme: string;
+	    Description: string;
+	    Author: string;
+	    Menu: MenuInfo[];
+	    Params: Record<string, any>;
+	    Taxonomies: Record<string, string>;
+	    Permalinks: Record<string, string>;
+	    Markup: Record<string, any>;
+	    Outputs: Record<string, Array<string>>;
+	    RawConfig: Record<string, any>;
+	
+	    static createFrom(source: any = {}) {
+	        return new SiteConfigInfo(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.Title = source["Title"];
+	        this.BaseURL = source["BaseURL"];
+	        this.Language = source["Language"];
+	        this.Theme = source["Theme"];
+	        this.Description = source["Description"];
+	        this.Author = source["Author"];
+	        this.Menu = this.convertValues(source["Menu"], MenuInfo);
+	        this.Params = source["Params"];
+	        this.Taxonomies = source["Taxonomies"];
+	        this.Permalinks = source["Permalinks"];
+	        this.Markup = source["Markup"];
+	        this.Outputs = source["Outputs"];
+	        this.RawConfig = source["RawConfig"];
+	    }
+	
+		convertValues(a: any, classs: any, asMap: boolean = false): any {
+		    if (!a) {
+		        return a;
+		    }
+		    if (a.slice && a.map) {
+		        return (a as any[]).map(elem => this.convertValues(elem, classs));
+		    } else if ("object" === typeof a) {
+		        if (asMap) {
+		            for (const key of Object.keys(a)) {
+		                a[key] = new classs(a[key]);
+		            }
+		            return a;
+		        }
+		        return new classs(a);
+		    }
+		    return a;
+		}
+	}
 	export class ContentStructure {
+	    SitePath: string;
+	    SiteConfig?: SiteConfigInfo;
+	    ThemeInfo?: ThemeLayoutInfo;
 	    ContentTypes: ContentTypeInfo[];
+	    ContentFiles: ContentFileInfo[];
 	    DefaultType: string;
 	    ContentDir: string;
 	
@@ -29,7 +147,11 @@ export namespace ai {
 	
 	    constructor(source: any = {}) {
 	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.SitePath = source["SitePath"];
+	        this.SiteConfig = this.convertValues(source["SiteConfig"], SiteConfigInfo);
+	        this.ThemeInfo = this.convertValues(source["ThemeInfo"], ThemeLayoutInfo);
 	        this.ContentTypes = this.convertValues(source["ContentTypes"], ContentTypeInfo);
+	        this.ContentFiles = this.convertValues(source["ContentFiles"], ContentFileInfo);
 	        this.DefaultType = source["DefaultType"];
 	        this.ContentDir = source["ContentDir"];
 	    }
@@ -52,6 +174,9 @@ export namespace ai {
 		    return a;
 		}
 	}
+	
+	
+	
 
 }
 
@@ -122,64 +247,6 @@ export namespace api {
 	        this.description = source["description"];
 	        this.audience = source["audience"];
 	    }
-	}
-	export class LaunchStep {
-	    name: string;
-	    status: string;
-	    message: string;
-	    error?: string;
-	
-	    static createFrom(source: any = {}) {
-	        return new LaunchStep(source);
-	    }
-	
-	    constructor(source: any = {}) {
-	        if ('string' === typeof source) source = JSON.parse(source);
-	        this.name = source["name"];
-	        this.status = source["status"];
-	        this.message = source["message"];
-	        this.error = source["error"];
-	    }
-	}
-	export class AICreateSiteResult {
-	    success: boolean;
-	    sitePath: string;
-	    totalPages: number;
-	    filesCreated: number;
-	    steps: LaunchStep[];
-	    error: string;
-	
-	    static createFrom(source: any = {}) {
-	        return new AICreateSiteResult(source);
-	    }
-	
-	    constructor(source: any = {}) {
-	        if ('string' === typeof source) source = JSON.parse(source);
-	        this.success = source["success"];
-	        this.sitePath = source["sitePath"];
-	        this.totalPages = source["totalPages"];
-	        this.filesCreated = source["filesCreated"];
-	        this.steps = this.convertValues(source["steps"], LaunchStep);
-	        this.error = source["error"];
-	    }
-	
-		convertValues(a: any, classs: any, asMap: boolean = false): any {
-		    if (!a) {
-		        return a;
-		    }
-		    if (a.slice && a.map) {
-		        return (a as any[]).map(elem => this.convertValues(elem, classs));
-		    } else if ("object" === typeof a) {
-		        if (asMap) {
-		            for (const key of Object.keys(a)) {
-		                a[key] = new classs(a[key]);
-		            }
-		            return a;
-		        }
-		        return new classs(a);
-		    }
-		    return a;
-		}
 	}
 	export class AddressListResult {
 	    addresses: string[];
@@ -304,6 +371,7 @@ export namespace api {
 	    message: string;
 	    error: string;
 	    onChainDestroyed: boolean;
+	    estimatedGasCost?: string;
 	
 	    static createFrom(source: any = {}) {
 	        return new DeleteProjectResult(source);
@@ -315,6 +383,7 @@ export namespace api {
 	        this.message = source["message"];
 	        this.error = source["error"];
 	        this.onChainDestroyed = source["onChainDestroyed"];
+	        this.estimatedGasCost = source["estimatedGasCost"];
 	    }
 	}
 	export class DeploymentRecord {
@@ -431,6 +500,62 @@ export namespace api {
 	        this.error = source["error"];
 	    }
 	}
+	export class GenerateContentParams {
+	    sitePath: string;
+	    filePath?: string;
+	    contentType: string;
+	    topic: string;
+	    context: string;
+	    instructions: string;
+	
+	    static createFrom(source: any = {}) {
+	        return new GenerateContentParams(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.sitePath = source["sitePath"];
+	        this.filePath = source["filePath"];
+	        this.contentType = source["contentType"];
+	        this.topic = source["topic"];
+	        this.context = source["context"];
+	        this.instructions = source["instructions"];
+	    }
+	}
+	export class GenerateContentResult {
+	    success: boolean;
+	    content: string;
+	    filePath: string;
+	    error: string;
+	
+	    static createFrom(source: any = {}) {
+	        return new GenerateContentResult(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.success = source["success"];
+	        this.content = source["content"];
+	        this.filePath = source["filePath"];
+	        this.error = source["error"];
+	    }
+	}
+	export class GetInstalledThemesResult {
+	    success: boolean;
+	    themes: string[];
+	    error?: string;
+	
+	    static createFrom(source: any = {}) {
+	        return new GetInstalledThemesResult(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.success = source["success"];
+	        this.themes = source["themes"];
+	        this.error = source["error"];
+	    }
+	}
 	export class ImportAddressParams {
 	    method: string;
 	    keyScheme: string;
@@ -463,6 +588,50 @@ export namespace api {
 	        this.error = source["error"];
 	    }
 	}
+	export class ImportObsidianParams {
+	    vaultPath: string;
+	    siteName: string;
+	    parentDir: string;
+	    outputDir: string;
+	    dryRun: boolean;
+	    convertLinks: boolean;
+	    linkStyle: string;
+	    includeDrafts: boolean;
+	
+	    static createFrom(source: any = {}) {
+	        return new ImportObsidianParams(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.vaultPath = source["vaultPath"];
+	        this.siteName = source["siteName"];
+	        this.parentDir = source["parentDir"];
+	        this.outputDir = source["outputDir"];
+	        this.dryRun = source["dryRun"];
+	        this.convertLinks = source["convertLinks"];
+	        this.linkStyle = source["linkStyle"];
+	        this.includeDrafts = source["includeDrafts"];
+	    }
+	}
+	export class ImportObsidianResult {
+	    success: boolean;
+	    filesImported: number;
+	    sitePath: string;
+	    error: string;
+	
+	    static createFrom(source: any = {}) {
+	        return new ImportObsidianResult(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.success = source["success"];
+	        this.filesImported = source["filesImported"];
+	        this.sitePath = source["sitePath"];
+	        this.error = source["error"];
+	    }
+	}
 	export class InitSiteResult {
 	    success: boolean;
 	    sitePath: string;
@@ -479,7 +648,56 @@ export namespace api {
 	        this.error = source["error"];
 	    }
 	}
+	export class InstallThemeParams {
+	    sitePath: string;
+	    githubUrl: string;
 	
+	    static createFrom(source: any = {}) {
+	        return new InstallThemeParams(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.sitePath = source["sitePath"];
+	        this.githubUrl = source["githubUrl"];
+	    }
+	}
+	export class InstallThemeResult {
+	    success: boolean;
+	    themeName: string;
+	    removedThemes?: string[];
+	    error?: string;
+	
+	    static createFrom(source: any = {}) {
+	        return new InstallThemeResult(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.success = source["success"];
+	        this.themeName = source["themeName"];
+	        this.removedThemes = source["removedThemes"];
+	        this.error = source["error"];
+	    }
+	}
+	export class LaunchStep {
+	    name: string;
+	    status: string;
+	    message: string;
+	    error?: string;
+	
+	    static createFrom(source: any = {}) {
+	        return new LaunchStep(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.name = source["name"];
+	        this.status = source["status"];
+	        this.message = source["message"];
+	        this.error = source["error"];
+	    }
+	}
 	export class LaunchWizardParams {
 	    sitePath?: string;
 	    network: string;
@@ -594,9 +812,16 @@ export namespace api {
 	    createdAt: string;
 	    updatedAt: string;
 	    lastDeployAt: string;
+	    firstDeployAt?: string;
 	    epochs: number;
+	    totalEpochs?: number;
+	    gasFee?: string;
+	    expiresAt?: string;
+	    expiresIn?: string;
 	    status: string;
 	    deployCount: number;
+	    size?: number;
+	    fileCount?: number;
 	    deployments?: DeploymentRecord[];
 	    suiReady?: boolean;
 	    walrusReady?: boolean;
@@ -622,9 +847,16 @@ export namespace api {
 	        this.createdAt = source["createdAt"];
 	        this.updatedAt = source["updatedAt"];
 	        this.lastDeployAt = source["lastDeployAt"];
+	        this.firstDeployAt = source["firstDeployAt"];
 	        this.epochs = source["epochs"];
+	        this.totalEpochs = source["totalEpochs"];
+	        this.gasFee = source["gasFee"];
+	        this.expiresAt = source["expiresAt"];
+	        this.expiresIn = source["expiresIn"];
 	        this.status = source["status"];
 	        this.deployCount = source["deployCount"];
+	        this.size = source["size"];
+	        this.fileCount = source["fileCount"];
 	        this.deployments = this.convertValues(source["deployments"], DeploymentRecord);
 	        this.suiReady = source["suiReady"];
 	        this.walrusReady = source["walrusReady"];
@@ -674,6 +906,7 @@ export namespace api {
 	    parentDir?: string;
 	    siteName: string;
 	    name?: string;
+	    siteType?: string;
 	    skipBuild: boolean;
 	
 	    static createFrom(source: any = {}) {
@@ -685,6 +918,7 @@ export namespace api {
 	        this.parentDir = source["parentDir"];
 	        this.siteName = source["siteName"];
 	        this.name = source["name"];
+	        this.siteType = source["siteType"];
 	        this.skipBuild = source["skipBuild"];
 	    }
 	}
@@ -875,6 +1109,42 @@ export namespace api {
 	        this.error = source["error"];
 	    }
 	}
+	export class UpdateSiteParams {
+	    projectId: number;
+	    epochs?: number;
+	
+	    static createFrom(source: any = {}) {
+	        return new UpdateSiteParams(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.projectId = source["projectId"];
+	        this.epochs = source["epochs"];
+	    }
+	}
+	export class UpdateSiteResult {
+	    success: boolean;
+	    objectId: string;
+	    gasFee: string;
+	    message: string;
+	    error: string;
+	    logs?: string[];
+	
+	    static createFrom(source: any = {}) {
+	        return new UpdateSiteResult(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.success = source["success"];
+	        this.objectId = source["objectId"];
+	        this.gasFee = source["gasFee"];
+	        this.message = source["message"];
+	        this.error = source["error"];
+	        this.logs = source["logs"];
+	    }
+	}
 	export class UpdateToolsParams {
 	    tools: string[];
 	    network: string;
@@ -948,6 +1218,42 @@ export namespace api {
 
 export namespace main {
 	
+	export class AIProgressState {
+	    isActive: boolean;
+	    phase: string;
+	    message: string;
+	    pagePath: string;
+	    progress: number;
+	    current: number;
+	    total: number;
+	    complete: boolean;
+	    success: boolean;
+	    sitePath: string;
+	    totalPages: number;
+	    filesCreated: number;
+	    error: string;
+	
+	    static createFrom(source: any = {}) {
+	        return new AIProgressState(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.isActive = source["isActive"];
+	        this.phase = source["phase"];
+	        this.message = source["message"];
+	        this.pagePath = source["pagePath"];
+	        this.progress = source["progress"];
+	        this.current = source["current"];
+	        this.total = source["total"];
+	        this.complete = source["complete"];
+	        this.success = source["success"];
+	        this.sitePath = source["sitePath"];
+	        this.totalPages = source["totalPages"];
+	        this.filesCreated = source["filesCreated"];
+	        this.error = source["error"];
+	    }
+	}
 	export class CheckDirectoryDepthResult {
 	    success: boolean;
 	    depth: number;
@@ -1067,90 +1373,6 @@ export namespace main {
 	        this.fileCount = source["fileCount"];
 	        this.folderCount = source["folderCount"];
 	        this.totalSize = source["totalSize"];
-	        this.error = source["error"];
-	    }
-	}
-	export class GenerateContentParams {
-	    sitePath: string;
-	    filePath: string;
-	    contentType: string;
-	    topic: string;
-	    context: string;
-	    instructions: string;
-	
-	    static createFrom(source: any = {}) {
-	        return new GenerateContentParams(source);
-	    }
-	
-	    constructor(source: any = {}) {
-	        if ('string' === typeof source) source = JSON.parse(source);
-	        this.sitePath = source["sitePath"];
-	        this.filePath = source["filePath"];
-	        this.contentType = source["contentType"];
-	        this.topic = source["topic"];
-	        this.context = source["context"];
-	        this.instructions = source["instructions"];
-	    }
-	}
-	export class GenerateContentResult {
-	    success: boolean;
-	    filePath: string;
-	    content: string;
-	    error: string;
-	
-	    static createFrom(source: any = {}) {
-	        return new GenerateContentResult(source);
-	    }
-	
-	    constructor(source: any = {}) {
-	        if ('string' === typeof source) source = JSON.parse(source);
-	        this.success = source["success"];
-	        this.filePath = source["filePath"];
-	        this.content = source["content"];
-	        this.error = source["error"];
-	    }
-	}
-	export class ImportObsidianParams {
-	    vaultPath: string;
-	    siteName: string;
-	    parentDir: string;
-	    outputDir: string;
-	    dryRun: boolean;
-	    convertLinks: boolean;
-	    linkStyle: string;
-	    includeDrafts: boolean;
-	
-	    static createFrom(source: any = {}) {
-	        return new ImportObsidianParams(source);
-	    }
-	
-	    constructor(source: any = {}) {
-	        if ('string' === typeof source) source = JSON.parse(source);
-	        this.vaultPath = source["vaultPath"];
-	        this.siteName = source["siteName"];
-	        this.parentDir = source["parentDir"];
-	        this.outputDir = source["outputDir"];
-	        this.dryRun = source["dryRun"];
-	        this.convertLinks = source["convertLinks"];
-	        this.linkStyle = source["linkStyle"];
-	        this.includeDrafts = source["includeDrafts"];
-	    }
-	}
-	export class ImportObsidianResult {
-	    success: boolean;
-	    filesImported: number;
-	    sitePath: string;
-	    error: string;
-	
-	    static createFrom(source: any = {}) {
-	        return new ImportObsidianResult(source);
-	    }
-	
-	    constructor(source: any = {}) {
-	        if ('string' === typeof source) source = JSON.parse(source);
-	        this.success = source["success"];
-	        this.filesImported = source["filesImported"];
-	        this.sitePath = source["sitePath"];
 	        this.error = source["error"];
 	    }
 	}

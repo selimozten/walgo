@@ -115,7 +115,7 @@ Press Ctrl+C to stop the server.`,
 		go filterHugoOutput(stderr, os.Stderr, icons)
 
 		if err := hugoCmd.Wait(); err != nil {
-			fmt.Fprintf(os.Stderr, "\n%s Hugo server stopped\n", icons.Success)
+			fmt.Fprintf(os.Stderr, "\n%s Hugo server stopped: %v\n", icons.Warning, err)
 		} else {
 			fmt.Printf("\n%s Hugo server stopped\n", icons.Success)
 		}

@@ -46,37 +46,21 @@ func DestroySite(ctx context.Context, objectID string) error {
 	fmt.Printf("%s Destroying site on Walrus...\n", icons.Garbage)
 	fmt.Println()
 
-	cmd := execCommand(builderPath, args...)
+	// Use CommandContext so the process is killed automatically on context cancellation
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	cmd := execCommandContext(ctx, builderPath, args...)
 	var stdout, stderr bytes.Buffer
 
 	cmd.Stdout = io.MultiWriter(os.Stdout, &stdout)
 	cmd.Stderr = io.MultiWriter(os.Stderr, &stderr)
 
-	if ctx != nil {
-		if err := cmd.Start(); err != nil {
-			return handleSiteBuilderError(err, stderr.String())
-		}
-
-		done := make(chan error, 1)
-		go func() {
-			done <- cmd.Wait()
-		}()
-
-		select {
-		case <-ctx.Done():
-			if cmd.Process != nil {
-				_ = cmd.Process.Kill()
-			}
+	if err := cmd.Run(); err != nil {
+		if ctx.Err() != nil {
 			return fmt.Errorf("destroy operation cancelled: %w", ctx.Err())
-		case err := <-done:
-			if err != nil {
-				return handleSiteBuilderError(err, stderr.String())
-			}
 		}
-	} else {
-		if err := cmd.Run(); err != nil {
-			return handleSiteBuilderError(err, stderr.String())
-		}
+		return handleSiteBuilderError(err, stderr.String())
 	}
 
 	fmt.Printf("\n%s Site destroyed successfully on Walrus!\n", icons.Success)

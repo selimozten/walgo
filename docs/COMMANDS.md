@@ -488,6 +488,35 @@ walgo update 0x7b5a...8f3c --network mainnet
 
 ## Project Management
 
+### Project Identification
+
+All project commands support multiple ways to identify a project:
+
+| Method | Example | Description |
+| ------ | ------- | ----------- |
+| `--id=<number>` | `--id=5` | Project ID (unambiguous, recommended) |
+| `--name="<name>"` | `--name="My Site"` | Project name (supports spaces) |
+| `<name\|id>` | `mysite` or `5` | Positional argument (legacy, no spaces) |
+
+**Priority:** `--id` > `--name` > positional argument
+
+**Examples:**
+```bash
+# For projects with spaces in names
+walgo projects show --name="My Awesome Site"
+walgo projects update --name="My Blog" --epochs 10
+walgo projects delete --name="Test Site"
+
+# For unambiguous identification by ID
+walgo projects show --id=5
+walgo projects edit --id=5 --new-name="Renamed Site"
+
+# Legacy syntax (no spaces)
+walgo projects show mysite
+```
+
+---
+
 ### `walgo projects list`
 
 **List all your deployed projects**
@@ -516,13 +545,14 @@ walgo projects list --status archived
 
 ---
 
-### `walgo projects show <name>`
+### `walgo projects show`
 
 **Show detailed project information**
 
 ```bash
-walgo projects show "My Blog"
-walgo projects show 1  # By ID
+walgo projects show --name="My Blog"      # Name with spaces
+walgo projects show --id=5                # By ID
+walgo projects show mysite                # Legacy syntax
 ```
 
 **What it shows:**
@@ -571,83 +601,69 @@ walgo projects show 1  # By ID
 
 ---
 
-### `walgo projects update <name>`
+### `walgo projects update`
 
-**Redeploy existing project with new content and/or metadata**
+**Redeploy existing project with new content**
 
 ```bash
-walgo projects update "My Blog"
-walgo projects update "My Blog" --epochs 10
-walgo projects update "My Blog" --name "New Name" --category blog
-walgo projects update "My Blog" --description "My awesome blog" --force
+walgo projects update --name="My Blog"                # Name with spaces
+walgo projects update --id=5 --epochs 10              # By ID with epochs
+walgo projects update mysite                          # Legacy syntax
 ```
 
 **What it does:**
 
-- Updates project metadata in database
-- Updates ws-resources.json with new metadata
-- Redeploys site content to Walrus (when needed)
+- Rebuilds the Hugo site
+- Pushes changes to Walrus blockchain
 - Preserves project history
 - Tracks new deployment
 
 **Flags:**
 
+- `--id <number>` - Project ID (unambiguous)
+- `--name "<name>"` - Project name (supports spaces)
 - `--epochs <number>` - Storage duration
-- `--name <name>` - Update project name
-- `--category <category>` - Update project category
-- `--description <text>` - Update project description
-- `--image-url <url>` - Update project image/logo URL
-- `--suins <domain>` - Update SuiNS domain
-- `--force` - Force on-chain update even if only metadata changed
-
-**Behavior:**
-
-- If only metadata flags are provided → updates database and ws-resources.json only
-- If `--force` or `--epochs` is provided → also updates on-chain
-- If no flags provided → assumes content changed, updates on-chain
 
 ---
 
-### `walgo projects edit <name>`
+### `walgo projects edit`
 
-**Edit project metadata with optional on-chain update**
+**Edit project metadata locally**
 
 ```bash
-walgo projects edit "My Blog" --name "New Blog Name"
-walgo projects edit "My Blog" --description "A blog about tech"
-walgo projects edit "My Blog" --category portfolio --image-url "https://example.com/logo.png"
-walgo projects edit "My Blog" --name "New Name" --apply  # Also update on-chain
+walgo projects edit --id=5 --new-name="New Blog Name"
+walgo projects edit --name="My Blog" --description="A blog about tech"
+walgo projects edit --id=5 --category portfolio --image-url "https://example.com/logo.png"
 ```
 
-**What it does (3-step process):**
+**What it does (2-step process):**
 
-1. **Database update** - Always saves changes to local SQLite database
-2. **ws-resources.json update** - Always updates the publish directory's metadata file
-3. **On-chain update** - Only with `--apply` flag, deploys changes to Walrus
+1. **Database update** - Saves changes to local SQLite database
+2. **ws-resources.json update** - Updates the publish directory's metadata file
+
+After editing, use `walgo projects update` to push changes to Walrus.
 
 **Flags:**
 
-- `--name <name>` - New project name (also used as site_name in ws-resources.json)
+- `--id <number>` - Project ID (unambiguous)
+- `--name "<name>"` - Project name to identify (supports spaces)
+- `--new-name <name>` - New project name (rename)
 - `--category <category>` - New project category
 - `--description <text>` - New project description
 - `--image-url <url>` - New image/logo URL for the site
 - `--suins <domain>` - New SuiNS domain
-- `--apply` - Apply changes on-chain (update the site on Walrus)
 
 **Examples:**
 
 ```bash
-# Edit metadata only (database + ws-resources.json)
-walgo projects edit mysite --name "New Name" --category blog
+# Edit metadata by ID
+walgo projects edit --id=5 --new-name="New Name" --category blog
 
-# Edit description
-walgo projects edit mysite --description "My awesome decentralized website"
+# Edit by name (with spaces)
+walgo projects edit --name="My Site" --description="My awesome decentralized website"
 
 # Change image URL
-walgo projects edit mysite --image-url "https://example.com/new-logo.png"
-
-# Edit and immediately apply on-chain
-walgo projects edit mysite --name "New Name" --description "Updated site" --apply
+walgo projects edit --id=5 --image-url "https://example.com/new-logo.png"
 ```
 
 **Output Example:**
@@ -659,26 +675,27 @@ Changes to apply:
   ✏️ Name: My Blog → New Blog Name
   ✏️ Description: (empty) → A blog about tech and decentralization
 
-💾 Step 1/3: Updating database...
+💾 Step 1/2: Updating database...
   ✓ Database updated
-📄 Step 2/3: Updating ws-resources.json...
+📄 Step 2/2: Updating ws-resources.json...
   ✓ ws-resources.json updated
-ℹ️ Step 3/3: Skipped on-chain update (use --apply to update on Walrus)
 
-✓ Project metadata updated successfully!
+✓ Project metadata updated locally!
 
-💡 To apply changes on-chain, run:
-   walgo projects edit "New Blog Name" --apply
+💡 To push changes to Walrus, run:
+   walgo projects update --id=5
 ```
 
 ---
 
-### `walgo projects archive <name>`
+### `walgo projects archive`
 
 **Archive a project (hide from default list)**
 
 ```bash
-walgo projects archive "Old Blog"
+walgo projects archive --name="Old Blog"    # Name with spaces
+walgo projects archive --id=5               # By ID
+walgo projects archive oldblog              # Legacy syntax
 ```
 
 **What it does:**
@@ -687,14 +704,21 @@ walgo projects archive "Old Blog"
 - Hides from default list (use `--status archived` to view)
 - Preserves all data
 
+**Flags:**
+
+- `--id <number>` - Project ID (unambiguous)
+- `--name "<name>"` - Project name (supports spaces)
+
 ---
 
-### `walgo projects delete <name>`
+### `walgo projects delete`
 
 **Permanently delete project record**
 
 ```bash
-walgo projects delete "Test Site"
+walgo projects delete --name="Test Site"    # Name with spaces
+walgo projects delete --id=5                # By ID
+walgo projects delete testsite              # Legacy syntax
 ```
 
 **What it does:**
@@ -703,6 +727,11 @@ walgo projects delete "Test Site"
 - Removes deployment history
 - **Does NOT delete from Walrus**
 - Cannot be undone
+
+**Flags:**
+
+- `--id <number>` - Project ID (unambiguous)
+- `--name "<name>"` - Project name (supports spaces)
 
 **Warning:** Prompts for confirmation
 
@@ -846,9 +875,9 @@ walgo ai pipeline
 **Supported Site Types:**
 
 - Blog - Classic blog with posts and about page
-- Portfolio - Project showcase
 - Docs - Documentation site
-- Business - Business website
+- Biolink - Bio link page
+- Whitepaper - Technical whitepaper site
 
 ---
 
@@ -945,11 +974,10 @@ walgo ai fix --validate
 
 - `--validate` - Only validate, don't fix (default: false)
 
-**For Business/Portfolio Sites (Ananke theme):**
+**For All Sites:**
 
 - Validates title and description fields
 - Removes duplicate H1 headings (title is already in frontmatter)
-- Ensures services/projects have date fields (ISO 8601 format)
 - Sets draft to false
 
 **Example:**
@@ -1386,8 +1414,10 @@ walgo ai update content/posts/old-post.md
 # 2. Build
 walgo build
 
-# 3. Update project
-walgo projects update "My Site"
+# 3. Update project (use --name for names with spaces, or --id)
+walgo projects update --name="My Site"
+# or
+walgo projects update --id=5
 ```
 
 ---
@@ -1398,52 +1428,52 @@ walgo projects update "My Site"
 # List all projects
 walgo projects list
 
-# Show details
-walgo projects show "My Blog"
+# Show details (various ways to identify project)
+walgo projects show --name="My Blog"      # Name with spaces
+walgo projects show --id=5                # By ID (unambiguous)
+walgo projects show mysite                # Legacy syntax (no spaces)
 
 # Update site content
-walgo projects update "My Blog"
+walgo projects update --name="My Blog"
+walgo projects update --id=5 --epochs 10  # Update with new epochs
 
-# Update with new epochs
-walgo projects update "My Blog" --epochs 10
+# Edit metadata locally
+walgo projects edit --id=5 --new-name="New Name" --description="Updated description"
 
-# Edit metadata only (no on-chain update)
-walgo projects edit "My Blog" --name "New Name" --description "Updated description"
-
-# Edit metadata and apply on-chain
-walgo projects edit "My Blog" --category blog --image-url "https://example.com/logo.png" --apply
+# Then push to Walrus
+walgo projects update --id=5
 
 # Archive old project
-walgo projects archive "Old Site"
+walgo projects archive --name="Old Site"
 
 # Delete test project
-walgo projects delete "Test Site"
+walgo projects delete --id=5
 ```
 
 ### Metadata Management
 
 ```bash
-# Update project name (also updates site_name in ws-resources.json)
-walgo projects edit mysite --name "My Awesome Site"
+# Rename project (use --new-name flag)
+walgo projects edit --id=5 --new-name="My Awesome Site"
 
 # Update description for wallet/explorer display
-walgo projects edit mysite --description "A decentralized blog about Web3"
+walgo projects edit --name="My Site" --description="A decentralized blog about Web3"
 
 # Update category
-walgo projects edit mysite --category portfolio
+walgo projects edit --id=5 --category portfolio
 
 # Update site logo/image
-walgo projects edit mysite --image-url "https://example.com/logo.png"
+walgo projects edit --id=5 --image-url="https://example.com/logo.png"
 
 # Update multiple fields at once
-walgo projects edit mysite \
-  --name "New Name" \
-  --description "New description" \
+walgo projects edit --id=5 \
+  --new-name="New Name" \
+  --description="New description" \
   --category blog \
-  --image-url "https://example.com/logo.png"
+  --image-url="https://example.com/logo.png"
 
-# Apply all changes on-chain
-walgo projects edit mysite --apply
+# Push metadata changes to Walrus
+walgo projects update --id=5
 ```
 
 ---
@@ -1521,11 +1551,11 @@ Available for all commands:
 **Projects:**
 
 - `projects list` - List all projects
-- `projects show` - Show project details (including metadata)
-- `projects update` - Update project content and/or metadata on-chain
-- `projects edit` - Edit project metadata (name, description, category, image URL) with optional on-chain update
-- `projects archive` - Archive project
-- `projects delete` - Delete project
+- `projects show` - Show project details (use `--name="..."` or `--id=N`)
+- `projects update` - Update project on-chain (use `--name="..."` or `--id=N`)
+- `projects edit` - Edit project metadata locally (use `--new-name` to rename)
+- `projects archive` - Archive project (use `--name="..."` or `--id=N`)
+- `projects delete` - Delete project (use `--name="..."` or `--id=N`)
 
 **Optimize:**
 

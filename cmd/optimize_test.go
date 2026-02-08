@@ -104,10 +104,10 @@ func TestOptimizeCommandExecution(t *testing.T) {
 		defer func() { _ = os.Chdir(originalWd) }()
 
 		// Execute optimize with non-existent directory
-		output, err := executeCommand(rootCmd, "optimize", "/nonexistent/path")
-		// Command may return error or not depending on implementation
-		_ = err
-		_ = output
+		_, err := executeCommand(rootCmd, "optimize", "/nonexistent/path")
+		if err != nil {
+			t.Logf("optimize with non-existent directory returned error: %v", err)
+		}
 	})
 
 	t.Run("Optimize with empty directory", func(t *testing.T) {

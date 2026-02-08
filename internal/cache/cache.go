@@ -72,10 +72,12 @@ func NewManager(siteRoot string) (*Manager, error) {
 	return manager, nil
 }
 
-// Close closes the cache database
+// Close closes the cache database. Safe to call multiple times.
 func (m *Manager) Close() error {
 	if m.db != nil {
-		return m.db.Close()
+		err := m.db.Close()
+		m.db = nil
+		return err
 	}
 	return nil
 }

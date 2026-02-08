@@ -13,19 +13,17 @@ export const useProjects = () => {
         try {
             const result = await ListProjects();
             if (result) {
-                const mappedProjects = result.map((project: any) => ({
+                const mappedProjects = result.map((project) => ({
                     ...project,
-                    deployments: Array.isArray(project.deployments) 
-                        ? project.deployments.length 
-                        : project.deployments,
+                    deployments: project.deployCount || 0,
                     deploymentHistory: Array.isArray(project.deployments)
-                        ? project.deployments.map((d: any) => ({
-                            timestamp: d.deployedAt || d.createdAt,
-                            objectId: d.objectID || d.objectId,
+                        ? project.deployments.map((d) => ({
+                            timestamp: d.createdAt,
+                            objectId: d.objectId,
                             network: d.network,
-                            size: d.size,
-                            status: d.status === 'success' ? 'success' : 'failed',
-                            wallet: d.wallet
+                            epochs: d.epochs,
+                            gasFee: d.gasFee,
+                            status: d.success ? 'success' as const : 'failed' as const,
                         }))
                         : []
                 }));
