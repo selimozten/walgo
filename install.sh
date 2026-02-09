@@ -377,17 +377,29 @@ detect_user_shell() {
 get_latest_version() {
     print_info "Fetching latest version..."
 
+    # Use the redirect URL to avoid GitHub API rate limits (60/hr unauthenticated).
+    # "releases/latest" redirects to "releases/tag/vX.Y.Z" — extract the tag from the redirect Location header.
     if command -v curl >/dev/null 2>&1; then
-        VERSION=$(curl -fsSL "https://api.github.com/repos/$REPO/releases/latest" | grep '"tag_name"' | sed -E 's/.*"([^"]+)".*/\1/')
+        VERSION=$(curl -fsSI "https://github.com/$REPO/releases/latest" 2>/dev/null | grep -i '^location:' | sed -E 's|.*/tag/v?||' | tr -d '\r')
     elif command -v wget >/dev/null 2>&1; then
-        VERSION=$(wget -qO- "https://api.github.com/repos/$REPO/releases/latest" | grep '"tag_name"' | sed -E 's/.*"([^"]+)".*/\1/')
+        VERSION=$(wget --spider -S "https://github.com/$REPO/releases/latest" 2>&1 | grep -i '^\s*location:' | sed -E 's|.*/tag/v?||' | tr -d '\r')
     else
         print_error "Neither curl nor wget found. Please install one of them."
         exit 1
     fi
 
+    # Fallback to GitHub API if redirect method failed
+    if [ -z "$VERSION" ]; then
+        if command -v curl >/dev/null 2>&1; then
+            VERSION=$(curl -fsSL "https://api.github.com/repos/$REPO/releases/latest" 2>/dev/null | grep '"tag_name"' | sed -E 's/.*"v?([^"]+)".*/\1/')
+        elif command -v wget >/dev/null 2>&1; then
+            VERSION=$(wget -qO- "https://api.github.com/repos/$REPO/releases/latest" 2>/dev/null | grep '"tag_name"' | sed -E 's/.*"v?([^"]+)".*/\1/')
+        fi
+    fi
+
     if [ -z "$VERSION" ]; then
         print_error "Failed to fetch latest version"
+        print_info "This may be due to GitHub API rate limiting. Try again in a few minutes."
         exit 1
     fi
 
@@ -672,13 +684,21 @@ install_hugo_direct() {
     print_info "Fetching latest Hugo version..."
 
     local hugo_version=""
+    # Use redirect URL to avoid GitHub API rate limits
     if command -v curl >/dev/null 2>&1; then
-        hugo_version=$(curl -fsSL "https://api.github.com/repos/gohugoio/hugo/releases/latest" | grep '"tag_name"' | sed -E 's/.*"([^"]+)".*/\1/')
+        hugo_version=$(curl -fsSI "https://github.com/gohugoio/hugo/releases/latest" 2>/dev/null | grep -i '^location:' | sed -E 's|.*/tag/v?||' | tr -d '\r')
     elif command -v wget >/dev/null 2>&1; then
-        hugo_version=$(wget -qO- "https://api.github.com/repos/gohugoio/hugo/releases/latest" | grep '"tag_name"' | sed -E 's/.*"([^"]+)".*/\1/')
+        hugo_version=$(wget --spider -S "https://github.com/gohugoio/hugo/releases/latest" 2>&1 | grep -i '^\s*location:' | sed -E 's|.*/tag/v?||' | tr -d '\r')
     else
         print_error "Neither curl nor wget found"
         return 1
+    fi
+
+    # Fallback to API if redirect method failed
+    if [ -z "$hugo_version" ]; then
+        if command -v curl >/dev/null 2>&1; then
+            hugo_version=$(curl -fsSL "https://api.github.com/repos/gohugoio/hugo/releases/latest" 2>/dev/null | grep '"tag_name"' | sed -E 's/.*"v?([^"]+)".*/\1/')
+        fi
     fi
 
     if [ -z "$hugo_version" ]; then

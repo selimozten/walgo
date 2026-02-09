@@ -389,14 +389,34 @@ function Initialize-Environment {
     Ensure-Directory $script:DesktopInstallDir
 }
 
-# GitHub release helper
+# GitHub release helper - uses redirect to avoid API rate limits, falls back to API
 function Get-LatestRelease {
     param([Parameter(Mandatory = $true)][string]$Repository)
+    try {
+        # Try redirect method first (no API rate limit)
+        $response = Invoke-WebRequest -Uri "https://github.com/$Repository/releases/latest" -MaximumRedirection 0 -ErrorAction SilentlyContinue -UseBasicParsing 2>$null
+    } catch {
+        # Invoke-WebRequest throws on redirect; extract Location from the exception response
+        if ($_.Exception.Response -and $_.Exception.Response.Headers -and $_.Exception.Response.Headers.Location) {
+            $redirectUrl = $_.Exception.Response.Headers.Location.ToString()
+        }
+    }
+    if (-not $redirectUrl -and $response -and $response.Headers -and $response.Headers['Location']) {
+        $redirectUrl = $response.Headers['Location']
+    }
+    if ($redirectUrl -and $redirectUrl -match '/tag/v?(.+)$') {
+        # Build a minimal object with tag_name to match existing callers
+        $version = $Matches[1]
+        return [PSCustomObject]@{ tag_name = "v$version" }
+    }
+
+    # Fallback to GitHub API
     try {
         return Invoke-RestMethod -Uri "https://api.github.com/repos/$Repository/releases/latest" -UseBasicParsing
     } catch {
         $errorMsg = $_.Exception.Message
         Print-Error "Failed to fetch latest release for $Repository - $errorMsg"
+        Print-Info "This may be due to GitHub API rate limiting. Try again in a few minutes."
         return $null
     }
 }
