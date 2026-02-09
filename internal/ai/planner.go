@@ -343,10 +343,19 @@ func (p *Planner) validatePlan(plan *SitePlan) error {
 		}
 	}
 
-	for section, count := range sectionPageCount {
-		if count > 1 && !sectionHasIndex[section] {
-			return NewValidationError("pages", nil,
-				fmt.Sprintf("section '%s' has %d pages but missing section index file (content/%s/_index.md)", section, count, section))
+	for section := range sectionPageCount {
+		if !sectionHasIndex[section] {
+			// Auto-add missing section index instead of failing validation
+			sectionTitle := strings.ToUpper(section[:1]) + section[1:]
+			plan.Pages = append(plan.Pages, PageSpec{
+				ID:          fmt.Sprintf("section_%s_index", section),
+				Path:        fmt.Sprintf("content/%s/_index.md", section),
+				Title:       sectionTitle,
+				PageType:    PageTypeSection,
+				ContentType: "section",
+				Description: fmt.Sprintf("Index page for the %s section", section),
+				Status:      PageStatusPending,
+			})
 		}
 	}
 
