@@ -38,6 +38,21 @@ func isVerbose() bool {
 	return verboseFlag.Load()
 }
 
+// safeWriter wraps a writer and silently ignores write errors.
+// This prevents broken os.Stdout/os.Stderr in GUI apps from
+// disrupting pipe-based output capture.
+type safeWriter struct {
+	w io.Writer
+}
+
+func (s safeWriter) Write(p []byte) (int, error) {
+	n, err := s.w.Write(p)
+	if err != nil {
+		return len(p), nil // Pretend success
+	}
+	return n, nil
+}
+
 // runCommandWithTimeout executes a command with a timeout context.
 // Returns stdout, stderr, and any error.
 func runCommandWithTimeout(ctx context.Context, name string, args []string, streamOutput bool) (string, string, error) {
@@ -51,8 +66,11 @@ func runCommandWithTimeout(ctx context.Context, name string, args []string, stre
 	var stdout, stderr bytes.Buffer
 
 	if streamOutput {
-		cmd.Stdout = io.MultiWriter(os.Stdout, &stdout)
-		cmd.Stderr = io.MultiWriter(os.Stderr, &stderr)
+		// Use safeWriter for os.Stdout/os.Stderr to prevent errors when
+		// running from a GUI app (e.g. Wails) where standard handles may
+		// be invalid. The buffer always captures output reliably.
+		cmd.Stdout = io.MultiWriter(safeWriter{os.Stdout}, &stdout)
+		cmd.Stderr = io.MultiWriter(safeWriter{os.Stderr}, &stderr)
 	} else {
 		cmd.Stdout = &stdout
 		cmd.Stderr = &stderr
