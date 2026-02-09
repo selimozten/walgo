@@ -26,11 +26,14 @@ func CheckSiteBuilderSetup() error {
 	icons := ui.GetIcons()
 	fmt.Printf("%s site-builder found at: %s\n", icons.Check, builderPath)
 
+	homeDir, _ := os.UserHomeDir()
 	configPaths := []string{
-		filepath.Join(os.Getenv("HOME"), ".config", "walrus", "sites-config.yaml"),
-		filepath.Join(os.Getenv("XDG_CONFIG_HOME"), "walrus", "sites-config.yaml"),
-		"sites-config.yaml",
+		filepath.Join(homeDir, ".config", "walrus", "sites-config.yaml"),
 	}
+	if xdg := os.Getenv("XDG_CONFIG_HOME"); xdg != "" {
+		configPaths = append(configPaths, filepath.Join(xdg, "walrus", "sites-config.yaml"))
+	}
+	configPaths = append(configPaths, "sites-config.yaml")
 
 	var configFound bool
 	var configPath string
