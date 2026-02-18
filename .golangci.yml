@@ -34,4 +34,4 @@ run:
 
 output:
   formats:
-    - format: colored-line-number
+    colored-line-number: {}
