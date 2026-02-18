@@ -41,9 +41,10 @@ func UpdateSite(ctx context.Context, deployDir, objectID string, epochs int) (*S
 	args := []string{
 		"--context", siteBuilderContext,
 		"--walrus-binary", walrusPath,
-		"deploy",
+		"update",
 		"--epochs", fmt.Sprintf("%d", epochs),
 		deployDir,
+		objectID,
 	}
 
 	icons := ui.GetIcons()

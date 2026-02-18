@@ -88,7 +88,7 @@ func DeploySite(ctx context.Context, deployDir string, walrusCfg config.WalrusCo
 	args := []string{
 		"--context", siteBuilderContext,
 		"--walrus-binary", walrusPath,
-		"deploy",
+		"publish",
 		deployDir,
 		"--epochs", fmt.Sprintf("%d", epochs),
 	}

@@ -173,6 +173,10 @@ func GetBalance() (*BalanceInfo, error) {
 }
 
 // parseBalanceJSON parses the JSON output from `sui client balance --json`
+// Supports both old format (Sui <1.66) and new format (Sui 1.66+).
+//
+// Old format: [[{"symbol":"SUI","decimals":9}, [coins...]], ...], bool]
+// New format: [[[{coinType,metadata:{symbol,decimals,...},treasury,...}, [coins...]], ...], bool]
 func parseBalanceJSON(jsonOutput string) (*BalanceInfo, error) {
 	var result interface{}
 	if err := json.Unmarshal([]byte(jsonOutput), &result); err != nil {
@@ -205,12 +209,9 @@ func parseBalanceJSON(jsonOutput string) (*BalanceInfo, error) {
 			continue
 		}
 
-		symbol, _ := tokenInfoMap["symbol"].(string)
-		decimals := 9 // Default decimals for SUI and WAL
-
-		if d, ok := tokenInfoMap["decimals"].(float64); ok {
-			decimals = int(d)
-		}
+		// Extract symbol and decimals - check both top-level (old format)
+		// and nested metadata (new Sui 1.66+ format)
+		symbol, decimals := extractTokenInfo(tokenInfoMap)
 
 		// Second element is array of coin balances
 		coinsArray, ok := entryArray[1].([]interface{})
@@ -247,6 +248,45 @@ func parseBalanceJSON(jsonOutput string) (*BalanceInfo, error) {
 	}
 
 	return info, nil
+}
+
+// extractTokenInfo extracts symbol and decimals from a token info map.
+// Handles both old format (top-level fields) and new Sui 1.66+ format
+// (nested inside "metadata" object).
+func extractTokenInfo(tokenInfoMap map[string]interface{}) (symbol string, decimals int) {
+	decimals = 9 // Default decimals for SUI and WAL
+
+	// Try top-level fields first (old format: {"symbol":"SUI","decimals":9})
+	if s, ok := tokenInfoMap["symbol"].(string); ok && s != "" {
+		symbol = s
+		if d, ok := tokenInfoMap["decimals"].(float64); ok {
+			decimals = int(d)
+		}
+		return
+	}
+
+	// Try nested metadata (new Sui 1.66+ format: {"coinType":"...","metadata":{"symbol":"SUI","decimals":9,...}})
+	if metadata, ok := tokenInfoMap["metadata"].(map[string]interface{}); ok {
+		if s, ok := metadata["symbol"].(string); ok && s != "" {
+			symbol = s
+		}
+		if d, ok := metadata["decimals"].(float64); ok {
+			decimals = int(d)
+		}
+		if symbol != "" {
+			return
+		}
+	}
+
+	// Fallback: try to extract symbol from coinType field (e.g. "0x...::sui::SUI")
+	if coinType, ok := tokenInfoMap["coinType"].(string); ok {
+		parts := strings.Split(coinType, "::")
+		if len(parts) >= 3 {
+			symbol = strings.ToUpper(parts[len(parts)-1])
+		}
+	}
+
+	return
 }
 
 // pow10 calculates 10^n

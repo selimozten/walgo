@@ -12,7 +12,7 @@ jobs:
     runs-on: ubuntu-latest
     strategy:
       matrix:
-        go-version: [1.22.x, 1.23.x]
+        go-version: [1.24.x]
 
     steps:
       - name: Check out code
@@ -56,16 +56,10 @@ jobs:
       - name: Set up Go
         uses: actions/setup-go@v5
         with:
-          go-version: 1.23.x
+          go-version: 1.24.x
 
       - name: golangci-lint
-        uses: golangci/golangci-lint-action@v4
+        uses: golangci/golangci-lint-action@v7
         with:
-          version: latest
-          github-token: ${{ secrets.GITHUB_TOKEN }}
-          only-new-issues: false
-          skip-cache: false
-          skip-pkg-cache: false
-          skip-build-cache: false
-          install-mode: binary
+          version: v1.64.8
           args: --out-format=colored-line-number

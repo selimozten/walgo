@@ -407,11 +407,11 @@ func GetRPCEndpoint(network string) string {
 func DefaultGasPrice(network string) uint64 {
 	switch strings.ToLower(network) {
 	case "testnet":
-		return 750 // Lower gas prices on testnet
+		return 1000 // Testnet reference gas price (Feb 2026)
 	case "mainnet":
-		return 1000 // Higher gas prices on mainnet
+		return 550 // Mainnet reference gas price (Feb 2026)
 	default:
-		return 750
+		return 1000
 	}
 }
 

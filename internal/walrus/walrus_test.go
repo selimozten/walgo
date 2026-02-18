@@ -36,7 +36,7 @@ func TestDeploySite(t *testing.T) {
 			siteBuilderFound: true,
 			configExists:     true,
 			expectedError:    false,
-			expectedInArgs:   []string{"--walrus-binary", "deploy", "/path/to/public", "--epochs", "5"},
+			expectedInArgs:   []string{"--walrus-binary", "publish", "/path/to/public", "--epochs", "5"},
 		},
 		{
 			name:      "Zero epochs - should fail validation",
@@ -188,7 +188,7 @@ func TestUpdateSite(t *testing.T) {
 			siteBuilderFound: true,
 			configExists:     true,
 			expectedError:    false,
-			expectedInArgs:   []string{"--walrus-binary", "deploy", "--epochs", "3", "/path/to/public"},
+			expectedInArgs:   []string{"--walrus-binary", "update", "--epochs", "3", "/path/to/public"},
 		},
 		{
 			name:             "Zero epochs - should fail validation",

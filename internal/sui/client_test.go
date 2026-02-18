@@ -1322,6 +1322,164 @@ func TestExtractJSONComplexCases(t *testing.T) {
 	}
 }
 
+// TestParseBalanceJSON_Sui166Format tests the new Sui 1.66+ balance JSON format
+// where symbol/decimals are nested inside a "metadata" object
+func TestParseBalanceJSON_Sui166Format(t *testing.T) {
+	tests := []struct {
+		name        string
+		input       string
+		expectedSUI float64
+		expectedWAL float64
+		wantErr     bool
+	}{
+		{
+			name: "Sui 1.66 format with SUI and WAL",
+			input: `[[
+				[{"coinType":"0x0000000000000000000000000000000000000000000000000000000000000002::sui::SUI","metadata":{"id":"0xf256","decimals":9,"name":"Sui","symbol":"SUI","description":"","iconUrl":"","metadataCapState":"UNCLAIMED"},"treasury":{"totalSupply":"10000000000000000000","supplyState":"FIXED"},"regulatedMetadata":{"coinRegulatedState":"UNREGULATED"}},
+				 [{"coinType":"0x0000000000000000000000000000000000000000000000000000000000000002::sui::SUI","coinObjectId":"0xccfc","version":"787224574","digest":"DRhY","balance":"6561056094","previousTransaction":"CyoJ"},
+				  {"coinType":"0x0000000000000000000000000000000000000000000000000000000000000002::sui::SUI","coinObjectId":"0xf584","version":"734297526","digest":"4KVD","balance":"1399945628","previousTransaction":"J3DL"}]],
+				[{"coinType":"0x356a26eb9e012a68958082340d4c4116e7f55615cf27affcff209cf0ae544f59::wal::WAL","metadata":{"id":"0xb6a0","decimals":9,"name":"WAL Token","symbol":"WAL","description":"The native token for the Walrus Protocol.","iconUrl":"https://www.walrus.xyz/wal-icon.svg","metadataCapState":"UNCLAIMED"},"treasury":{"id":"0xf44b","totalSupply":"5000000000000000000","supplyState":"SUPPLY_STATE_UNKNOWN"},"regulatedMetadata":{"coinRegulatedState":"UNREGULATED"}},
+				 [{"coinType":"0x356a26eb9e012a68958082340d4c4116e7f55615cf27affcff209cf0ae544f59::wal::WAL","coinObjectId":"0xdb5d","version":"787224574","digest":"CYcK","balance":"4751619000","previousTransaction":"CyoJ"}]]
+			], false]`,
+			expectedSUI: 7.961001722,
+			expectedWAL: 4.751619,
+			wantErr:     false,
+		},
+		{
+			name: "Sui 1.66 format SUI only",
+			input: `[[
+				[{"coinType":"0x2::sui::SUI","metadata":{"decimals":9,"symbol":"SUI"},"treasury":{},"regulatedMetadata":{}},
+				 [{"balance":"5000000000"}]]
+			], false]`,
+			expectedSUI: 5.0,
+			expectedWAL: 0.0,
+			wantErr:     false,
+		},
+		{
+			name: "Sui 1.66 format multiple SUI coins",
+			input: `[[
+				[{"coinType":"0x2::sui::SUI","metadata":{"decimals":9,"symbol":"SUI"}},
+				 [{"balance":"1000000000"},{"balance":"2000000000"},{"balance":"500000000"}]]
+			], false]`,
+			expectedSUI: 3.5,
+			expectedWAL: 0.0,
+			wantErr:     false,
+		},
+		{
+			name: "Sui 1.66 format with coinType fallback (no metadata symbol)",
+			input: `[[
+				[{"coinType":"0x2::sui::SUI","metadata":{"decimals":9}},
+				 [{"balance":"1000000000"}]]
+			], false]`,
+			expectedSUI: 1.0,
+			expectedWAL: 0.0,
+			wantErr:     false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result, err := parseBalanceJSON(tt.input)
+			if (err != nil) != tt.wantErr {
+				t.Errorf("parseBalanceJSON() error = %v, wantErr %v", err, tt.wantErr)
+				return
+			}
+			if !tt.wantErr {
+				if !approxEqual(result.SUI, tt.expectedSUI, 0.001) {
+					t.Errorf("parseBalanceJSON() SUI = %f, want %f", result.SUI, tt.expectedSUI)
+				}
+				if !approxEqual(result.WAL, tt.expectedWAL, 0.001) {
+					t.Errorf("parseBalanceJSON() WAL = %f, want %f", result.WAL, tt.expectedWAL)
+				}
+			}
+		})
+	}
+}
+
+// TestExtractTokenInfo tests the extractTokenInfo helper for both old and new formats
+func TestExtractTokenInfo(t *testing.T) {
+	tests := []struct {
+		name             string
+		input            map[string]interface{}
+		expectedSymbol   string
+		expectedDecimals int
+	}{
+		{
+			name:             "old format - top level symbol and decimals",
+			input:            map[string]interface{}{"symbol": "SUI", "decimals": float64(9)},
+			expectedSymbol:   "SUI",
+			expectedDecimals: 9,
+		},
+		{
+			name:             "old format - symbol only, default decimals",
+			input:            map[string]interface{}{"symbol": "WAL"},
+			expectedSymbol:   "WAL",
+			expectedDecimals: 9,
+		},
+		{
+			name: "new format - nested metadata",
+			input: map[string]interface{}{
+				"coinType": "0x2::sui::SUI",
+				"metadata": map[string]interface{}{
+					"symbol":   "SUI",
+					"decimals": float64(9),
+				},
+			},
+			expectedSymbol:   "SUI",
+			expectedDecimals: 9,
+		},
+		{
+			name: "new format - metadata with different decimals",
+			input: map[string]interface{}{
+				"coinType": "0x2::usdc::USDC",
+				"metadata": map[string]interface{}{
+					"symbol":   "USDC",
+					"decimals": float64(6),
+				},
+			},
+			expectedSymbol:   "USDC",
+			expectedDecimals: 6,
+		},
+		{
+			name: "fallback - coinType only, no metadata",
+			input: map[string]interface{}{
+				"coinType": "0x356a::wal::WAL",
+			},
+			expectedSymbol:   "WAL",
+			expectedDecimals: 9,
+		},
+		{
+			name:             "empty map",
+			input:            map[string]interface{}{},
+			expectedSymbol:   "",
+			expectedDecimals: 9,
+		},
+		{
+			name: "metadata without symbol - coinType fallback",
+			input: map[string]interface{}{
+				"coinType": "0x2::sui::SUI",
+				"metadata": map[string]interface{}{
+					"decimals": float64(9),
+				},
+			},
+			expectedSymbol:   "SUI",
+			expectedDecimals: 9,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			symbol, decimals := extractTokenInfo(tt.input)
+			if symbol != tt.expectedSymbol {
+				t.Errorf("extractTokenInfo() symbol = %q, want %q", symbol, tt.expectedSymbol)
+			}
+			if decimals != tt.expectedDecimals {
+				t.Errorf("extractTokenInfo() decimals = %d, want %d", decimals, tt.expectedDecimals)
+			}
+		})
+	}
+}
+
 // TestBalanceInfoEdgeCases tests edge cases in balance parsing
 func TestBalanceInfoEdgeCases(t *testing.T) {
 	tests := []struct {

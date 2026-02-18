@@ -217,12 +217,12 @@ func TestDefaultGasPrice(t *testing.T) {
 		network string
 		want    uint64
 	}{
-		{"testnet", "testnet", 750},
-		{"mainnet", "mainnet", 1000},
-		{"Testnet uppercase", "Testnet", 750},
-		{"Mainnet uppercase", "Mainnet", 1000},
-		{"empty defaults to testnet price", "", 750},
-		{"unknown defaults to testnet price", "devnet", 750},
+		{"testnet", "testnet", 1000},
+		{"mainnet", "mainnet", 550},
+		{"Testnet uppercase", "Testnet", 1000},
+		{"Mainnet uppercase", "Mainnet", 550},
+		{"empty defaults to testnet price", "", 1000},
+		{"unknown defaults to testnet price", "devnet", 1000},
 	}
 
 	for _, tt := range tests {

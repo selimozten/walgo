@@ -19,10 +19,7 @@ linters:
     - unused
     - gosimple
     - govet
-  disable:
-    - deadcode # deprecated
-    - structcheck # deprecated
-    - varcheck # deprecated
+  disable: []
 
 issues:
   # Exclude test files from errcheck

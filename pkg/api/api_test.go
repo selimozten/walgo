@@ -107,10 +107,10 @@ func TestGetVersion(t *testing.T) {
 	})
 
 	t.Run("version format looks valid", func(t *testing.T) {
-		// Should look like a semver e.g. "0.3.4"
+		// Should look like a semver e.g. "0.3.5"
 		parts := strings.Split(result.Version, ".")
 		if len(parts) < 2 {
-			t.Errorf("GetVersion().Version = %q, expected semver format (e.g., 0.3.4)", result.Version)
+			t.Errorf("GetVersion().Version = %q, expected semver format (e.g., 0.3.5)", result.Version)
 		}
 	})
 
@@ -514,7 +514,7 @@ func TestWalletInfo_JSONSerialization(t *testing.T) {
 
 func TestVersionResult_JSONSerialization(t *testing.T) {
 	result := VersionResult{
-		Version:   "0.3.4",
+		Version:   "0.3.5",
 		GitCommit: "abc123",
 		BuildDate: "2024-01-01",
 	}
@@ -1831,7 +1831,7 @@ func TestUpdateSiteParams_OmitemptyEpochs(t *testing.T) {
 
 func TestCheckUpdatesResult_JSONSerialization(t *testing.T) {
 	result := CheckUpdatesResult{
-		CurrentVersion: "0.3.4",
+		CurrentVersion: "0.3.5",
 		LatestVersion:  "0.4.0",
 		UpdateURL:      "https://github.com/selimozten/walgo/releases/tag/v0.4.0",
 	}
@@ -1846,8 +1846,8 @@ func TestCheckUpdatesResult_JSONSerialization(t *testing.T) {
 		t.Fatalf("failed to unmarshal: %v", err)
 	}
 
-	if decoded.CurrentVersion != "0.3.4" {
-		t.Errorf("CurrentVersion = %q, want %q", decoded.CurrentVersion, "0.3.4")
+	if decoded.CurrentVersion != "0.3.5" {
+		t.Errorf("CurrentVersion = %q, want %q", decoded.CurrentVersion, "0.3.5")
 	}
 	if decoded.LatestVersion != "0.4.0" {
 		t.Errorf("LatestVersion = %q, want %q", decoded.LatestVersion, "0.4.0")
