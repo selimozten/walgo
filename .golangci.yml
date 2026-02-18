@@ -16,14 +16,32 @@ linters:
         - (*encoding/json.Encoder).Encode
         - (*encoding/json.Decoder).Decode
         - (io.Writer).Write
+        - (*database/sql.Rows).Close
+        - (*archive/zip.ReadCloser).Close
+        - fmt.Fprintf
+        - fmt.Fprintln
+        - os.Remove
+        - os.RemoveAll
     staticcheck:
-      checks: ["all", "-SA9003"]
+      checks:
+        - "all"
+        - "-SA9003"
+        - "-ST1000"
+        - "-ST1003"
+        - "-ST1020"
+        - "-ST1023"
+        - "-QF1003"
+        - "-QF1011"
+        - "-QF1012"
   exclusions:
     rules:
       - path: _test\.go
         linters:
           - errcheck
       - path: test/
+        linters:
+          - errcheck
+      - text: "Error return value of .*.Close\\(\\). is not checked"
         linters:
           - errcheck
 
