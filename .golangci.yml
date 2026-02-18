@@ -18,15 +18,14 @@ linters:
         - (io.Writer).Write
     staticcheck:
       checks: ["all", "-SA9003"]
-
-issues:
-  exclude-rules:
-    - path: _test\.go
-      linters:
-        - errcheck
-    - path: test/
-      linters:
-        - errcheck
+  exclusions:
+    rules:
+      - path: _test\.go
+        linters:
+          - errcheck
+      - path: test/
+        linters:
+          - errcheck
 
 run:
   timeout: 5m
@@ -34,4 +33,4 @@ run:
 
 output:
   formats:
-    colored-line-number: {}
+    text: {}
