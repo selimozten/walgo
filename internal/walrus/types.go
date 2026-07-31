@@ -20,6 +20,13 @@ type SiteBuilderOutput struct {
 
 // Resource represents a deployed site resource.
 type Resource struct {
-	Path   string
+	Path string
+	// BlobID is the blob ID or, for quilted sites, the quilt patch ID.
 	BlobID string
+	// BlobObjectID is the owned Sui blob object backing the resource, when the
+	// wallet owns one. Empty for resources stored by somebody else.
+	BlobObjectID string
+	// Expiry is when the backing storage runs out. Zero when site-builder
+	// reported no expiration date (typically because no owned blob was found).
+	Expiry time.Time
 }

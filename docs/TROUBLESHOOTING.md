@@ -598,6 +598,37 @@ Error: Failed to connect to Walrus publisher/aggregator
 
 ---
 
+### Site is live on chain but serves nothing (expired storage)
+
+**Symptoms:** the portal returns 404, while `walgo status` still finds the object
+and reports expired resources.
+
+**Cause:** a Walrus Site is two things with different lifetimes. The Sui object
+never expires; the blobs holding the content do, after the number of epochs paid
+for at deploy time (a mainnet epoch is ~2 weeks, a testnet epoch ~1 day).
+
+**Expired storage cannot be extended.** The walrus contract rejects extending an
+expired blob (`assert_certified_not_expired`), so there is no renew path once the
+deadline passes — the content has to be stored again:
+
+```bash
+walgo build                 # regenerate the files locally
+walgo update --epochs 10    # re-upload; the site keeps its object ID
+walrus burn-blobs --all-expired   # clean up the dead blob objects afterwards
+```
+
+Notes:
+
+- Re-uploading costs the full write + storage price. Extending, which only works
+  *before* expiry, is cheaper — `walgo status` prints the expiration date so the
+  renewal can happen in time.
+- The local build is the only source of the content once the blobs are gone.
+  Walrus no longer holds it, so a site whose sources are lost cannot be restored.
+- `walgo update` defaults to 1 epoch. Pass `--epochs` unless a two-week (mainnet)
+  or one-day (testnet) lifetime is what you want.
+
+---
+
 ### "Method not found. JSON-RPC on public fullnodes has been deprecated"
 
 **Symptoms:**

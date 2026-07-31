@@ -13,9 +13,24 @@ import (
 
 // CheckSiteBuilderSetup verifies site-builder installation and configuration.
 func CheckSiteBuilderSetup() error {
-	builderPath, err := execLookPath(siteBuilderCmd)
+	builderPath, configPath, err := checkSiteBuilderSetupQuiet()
 	if err != nil {
-		return fmt.Errorf("'%s' CLI not found. Please install it using suiup:\n\n"+
+		return err
+	}
+
+	icons := ui.GetIcons()
+	fmt.Printf("%s site-builder found at: %s\n", icons.Check, builderPath)
+	fmt.Printf("%s site-builder config found at: %s\n", icons.Check, configPath)
+	return nil
+}
+
+// checkSiteBuilderSetupQuiet validates the site-builder installation without
+// printing anything, and returns the resolved binary and config paths. Commands
+// that only read state use this so their output stays parseable.
+func checkSiteBuilderSetupQuiet() (builderPath, configPath string, err error) {
+	builderPath, err = execLookPath(siteBuilderCmd)
+	if err != nil {
+		return "", "", fmt.Errorf("'%s' CLI not found. Please install it using suiup:\n\n"+
 			"  1. Install suiup (if not installed):\n"+
 			"     curl -sSfL https://raw.githubusercontent.com/MystenLabs/suiup/main/install.sh | sh\n\n"+
 			"  2. Install site-builder:\n"+
@@ -23,9 +38,6 @@ func CheckSiteBuilderSetup() error {
 			"     suiup default set site-builder@mainnet\n\n"+
 			"  Or run: walgo setup-deps", siteBuilderCmd)
 	}
-
-	icons := ui.GetIcons()
-	fmt.Printf("%s site-builder found at: %s\n", icons.Check, builderPath)
 
 	homeDir, _ := os.UserHomeDir()
 	configPaths := []string{
@@ -36,22 +48,13 @@ func CheckSiteBuilderSetup() error {
 	}
 	configPaths = append(configPaths, "sites-config.yaml")
 
-	var configFound bool
-	var configPath string
 	for _, path := range configPaths {
 		if _, err := osStat(path); err == nil {
-			configFound = true
-			configPath = path
-			break
+			return builderPath, path, nil
 		}
 	}
 
-	if !configFound {
-		return fmt.Errorf("site-builder configuration not found. Please run 'walgo setup' to configure site-builder")
-	}
-
-	fmt.Printf("%s site-builder config found at: %s\n", icons.Check, configPath)
-	return nil
+	return "", "", fmt.Errorf("site-builder configuration not found. Please run 'walgo setup' to configure site-builder")
 }
 
 // handleSiteBuilderError converts site-builder errors into actionable messages.

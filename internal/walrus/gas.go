@@ -17,6 +17,23 @@ type TransactionGasInfo struct {
 	Success     bool
 }
 
+// Format renders the recorded spend as "X.XXXXXX WAL + Y.YYYYYY SUI", dropping
+// a currency that was not spent. Returns "" when nothing was recorded.
+func (t *TransactionGasInfo) Format() string {
+	switch {
+	case t == nil:
+		return ""
+	case t.TotalWAL > 0 && t.TotalGasSUI > 0:
+		return fmt.Sprintf("%.6f WAL + %.6f SUI", t.TotalWAL, t.TotalGasSUI)
+	case t.TotalWAL > 0:
+		return fmt.Sprintf("%.6f WAL", t.TotalWAL)
+	case t.TotalGasSUI > 0:
+		return fmt.Sprintf("%.6f SUI", t.TotalGasSUI)
+	default:
+		return ""
+	}
+}
+
 // latestTransactionQuery reads the most recent transaction sent by an address
 // together with its balance changes. Replaces the retired
 // suix_queryTransactionBlocks JSON-RPC method; note that the filter key is

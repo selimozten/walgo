@@ -69,6 +69,7 @@ You can provide the object ID as an argument, or the command will look for it in
 			if output.ResourceCount > 0 {
 				fmt.Printf("%s Resources: %d files\n", icons.Folder, output.ResourceCount)
 			}
+			printExpiryStatus(output.ExpiredResources, output.ResourceCount, output.EarliestExpiry)
 		}
 
 		return nil

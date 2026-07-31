@@ -3,6 +3,7 @@ package walrus
 import (
 	"regexp"
 	"strings"
+	"time"
 )
 
 // parseSiteBuilderOutput extracts key information from site-builder command output.
@@ -54,37 +55,100 @@ func parseSiteBuilderOutput(output string) *SiteBuilderOutput {
 	return result
 }
 
+// sitemapColumnSeparator splits the columns of the sitemap table, which are
+// padded apart with at least two spaces.
+var sitemapColumnSeparator = regexp.MustCompile(`\s{2,}`)
+
 // parseSitemapOutput extracts resources from sitemap command output.
+//
+// site-builder prints a table:
+//
+//	Resource path   Blob / Quilt Patch ID   Owned blob object ID (if any)   Earliest Expiration Date
+//	/index.html     0nLObHz-...             0x69f3aff9...                   2026-08-11
+//
+// Older builds printed one "resource <path> with blob ID <id>" line per entry,
+// which is still recognized.
 func parseSitemapOutput(output string) *SiteBuilderOutput {
 	result := &SiteBuilderOutput{
 		Resources: make([]Resource, 0),
 	}
 
-	lines := strings.Split(output, "\n")
-	for _, line := range lines {
+	for _, line := range strings.Split(string(stripANSI([]byte(output))), "\n") {
 		line = strings.TrimSpace(line)
+		if line == "" {
+			continue
+		}
 
-		if strings.Contains(line, "blob ID") {
-			parts := strings.Fields(line)
-			var path, blobID string
+		if resource, ok := parseSitemapTableRow(line); ok {
+			result.Resources = append(result.Resources, resource)
+			continue
+		}
 
-			for i, part := range parts {
-				if part == "resource" && i+1 < len(parts) {
-					path = parts[i+1]
-				}
-				if part == "ID" && i+1 < len(parts) {
-					blobID = parts[i+1]
-				}
-			}
-
-			if path != "" && blobID != "" {
-				result.Resources = append(result.Resources, Resource{
-					Path:   path,
-					BlobID: blobID,
-				})
-			}
+		if resource, ok := parseSitemapLegacyLine(line); ok {
+			result.Resources = append(result.Resources, resource)
 		}
 	}
 
 	return result
+}
+
+// parseSitemapTableRow parses one row of the sitemap table. Header, separator
+// and non-resource lines are rejected.
+func parseSitemapTableRow(line string) (Resource, bool) {
+	if !strings.HasPrefix(line, "/") {
+		return Resource{}, false // resource paths are absolute; headers are not
+	}
+
+	columns := sitemapColumnSeparator.Split(line, -1)
+	if len(columns) < 2 {
+		return Resource{}, false
+	}
+
+	resource := Resource{
+		Path:   strings.TrimSpace(columns[0]),
+		BlobID: strings.TrimSpace(columns[1]),
+	}
+
+	if len(columns) > 2 {
+		if objectID := strings.TrimSpace(columns[2]); strings.HasPrefix(objectID, "0x") {
+			resource.BlobObjectID = objectID
+		}
+	}
+
+	if len(columns) > 3 {
+		if expiry, err := time.Parse(time.DateOnly, strings.TrimSpace(columns[3])); err == nil {
+			resource.Expiry = expiry
+		}
+	}
+
+	if resource.Path == "" || resource.BlobID == "" {
+		return Resource{}, false
+	}
+
+	return resource, true
+}
+
+// parseSitemapLegacyLine parses the pre-table sitemap format.
+func parseSitemapLegacyLine(line string) (Resource, bool) {
+	if !strings.Contains(line, "blob ID") {
+		return Resource{}, false
+	}
+
+	parts := strings.Fields(line)
+	var path, blobID string
+
+	for i, part := range parts {
+		if part == "resource" && i+1 < len(parts) {
+			path = parts[i+1]
+		}
+		if part == "ID" && i+1 < len(parts) {
+			blobID = parts[i+1]
+		}
+	}
+
+	if path == "" || blobID == "" {
+		return Resource{}, false
+	}
+
+	return Resource{Path: path, BlobID: blobID}, true
 }
