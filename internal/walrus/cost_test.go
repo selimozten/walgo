@@ -186,26 +186,26 @@ func TestCalculateEncodedSizeWithMultiplier(t *testing.T) {
 	}
 }
 
-func TestGetRPCEndpoint(t *testing.T) {
+func TestGetGraphQLEndpoint(t *testing.T) {
 	tests := []struct {
 		name    string
 		network string
 		want    string
 	}{
-		{"mainnet", "mainnet", SuiMainnetRPC},
-		{"testnet", "testnet", SuiTestnetRPC},
-		{"mainnet uppercase", "Mainnet", SuiMainnetRPC},
-		{"testnet uppercase", "Testnet", SuiTestnetRPC},
-		{"MAINNET", "MAINNET", SuiMainnetRPC},
-		{"empty defaults to testnet", "", SuiTestnetRPC},
-		{"unknown defaults to testnet", "devnet", SuiTestnetRPC},
+		{"mainnet", "mainnet", SuiMainnetGraphQL},
+		{"testnet", "testnet", SuiTestnetGraphQL},
+		{"mainnet uppercase", "Mainnet", SuiMainnetGraphQL},
+		{"testnet uppercase", "Testnet", SuiTestnetGraphQL},
+		{"MAINNET", "MAINNET", SuiMainnetGraphQL},
+		{"empty defaults to testnet", "", SuiTestnetGraphQL},
+		{"unknown defaults to testnet", "devnet", SuiTestnetGraphQL},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got := GetRPCEndpoint(tt.network)
+			got := GetGraphQLEndpoint(tt.network)
 			if got != tt.want {
-				t.Errorf("GetRPCEndpoint(%q) = %q, want %q", tt.network, got, tt.want)
+				t.Errorf("GetGraphQLEndpoint(%q) = %q, want %q", tt.network, got, tt.want)
 			}
 		})
 	}
@@ -218,9 +218,9 @@ func TestDefaultGasPrice(t *testing.T) {
 		want    uint64
 	}{
 		{"testnet", "testnet", 1000},
-		{"mainnet", "mainnet", 550},
+		{"mainnet", "mainnet", 100},
 		{"Testnet uppercase", "Testnet", 1000},
-		{"Mainnet uppercase", "Mainnet", 550},
+		{"Mainnet uppercase", "Mainnet", 100},
 		{"empty defaults to testnet price", "", 1000},
 		{"unknown defaults to testnet price", "devnet", 1000},
 	}
@@ -905,24 +905,24 @@ func TestStripANSICodes(t *testing.T) {
 	}
 }
 
-func TestSuiRPCConstants(t *testing.T) {
-	if SuiTestnetRPC == "" {
-		t.Error("SuiTestnetRPC should not be empty")
+func TestSuiGraphQLConstants(t *testing.T) {
+	if SuiTestnetGraphQL == "" {
+		t.Error("SuiTestnetGraphQL should not be empty")
 	}
-	if SuiMainnetRPC == "" {
-		t.Error("SuiMainnetRPC should not be empty")
+	if SuiMainnetGraphQL == "" {
+		t.Error("SuiMainnetGraphQL should not be empty")
 	}
-	if !strings.HasPrefix(SuiTestnetRPC, "https://") {
-		t.Errorf("SuiTestnetRPC should use HTTPS, got %q", SuiTestnetRPC)
+	if !strings.HasPrefix(SuiTestnetGraphQL, "https://") {
+		t.Errorf("SuiTestnetGraphQL should use HTTPS, got %q", SuiTestnetGraphQL)
 	}
-	if !strings.HasPrefix(SuiMainnetRPC, "https://") {
-		t.Errorf("SuiMainnetRPC should use HTTPS, got %q", SuiMainnetRPC)
+	if !strings.HasPrefix(SuiMainnetGraphQL, "https://") {
+		t.Errorf("SuiMainnetGraphQL should use HTTPS, got %q", SuiMainnetGraphQL)
 	}
-	if !strings.Contains(SuiTestnetRPC, "testnet") {
-		t.Errorf("SuiTestnetRPC should contain 'testnet', got %q", SuiTestnetRPC)
+	if !strings.Contains(SuiTestnetGraphQL, "testnet") {
+		t.Errorf("SuiTestnetGraphQL should contain 'testnet', got %q", SuiTestnetGraphQL)
 	}
-	if !strings.Contains(SuiMainnetRPC, "mainnet") {
-		t.Errorf("SuiMainnetRPC should contain 'mainnet', got %q", SuiMainnetRPC)
+	if !strings.Contains(SuiMainnetGraphQL, "mainnet") {
+		t.Errorf("SuiMainnetGraphQL should contain 'mainnet', got %q", SuiMainnetGraphQL)
 	}
 }
 

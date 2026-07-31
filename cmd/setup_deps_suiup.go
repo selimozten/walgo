@@ -11,7 +11,6 @@ import (
 
 	"github.com/ganbitlabs/walgo/internal/deps"
 	"github.com/ganbitlabs/walgo/internal/ui"
-	"github.com/ganbitlabs/walgo/internal/version"
 	"github.com/spf13/cobra"
 )
 
@@ -101,14 +100,9 @@ func runSetupDeps(cmd *cobra.Command, args []string) error {
 		}
 	}
 
-	// Check walrus/site-builder version compatibility after install
-	if withWalrus && withSiteBuilder {
-		if err := version.CheckInstalledCompatibility(); err != nil {
-			fmt.Println()
-			fmt.Printf("  %s %v\n", icons.Warning, err)
-			fmt.Println()
-		}
-	}
+	// Report what actually resolves after installing, so a stale binary earlier in
+	// PATH cannot masquerade as the version suiup just installed.
+	printToolchainReport()
 
 	if withHugo {
 		fmt.Println()

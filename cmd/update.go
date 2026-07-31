@@ -67,6 +67,13 @@ Assumes the site has been built using 'walgo build'.`,
 			return fmt.Errorf("publish directory not found: %w", err)
 		}
 
+		// Updates follow the active Sui environment; fail early if walgo.yaml
+		// disagrees rather than updating on the wrong network.
+		network, err := resolveDeployNetwork(cfg.WalrusConfig.Network)
+		if err != nil {
+			return err
+		}
+
 		// Get object ID with priority: CLI arg > ws-resources.json > walgo.yaml
 		var objectID string
 		if len(args) > 0 {
@@ -114,12 +121,20 @@ Assumes the site has been built using 'walgo build'.`,
 			return fmt.Errorf("error reading dry-run flag: %w", err)
 		}
 
+		// Kept beyond the block below so the expiry check can price a full
+		// re-upload when the current storage has already expired.
+		var planSiteSize int64
+		var planFileCount int
+
 		if cacheHelper != nil {
 			fmt.Printf("\n%s Analyzing changes...\n", icons.Info)
 			plan, err := cacheHelper.PrepareDeployment(deployDir)
 			if err != nil {
 				fmt.Fprintf(os.Stderr, "%s Warning: Failed to analyze changes: %v\n", icons.Warning, err)
 			} else {
+				planSiteSize = plan.TotalSize
+				planFileCount = plan.TotalFiles
+
 				if telemetry {
 					deployMetrics.TotalFiles = plan.TotalFiles
 					if plan.ChangeSet != nil {
@@ -158,6 +173,17 @@ Assumes the site has been built using 'walgo build'.`,
 		}
 
 		fmt.Printf("\n%s Storing for %d epoch(s)\n", icons.Database, epochs)
+
+		// Expired resources are re-uploaded at full price rather than extended,
+		// so say that before the wallet is charged.
+		checkExpiryBeforeUpdate(updateExpiryCheck{
+			ObjectID:  objectID,
+			Network:   network,
+			Epochs:    epochs,
+			SiteSize:  planSiteSize,
+			FileCount: planFileCount,
+			Verbose:   verbose,
+		})
 
 		err = hugo.BuildSite(sitePath)
 		if err != nil {
@@ -224,18 +250,27 @@ Assumes the site has been built using 'walgo build'.`,
 						existingProj.ObjectID = objectID
 						existingProj.Epochs = epochs
 						existingProj.LastDeployAt = time.Now()
+						// Older records were written without a network, which
+						// makes every epoch-based estimate for them wrong.
+						if existingProj.Network == "" {
+							existingProj.Network = network
+						}
 
 						if err := pm.UpdateProject(existingProj); err != nil {
 							fmt.Fprintf(os.Stderr, "%s Warning: Failed to update project in database: %v\n", icons.Warning, err)
 						} else {
-							// Use epoch-aware cost estimation
-							estimatedGas := projects.EstimateGasFeeWithEpochs(existingProj.Network, siteSize, epochs)
+							// Prefer what the chain actually charged; fall back to
+							// the epoch-aware estimate when it cannot be read.
+							gasFee := projects.EstimateGasFeeWithEpochs(existingProj.Network, siteSize, epochs)
+							if actual := actualUpdateCost(network); actual != "" {
+								gasFee = actual
+							}
 							deployment := &projects.DeploymentRecord{
 								ProjectID: existingProj.ID,
 								ObjectID:  objectID,
 								Network:   existingProj.Network,
 								Epochs:    epochs,
-								GasFee:    estimatedGas,
+								GasFee:    gasFee,
 								Success:   true,
 							}
 							_ = pm.RecordDeployment(deployment)

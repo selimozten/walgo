@@ -598,6 +598,66 @@ Error: Failed to connect to Walrus publisher/aggregator
 
 ---
 
+### Site is live on chain but serves nothing (expired storage)
+
+**Symptoms:** the portal returns 404, while `walgo status` still finds the object
+and reports expired resources.
+
+**Cause:** a Walrus Site is two things with different lifetimes. The Sui object
+never expires; the blobs holding the content do, after the number of epochs paid
+for at deploy time (a mainnet epoch is ~2 weeks, a testnet epoch ~1 day).
+
+**Expired storage cannot be extended.** The walrus contract rejects extending an
+expired blob (`assert_certified_not_expired`), so there is no renew path once the
+deadline passes — the content has to be stored again:
+
+```bash
+walgo build                 # regenerate the files locally
+walgo update --epochs 10    # re-upload; the site keeps its object ID
+walrus burn-blobs --all-expired   # clean up the dead blob objects afterwards
+```
+
+Notes:
+
+- Re-uploading costs the full write + storage price. Extending, which only works
+  *before* expiry, is cheaper — `walgo status` prints the expiration date so the
+  renewal can happen in time.
+- The local build is the only source of the content once the blobs are gone.
+  Walrus no longer holds it, so a site whose sources are lost cannot be restored.
+- `walgo update` defaults to 1 epoch. Pass `--epochs` unless a two-week (mainnet)
+  or one-day (testnet) lifetime is what you want.
+
+---
+
+### "Method not found. JSON-RPC on public fullnodes has been deprecated"
+
+**Symptoms:**
+
+```bash
+Error: Failed to get client from url: max failovers exceeded
+ErrorObject { code: MethodNotFound, message: "Method not found. JSON-RPC on public
+fullnodes has been deprecated. Please migrate to gRPC or GraphQL endpoints." }
+```
+
+**Cause:** Sui Foundation disabled JSON-RPC on its public fullnodes on 2026-07-31.
+Older walrus and site-builder builds only speak JSON-RPC, so every deployment fails.
+
+**Solution:** update the tools. Minimum versions are walrus **1.52.0** and
+site-builder **2.12.0**:
+
+```bash
+suiup install walrus@mainnet
+suiup install site-builder@mainnet
+walrus --version && site-builder --version
+```
+
+`rpc_url` in `sites-config.yaml` and `rpc_urls` in `client_config.yaml` stay the
+same — `https://fullnode.<network>.sui.io:443` serves gRPC on the same address.
+
+See the [JSON-RPC migration guide](https://docs.sui.io/develop/accessing-data/json-rpc-migration).
+
+---
+
 ### "RPC error" when deploying
 
 **Symptoms:**
@@ -612,12 +672,20 @@ Error: Failed to connect to Sui RPC node
 
    - Visit [Sui status page](https://status.sui.io)
 
-2. **Try different RPC:**
+2. **Check whether the endpoint is serving stale state:**
 
    ```bash
-   # Configure custom RPC (if supported)
-   export SUI_RPC_URL="https://fullnode.testnet.sui.io:443"
+   # gRPC (what walrus and the sui CLI use)
+   sui client object 0x5 --json | grep version
+   # GraphQL (independent read path)
+   curl -s https://graphql.mainnet.sui.io/graphql -H 'Content-Type: application/json' \
+     -d '{"query":"{ object(address:\"0x5\"){ version } }"}'
    ```
+
+   Different versions mean the public fullnode is lagging. Errors like
+   `object ... is unavailable for consumption, current version: ...` or
+   `could not find WAL coins with sufficient balance` (with a funded wallet)
+   come from that lag. Point `rpc_urls` at another provider or wait it out.
 
 3. **Wait and retry:**
    - Network congestion is temporary

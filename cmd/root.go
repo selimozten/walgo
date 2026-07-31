@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"path/filepath"
 	"strings"
 
 	"github.com/spf13/cobra"
@@ -51,17 +52,15 @@ Alternative deployment methods:
   walgo deploy        # Direct on-chain deployment (advanced)
 
 Docs: https://github.com/ganbitlabs/walgo`,
+	// A runtime failure is not a usage mistake; printing the full flag list after
+	// one buries the actual error message.
+	SilenceUsage: true,
 }
 
 // Execute runs the root command and returns any error encountered.
+// Cobra already reports the error, so it is only passed up for the exit code.
 func Execute() error {
-	err := rootCmd.Execute()
-	if err != nil {
-		fmt.Fprintln(os.Stderr, err)
-		return err
-	}
-
-	return nil
+	return rootCmd.Execute()
 }
 
 func init() {
@@ -72,31 +71,53 @@ func init() {
 }
 
 func initConfig() {
-	if cfgFile != "" {
-		viper.SetConfigFile(cfgFile)
+	viper.SetConfigType("yaml")
+
+	if cfgFile == "" {
+		found := findConfigFile()
+		if found == "" {
+			viper.AutomaticEnv()
+			return // no config file is a normal situation
+		}
+		viper.SetConfigFile(found)
 	} else {
-		home, err := os.UserHomeDir()
-		cobra.CheckErr(err)
-
-		viper.AddConfigPath(home)
-		viper.SetConfigType("yaml")
-		viper.SetConfigName(".walgo")
-
-		viper.AddConfigPath(".")
-		viper.SetConfigName("walgo")
+		viper.SetConfigFile(cfgFile)
 	}
 
 	viper.AutomaticEnv()
 
 	if err := viper.ReadInConfig(); err != nil {
-		if cfgFile != "" {
-			fmt.Fprintf(os.Stderr, "Error: Failed to read specified config file %s: %v\n", cfgFile, err)
-		} else {
-			if _, ok := err.(viper.ConfigFileNotFoundError); !ok {
-				fmt.Fprintf(os.Stderr, "Error: Found config file but failed to read/parse it: %v\n", err)
-			}
-		}
-	} else {
-		fmt.Fprintln(os.Stderr, "Using config file:", viper.ConfigFileUsed())
+		fmt.Fprintf(os.Stderr, "Error: Failed to read config file %s: %v\n", viper.ConfigFileUsed(), err)
+		return
 	}
+
+	fmt.Fprintln(os.Stderr, "Using config file:", viper.ConfigFileUsed())
+}
+
+// findConfigFile returns the first existing config file, preferring the working
+// directory over the home directory. Candidates are matched by full filename
+// rather than by basename, so an executable named "walgo" sitting next to the
+// site is never mistaken for a config file.
+func findConfigFile() string {
+	candidates := []string{"walgo.yaml", "walgo.yml"}
+
+	for _, name := range candidates {
+		if info, err := os.Stat(name); err == nil && !info.IsDir() {
+			return name
+		}
+	}
+
+	home, err := os.UserHomeDir()
+	if err != nil {
+		return ""
+	}
+
+	for _, name := range []string{".walgo.yaml", ".walgo.yml"} {
+		path := filepath.Join(home, name)
+		if info, err := os.Stat(path); err == nil && !info.IsDir() {
+			return path
+		}
+	}
+
+	return ""
 }

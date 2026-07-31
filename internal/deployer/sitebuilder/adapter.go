@@ -2,6 +2,8 @@ package sitebuilder
 
 import (
 	"context"
+	"time"
+
 	"github.com/ganbitlabs/walgo/internal/deployer"
 	"github.com/ganbitlabs/walgo/internal/walrus"
 )
@@ -52,10 +54,14 @@ func (a *Adapter) Status(ctx context.Context, objectID string, opts deployer.Dep
 	if out == nil {
 		return &deployer.Result{Success: false, ObjectID: objectID}, nil
 	}
+	expiry := walrus.SummarizeExpiry(out.Resources, time.Now())
+
 	return &deployer.Result{
-		Success:       out.Success,
-		ObjectID:      objectID,
-		BrowseURLs:    out.BrowseURLs,
-		ResourceCount: len(out.Resources),
+		Success:          out.Success,
+		ObjectID:         objectID,
+		BrowseURLs:       out.BrowseURLs,
+		ResourceCount:    len(out.Resources),
+		ExpiredResources: len(expiry.Expired),
+		EarliestExpiry:   expiry.Earliest,
 	}, nil
 }

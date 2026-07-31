@@ -63,18 +63,17 @@ func listProjects(network, status string) error {
 		// Show epoch and expiry info
 		epochInfo, err := pm.GetEpochInfo(proj.ID)
 		if err == nil && epochInfo != nil && epochInfo.TotalEpochs > 0 {
-			duration := projects.CalculateStorageDuration(epochInfo.TotalEpochs, proj.Network)
-			fmt.Printf("   Epochs:       %d (%s)\n", epochInfo.TotalEpochs, duration)
+			fmt.Printf("   Epochs:       %s\n", formatEpochs(epochInfo.TotalEpochs, proj.Network))
 
-			// Calculate and show expiry
+			// Estimated from local deployment records; `walgo projects show` and
+			// `walgo status` read the authoritative expiry from chain.
 			if !epochInfo.FirstDeploymentAt.IsZero() {
-				expiryDate := calculateExpiryDate(epochInfo.FirstDeploymentAt, epochInfo.TotalEpochs, proj.Network)
-				expiryStr := formatExpiryDuration(expiryDate)
-				fmt.Printf("   Expires:      %s\n", expiryStr)
+				if expiryDate, ok := estimateExpiry(epochInfo.FirstDeploymentAt, epochInfo.TotalEpochs, proj.Network); ok {
+					fmt.Printf("   Expires:      %s (est.)\n", formatExpiryDuration(expiryDate))
+				}
 			}
 		} else if proj.Epochs > 0 {
-			duration := projects.CalculateStorageDuration(proj.Epochs, proj.Network)
-			fmt.Printf("   Epochs:       %d (%s)\n", proj.Epochs, duration)
+			fmt.Printf("   Epochs:       %s\n", formatEpochs(proj.Epochs, proj.Network))
 		}
 
 		since := time.Since(proj.LastDeployAt)

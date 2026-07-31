@@ -2,6 +2,8 @@ package deployer
 
 import (
 	"context"
+	"time"
+
 	"github.com/ganbitlabs/walgo/internal/config"
 )
 
@@ -13,7 +15,11 @@ type Result struct {
 	FileToBlobID  map[string]string // For HTTP per-blob uploads: relative path -> blobId
 	QuiltPatches  map[string]string // For HTTP quilt uploads: identifier -> quiltPatchId
 	ResourceCount int               // For site-builder status: number of resources
-	Message       string
+	// ExpiredResources counts resources whose Walrus storage has already run out.
+	ExpiredResources int
+	// EarliestExpiry is when the site's storage next runs out. Zero if unknown.
+	EarliestExpiry time.Time
+	Message        string
 }
 
 // DeployOptions configures deploy behavior.

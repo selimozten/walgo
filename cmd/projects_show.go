@@ -7,6 +7,7 @@ import (
 
 	"github.com/ganbitlabs/walgo/internal/projects"
 	"github.com/ganbitlabs/walgo/internal/ui"
+	"github.com/ganbitlabs/walgo/internal/walrus"
 )
 
 // showProjectDetails displays detailed information about a specific project.
@@ -76,8 +77,7 @@ func showProjectDetails(proj *projects.Project) error {
 
 	// Storage Epochs
 	if epochInfo != nil && epochInfo.TotalEpochs > 0 {
-		duration := projects.CalculateStorageDuration(epochInfo.TotalEpochs, proj.Network)
-		fmt.Printf("  Total Storage Epochs:  %d (~%s)\n", epochInfo.TotalEpochs, duration)
+		fmt.Printf("  Total Storage Epochs:  %s\n", formatEpochs(epochInfo.TotalEpochs, proj.Network))
 
 		// Show last deployment epochs if different from total (indicates multiple deployments)
 		if proj.Epochs > 0 && proj.Epochs != epochInfo.TotalEpochs {
@@ -86,19 +86,33 @@ func showProjectDetails(proj *projects.Project) error {
 
 		// Calculate expiry from first deployment + total epochs
 		if !epochInfo.FirstDeploymentAt.IsZero() {
-			expiryDate := calculateExpiryDate(epochInfo.FirstDeploymentAt, epochInfo.TotalEpochs, proj.Network)
-			expiryStr := formatExpiryDuration(expiryDate)
-			fmt.Printf("  Expires In:            %s\n", expiryStr)
+			if expiryDate, ok := estimateExpiry(epochInfo.FirstDeploymentAt, epochInfo.TotalEpochs, proj.Network); ok {
+				fmt.Printf("  Expires In (est.):     %s\n", formatExpiryDuration(expiryDate))
+			}
 		}
 	} else if proj.Epochs > 0 {
 		// Fallback to project epochs if epoch info not available
-		duration := projects.CalculateStorageDuration(proj.Epochs, proj.Network)
-		fmt.Printf("  Storage Epochs:        %d (~%s)\n", proj.Epochs, duration)
+		fmt.Printf("  Storage Epochs:        %s\n", formatEpochs(proj.Epochs, proj.Network))
 
 		if !proj.LastDeployAt.IsZero() {
-			expiryDate := calculateExpiryDate(proj.LastDeployAt, proj.Epochs, proj.Network)
-			expiryStr := formatExpiryDuration(expiryDate)
-			fmt.Printf("  Expires In:            %s\n", expiryStr)
+			if expiryDate, ok := estimateExpiry(proj.LastDeployAt, proj.Epochs, proj.Network); ok {
+				fmt.Printf("  Expires In (est.):     %s\n", formatExpiryDuration(expiryDate))
+			}
+		}
+	}
+
+	// The database only knows what walgo last did; the chain knows what storage
+	// is actually paid for. Prefer the latter when the project is reachable from
+	// the active Sui environment.
+	if proj.ObjectID != "" {
+		if _, err := resolveDeployNetwork(proj.Network); err == nil {
+			if expiry, err := walrus.GetSiteExpiry(proj.ObjectID); err == nil {
+				fmt.Printf("  On-chain Storage:      %s\n", expiry.Describe(time.Now()))
+				if expiry.HasExpired() {
+					fmt.Printf("  %s Expired storage cannot be extended; 'walgo update --epochs <n>'\n", icons.Warning)
+					fmt.Printf("     re-uploads the content from the local build.\n")
+				}
+			}
 		}
 	}
 
@@ -183,6 +197,29 @@ func calculateExpiryDate(lastDeploy time.Time, epochs int, network string) time.
 
 	totalDays := epochs * daysPerEpoch
 	return lastDeploy.Add(time.Duration(totalDays) * 24 * time.Hour)
+}
+
+// estimateExpiry is calculateExpiryDate with an honesty check: epoch length
+// depends on the network, so without a recorded network the estimate would be
+// off by 14x and is better left unsaid.
+func estimateExpiry(lastDeploy time.Time, epochs int, network string) (time.Time, bool) {
+	switch normalizeNetwork(network) {
+	case "mainnet", "testnet":
+		return calculateExpiryDate(lastDeploy, epochs, normalizeNetwork(network)), true
+	default:
+		return time.Time{}, false
+	}
+}
+
+// formatEpochs renders an epoch count, adding the wall-clock duration only when
+// the network is known — a mainnet epoch lasts two weeks and a testnet one a day.
+func formatEpochs(epochs int, network string) string {
+	switch normalizeNetwork(network) {
+	case "mainnet", "testnet":
+		return fmt.Sprintf("%d (~%s)", epochs, projects.CalculateStorageDuration(epochs, normalizeNetwork(network)))
+	default:
+		return fmt.Sprintf("%d (network unknown)", epochs)
+	}
 }
 
 // formatExpiryDuration formats the time until expiry in a human-readable format

@@ -90,7 +90,10 @@ func runLegacyInstall(cmd *cobra.Command, withSiteBuilder, withWalrus, withHugo 
 
 	fmt.Println()
 	fmt.Printf("%s Dependencies installed successfully!\n", icons.Success)
-	fmt.Printf("\n%s Next step:\n", icons.Lightbulb)
+
+	printToolchainReport()
+
+	fmt.Printf("%s Next step:\n", icons.Lightbulb)
 	fmt.Println("   walgo doctor     # Verify your environment")
 	return nil
 }
@@ -129,11 +132,13 @@ func siteBuilderURL(osStr, archStr, network string) (string, string) {
 }
 
 func walrusURL(osStr, archStr, network string) (string, string) {
-	name := fmt.Sprintf("walrus-latest-%s-%s", osStr, archStr)
-	if network == "mainnet" || network == "testnet" {
-		candidate := fmt.Sprintf("walrus-%s-latest-%s-%s", network, osStr, archStr)
-		return fmt.Sprintf("%s/%s", baseBucket(), candidate), candidate
+	// The bucket only publishes network-qualified walrus builds; there is no
+	// walrus-latest-<os>-<arch> artifact, so an unknown network falls back to
+	// testnet rather than to a URL that 404s.
+	if network != "mainnet" {
+		network = "testnet"
 	}
+	name := fmt.Sprintf("walrus-%s-latest-%s-%s", network, osStr, archStr)
 	return fmt.Sprintf("%s/%s", baseBucket(), name), name
 }
 
