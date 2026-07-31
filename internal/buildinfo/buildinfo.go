@@ -20,7 +20,7 @@ var (
 )
 
 const (
-	releaseVersion = "0.4.0"
+	releaseVersion = "0.4.1"
 	unknownCommit  = "dev"
 	unknownDate    = "unknown"
 )
