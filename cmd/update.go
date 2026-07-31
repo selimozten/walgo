@@ -67,6 +67,12 @@ Assumes the site has been built using 'walgo build'.`,
 			return fmt.Errorf("publish directory not found: %w", err)
 		}
 
+		// Updates follow the active Sui environment; fail early if walgo.yaml
+		// disagrees rather than updating on the wrong network.
+		if _, err := resolveDeployNetwork(cfg.WalrusConfig.Network); err != nil {
+			return err
+		}
+
 		// Get object ID with priority: CLI arg > ws-resources.json > walgo.yaml
 		var objectID string
 		if len(args) > 0 {

@@ -598,6 +598,35 @@ Error: Failed to connect to Walrus publisher/aggregator
 
 ---
 
+### "Method not found. JSON-RPC on public fullnodes has been deprecated"
+
+**Symptoms:**
+
+```bash
+Error: Failed to get client from url: max failovers exceeded
+ErrorObject { code: MethodNotFound, message: "Method not found. JSON-RPC on public
+fullnodes has been deprecated. Please migrate to gRPC or GraphQL endpoints." }
+```
+
+**Cause:** Sui Foundation disabled JSON-RPC on its public fullnodes on 2026-07-31.
+Older walrus and site-builder builds only speak JSON-RPC, so every deployment fails.
+
+**Solution:** update the tools. Minimum versions are walrus **1.52.0** and
+site-builder **2.12.0**:
+
+```bash
+suiup install walrus@mainnet
+suiup install site-builder@mainnet
+walrus --version && site-builder --version
+```
+
+`rpc_url` in `sites-config.yaml` and `rpc_urls` in `client_config.yaml` stay the
+same — `https://fullnode.<network>.sui.io:443` serves gRPC on the same address.
+
+See the [JSON-RPC migration guide](https://docs.sui.io/develop/accessing-data/json-rpc-migration).
+
+---
+
 ### "RPC error" when deploying
 
 **Symptoms:**
@@ -612,12 +641,20 @@ Error: Failed to connect to Sui RPC node
 
    - Visit [Sui status page](https://status.sui.io)
 
-2. **Try different RPC:**
+2. **Check whether the endpoint is serving stale state:**
 
    ```bash
-   # Configure custom RPC (if supported)
-   export SUI_RPC_URL="https://fullnode.testnet.sui.io:443"
+   # gRPC (what walrus and the sui CLI use)
+   sui client object 0x5 --json | grep version
+   # GraphQL (independent read path)
+   curl -s https://graphql.mainnet.sui.io/graphql -H 'Content-Type: application/json' \
+     -d '{"query":"{ object(address:\"0x5\"){ version } }"}'
    ```
+
+   Different versions mean the public fullnode is lagging. Errors like
+   `object ... is unavailable for consumption, current version: ...` or
+   `could not find WAL coins with sufficient balance` (with a funded wallet)
+   come from that lag. Point `rpc_urls` at another provider or wait it out.
 
 3. **Wait and retry:**
    - Network congestion is temporary

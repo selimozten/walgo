@@ -6,9 +6,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"io"
 	"math"
-	"net/http"
 	"regexp"
 	"strconv"
 	"strings"
@@ -16,12 +14,6 @@ import (
 
 	"github.com/ganbitlabs/walgo/internal/deps"
 	"github.com/ganbitlabs/walgo/internal/sui"
-)
-
-// Default RPC endpoints for Sui networks
-const (
-	SuiTestnetRPC = "https://fullnode.testnet.sui.io:443"
-	SuiMainnetRPC = "https://fullnode.mainnet.sui.io:443"
 )
 
 // GetWalrusContext returns the walrus context based on the active Sui environment
@@ -36,28 +28,6 @@ func GetWalrusContext() string {
 		return "mainnet"
 	}
 	return "testnet"
-}
-
-// SuiRPCRequest represents a JSON-RPC 2.0 request to Sui
-type SuiRPCRequest struct {
-	JSONRPC string        `json:"jsonrpc"`
-	ID      int           `json:"id"`
-	Method  string        `json:"method"`
-	Params  []interface{} `json:"params"`
-}
-
-// SuiRPCResponse represents a JSON-RPC 2.0 response from Sui
-type SuiRPCResponse struct {
-	JSONRPC string          `json:"jsonrpc"`
-	ID      int             `json:"id"`
-	Result  json.RawMessage `json:"result,omitempty"`
-	Error   *SuiRPCError    `json:"error,omitempty"`
-}
-
-// SuiRPCError represents an error from Sui RPC
-type SuiRPCError struct {
-	Code    int    `json:"code"`
-	Message string `json:"message"`
 }
 
 // WalrusInfoJSON represents the JSON response from 'walrus info --json'
@@ -142,72 +112,44 @@ type CostBreakdown struct {
 
 // CostOptions contains parameters for cost estimation
 type CostOptions struct {
-	SiteSize  int64  // Total site size in bytes
-	Epochs    int    // Number of epochs for storage
-	FileCount int    // Actual number of files (if known, 0 to estimate)
-	RPCURL    string // Sui RPC endpoint for gas price query
-	GasPrice  uint64 // Manual gas price override (0 to fetch)
-	Network   string // "testnet" or "mainnet"
-	WalrusBin string // Path to walrus binary (optional)
+	SiteSize   int64  // Total site size in bytes
+	Epochs     int    // Number of epochs for storage
+	FileCount  int    // Actual number of files (if known, 0 to estimate)
+	GraphQLURL string // Sui GraphQL endpoint for gas price query (empty to derive from Network)
+	GasPrice   uint64 // Manual gas price override (0 to fetch)
+	Network    string // "testnet" or "mainnet"
+	WalrusBin  string // Path to walrus binary (optional)
 }
 
-// GetReferenceGasPrice queries Sui RPC for current reference gas price
-// Uses the suix_getReferenceGasPrice method
-// Returns gas price in MIST (1 SUI = 1e9 MIST)
-func GetReferenceGasPrice(rpcURL string) (uint64, error) {
-	if rpcURL == "" {
-		rpcURL = SuiTestnetRPC // Default to testnet
+// referenceGasPriceQuery reads the reference gas price of the current epoch.
+// Replaces the retired suix_getReferenceGasPrice JSON-RPC method.
+const referenceGasPriceQuery = `{ epoch { referenceGasPrice } }`
+
+// GetReferenceGasPrice queries the Sui GraphQL API for the current reference gas price.
+// Returns gas price in MIST (1 SUI = 1e9 MIST).
+func GetReferenceGasPrice(graphQLURL string) (uint64, error) {
+	if graphQLURL == "" {
+		graphQLURL = SuiTestnetGraphQL // Default to testnet
 	}
 
-	// Create JSON-RPC request
-	request := SuiRPCRequest{
-		JSONRPC: "2.0",
-		ID:      1,
-		Method:  "suix_getReferenceGasPrice",
-		Params:  []interface{}{},
+	var result struct {
+		Epoch struct {
+			ReferenceGasPrice string `json:"referenceGasPrice"`
+		} `json:"epoch"`
 	}
 
-	reqBody, err := json.Marshal(request)
-	if err != nil {
-		return 0, fmt.Errorf("failed to marshal request: %w", err)
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+
+	if err := queryGraphQL(ctx, graphQLURL, referenceGasPriceQuery, nil, &result); err != nil {
+		return 0, err
 	}
 
-	// Create HTTP client with timeout
-	client := &http.Client{
-		Timeout: 10 * time.Second,
+	if result.Epoch.ReferenceGasPrice == "" {
+		return 0, fmt.Errorf("no reference gas price in GraphQL response")
 	}
 
-	// Make the request
-	resp, err := client.Post(rpcURL, "application/json", bytes.NewReader(reqBody))
-	if err != nil {
-		return 0, fmt.Errorf("RPC request failed: %w", err)
-	}
-	defer resp.Body.Close()
-
-	// Read response
-	respBody, err := io.ReadAll(resp.Body)
-	if err != nil {
-		return 0, fmt.Errorf("failed to read response: %w", err)
-	}
-
-	// Parse response
-	var rpcResp SuiRPCResponse
-	if err := json.Unmarshal(respBody, &rpcResp); err != nil {
-		return 0, fmt.Errorf("failed to parse response: %w", err)
-	}
-
-	// Check for RPC error
-	if rpcResp.Error != nil {
-		return 0, fmt.Errorf("RPC error: %s", rpcResp.Error.Message)
-	}
-
-	// Parse result (returned as a string number)
-	var gasPriceStr string
-	if err := json.Unmarshal(rpcResp.Result, &gasPriceStr); err != nil {
-		return 0, fmt.Errorf("failed to parse gas price: %w", err)
-	}
-
-	gasPrice, err := strconv.ParseUint(gasPriceStr, 10, 64)
+	gasPrice, err := strconv.ParseUint(result.Epoch.ReferenceGasPrice, 10, 64)
 	if err != nil {
 		return 0, fmt.Errorf("invalid gas price format: %w", err)
 	}
@@ -391,25 +333,14 @@ func GetEncodedSizeFromDryRun(filePath string, walrusBin string) (int64, error) 
 	return result.EncodedSize, nil
 }
 
-// GetRPCEndpoint returns the appropriate RPC endpoint for the network
-func GetRPCEndpoint(network string) string {
-	switch strings.ToLower(network) {
-	case "mainnet":
-		return SuiMainnetRPC
-	case "testnet":
-		return SuiTestnetRPC
-	default:
-		return SuiTestnetRPC
-	}
-}
-
-// DefaultGasPrice returns the fallback gas price for the network
+// DefaultGasPrice returns the fallback gas price for the network,
+// used only when the GraphQL endpoint is unreachable.
 func DefaultGasPrice(network string) uint64 {
 	switch strings.ToLower(network) {
 	case "testnet":
-		return 1000 // Testnet reference gas price (Feb 2026)
+		return 1000 // Testnet reference gas price (Jul 2026)
 	case "mainnet":
-		return 550 // Mainnet reference gas price (Feb 2026)
+		return 100 // Mainnet reference gas price (Jul 2026)
 	default:
 		return 1000
 	}
@@ -427,19 +358,19 @@ func CalculateCost(options CostOptions) (*CostBreakdown, error) {
 		return nil, fmt.Errorf("epochs must be greater than 0")
 	}
 
-	// Get RPC endpoint
-	rpcURL := options.RPCURL
-	if rpcURL == "" {
-		rpcURL = GetRPCEndpoint(options.Network)
+	// Get GraphQL endpoint
+	graphQLURL := options.GraphQLURL
+	if graphQLURL == "" {
+		graphQLURL = GetGraphQLEndpoint(options.Network)
 	}
 
-	// Fetch real gas price from Sui RPC
+	// Fetch real gas price from Sui
 	gasPrice := options.GasPrice
 	if gasPrice == 0 {
 		var err error
-		gasPrice, err = GetReferenceGasPrice(rpcURL)
+		gasPrice, err = GetReferenceGasPrice(graphQLURL)
 		if err != nil {
-			// Fall back to default if RPC fails
+			// Fall back to default if the query fails
 			gasPrice = DefaultGasPrice(options.Network)
 		}
 	}
@@ -584,8 +515,7 @@ func CalculateCost(options CostOptions) (*CostBreakdown, error) {
 func CalculateUpdateCost(changedSize int64, newFiles int, epochs int, network string) (*CostBreakdown, error) {
 	if changedSize <= 0 && newFiles <= 0 {
 		// No changes, just metadata update
-		rpcURL := GetRPCEndpoint(network)
-		gasPrice, err := GetReferenceGasPrice(rpcURL)
+		gasPrice, err := GetReferenceGasPrice(GetGraphQLEndpoint(network))
 		if err != nil {
 			gasPrice = DefaultGasPrice(network)
 		}
@@ -613,8 +543,7 @@ func CalculateUpdateCost(changedSize int64, newFiles int, epochs int, network st
 
 // CalculateDestroyCost calculates cost for destroying a site
 func CalculateDestroyCost(network string) (*CostBreakdown, error) {
-	rpcURL := GetRPCEndpoint(network)
-	gasPrice, err := GetReferenceGasPrice(rpcURL)
+	gasPrice, err := GetReferenceGasPrice(GetGraphQLEndpoint(network))
 	if err != nil {
 		gasPrice = DefaultGasPrice(network)
 	}

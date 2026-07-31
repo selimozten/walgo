@@ -311,6 +311,30 @@ func TestParseBalanceJSON(t *testing.T) {
 			wantErr:     false,
 		},
 		{
+			// Sui 1.75+ shape: entry is an object and the total lives in
+			// balance.balance, split across addressBalance and coinBalance.
+			name:        "sui 1.75 object entry",
+			input:       `[[{"metadata":{"coinType":"0x2::sui::SUI","metadata":{"decimals":9,"symbol":"SUI"}},"balance":{"coinType":"0x2::sui::SUI","balance":"8735834256","addressBalance":"3715834256","coinBalance":"5020000000"},"coins":[]}], false]`,
+			expectedSUI: 8.735834256,
+			expectedWAL: 0.0,
+			wantErr:     false,
+		},
+		{
+			name:        "sui 1.75 object entry with WAL",
+			input:       `[[{"metadata":{"coinType":"0x8270::wal::WAL","metadata":{"decimals":9,"symbol":"WAL"}},"balance":{"balance":"500000000"},"coins":[]}], false]`,
+			expectedSUI: 0.0,
+			expectedWAL: 0.5,
+			wantErr:     false,
+		},
+		{
+			// No aggregate balance field: fall back to summing coin objects.
+			name:        "sui 1.75 object entry without aggregate",
+			input:       `[[{"metadata":{"coinType":"0x2::sui::SUI","metadata":{"decimals":9,"symbol":"SUI"}},"coins":[{"balance":"1000000000"},{"balance":"500000000"}]}], false]`,
+			expectedSUI: 1.5,
+			expectedWAL: 0.0,
+			wantErr:     false,
+		},
+		{
 			name:        "default decimals when not specified",
 			input:       `[[[{"symbol": "SUI"}, [{"balance": "1000000000"}]]], true]`,
 			expectedSUI: 1.0,

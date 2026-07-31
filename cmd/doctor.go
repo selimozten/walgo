@@ -155,17 +155,28 @@ Examples:
 			}
 		}
 
-		// Check walrus/site-builder version compatibility
-		if err := version.CheckInstalledCompatibility(); err != nil {
+		// Report resolved versions so a stale copy earlier in PATH is visible,
+		// then check them against the minimums walgo requires.
+		toolchain := version.InspectToolchain()
+		fmt.Println()
+		for _, status := range toolchain {
+			switch {
+			case !status.Installed:
+				continue // reported above as a missing dependency
+			case status.Version == "":
+				fmt.Printf("  %s %s version unknown (%s)\n", icons.Warning, status.Tool, status.Path)
+				warnings++
+			case status.Outdated:
+				fmt.Printf("  %s %s v%s at %s (need v%s+)\n",
+					icons.Cross, status.Tool, status.Version, status.Path, status.Minimum)
+			default:
+				fmt.Printf("  %s %s v%s\n", icons.Check, status.Tool, status.Version)
+			}
+		}
+
+		if err := version.ToolchainProblems(toolchain); err != nil {
 			fmt.Printf("\n  %s %v\n", icons.Cross, err)
 			issues++
-		} else {
-			// Only show if both are installed
-			if _, errW := deps.LookPath("walrus"); errW == nil {
-				if _, errS := deps.LookPath("site-builder"); errS == nil {
-					fmt.Printf("  %s walrus and site-builder versions are compatible\n", icons.Check)
-				}
-			}
 		}
 
 		fmt.Println()

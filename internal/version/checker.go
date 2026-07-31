@@ -81,11 +81,10 @@ func GetLatestSuiVersion() (string, error) {
 	return getLatestGitHubRelease("MystenLabs", "sui")
 }
 
-// GetLatestWalrusVersion fetches the latest Walrus version
-// Walrus binaries are distributed via the walrus-sites repo releases
+// GetLatestWalrusVersion fetches the latest mainnet Walrus version.
+// Walrus releases live in the walrus repo; walrus-sites only carries site-builder.
 func GetLatestWalrusVersion() (string, error) {
-	// Try walrus-sites repo first (this is where site-builder releases are)
-	version, err := getLatestGitHubRelease("MystenLabs", "walrus-sites")
+	version, err := getLatestGitHubReleaseForNetwork("MystenLabs", "walrus", "mainnet")
 	if err == nil && version != "" {
 		return version, nil
 	}
@@ -101,10 +100,15 @@ func GetLatestWalrusVersion() (string, error) {
 	return "", fmt.Errorf("unable to determine latest Walrus version: GitHub API unavailable and local walrus not found")
 }
 
-// GetLatestSiteBuilderVersion fetches the latest site-builder version
-// Site-builder is released via the walrus-sites repository
+// GetLatestSiteBuilderVersion fetches the latest mainnet site-builder version.
+// Site-builder is released via the walrus-sites repository.
 func GetLatestSiteBuilderVersion() (string, error) {
-	// Site-builder releases are in walrus-sites repo
+	version, err := getLatestGitHubReleaseForNetwork("MystenLabs", "walrus-sites", "mainnet")
+	if err == nil && version != "" {
+		return version, nil
+	}
+
+	// Fallback: the repo's latest release, whichever network it targets
 	return getLatestGitHubRelease("MystenLabs", "walrus-sites")
 }
 
@@ -170,9 +174,73 @@ func getLatestGitHubRelease(owner, repo string) (string, error) {
 		return "", fmt.Errorf("failed to parse response: %w", err)
 	}
 
-	// Remove 'v' prefix if present
-	version := strings.TrimPrefix(release.TagName, "v")
-	return version, nil
+	return normalizeReleaseTag(release.TagName), nil
+}
+
+// getLatestGitHubReleaseForNetwork returns the newest release whose tag starts
+// with "<network>-v". Walrus and site-builder publish per-network tags
+// (e.g. mainnet-v1.52.1), and the repo's "latest" release may be for another
+// network, so the plain latest endpoint is not enough.
+func getLatestGitHubReleaseForNetwork(owner, repo, network string) (string, error) {
+	url := fmt.Sprintf("https://api.github.com/repos/%s/%s/releases?per_page=30",
+		neturl.PathEscape(owner), neturl.PathEscape(repo))
+
+	client := &http.Client{Timeout: 10 * time.Second}
+	req, err := http.NewRequest("GET", url, nil)
+	if err != nil {
+		return "", fmt.Errorf("failed to create request: %w", err)
+	}
+	req.Header.Set("User-Agent", "walgo-version-checker")
+
+	resp, err := client.Do(req)
+	if err != nil {
+		return "", fmt.Errorf("failed to fetch release info: %w", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		return "", fmt.Errorf("GitHub API returned status: %d", resp.StatusCode)
+	}
+
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return "", fmt.Errorf("failed to read response: %w", err)
+	}
+
+	var releases []struct {
+		TagName string `json:"tag_name"`
+	}
+	if err := json.Unmarshal(body, &releases); err != nil {
+		return "", fmt.Errorf("failed to parse response: %w", err)
+	}
+
+	prefix := strings.ToLower(network) + "-v"
+	best := ""
+	for _, release := range releases {
+		if !strings.HasPrefix(strings.ToLower(release.TagName), prefix) {
+			continue
+		}
+		version := normalizeReleaseTag(release.TagName)
+		if best == "" || CompareVersions(version, best) > 0 {
+			best = version
+		}
+	}
+
+	if best == "" {
+		return "", fmt.Errorf("no %s release found for %s/%s", network, owner, repo)
+	}
+
+	return best, nil
+}
+
+// normalizeReleaseTag turns a release tag into a bare semantic version,
+// dropping any network prefix ("mainnet-v1.52.1" becomes "1.52.1").
+func normalizeReleaseTag(tag string) string {
+	version := strings.TrimSpace(tag)
+	for _, prefix := range []string{"mainnet-", "testnet-", "devnet-"} {
+		version = strings.TrimPrefix(version, prefix)
+	}
+	return strings.TrimPrefix(version, "v")
 }
 
 // CompareVersions compares two semantic versions
@@ -315,8 +383,117 @@ func CheckAllVersions() (*CheckResult, error) {
 	return result, nil
 }
 
-// CheckCompatibility verifies that installed walrus and site-builder versions are compatible.
-// site-builder v2.x requires walrus v2.x; mixing major versions causes deployment failures.
+// Minimum tool versions required since Sui Foundation disabled JSON-RPC on its
+// public fullnodes (2026-07-31). Older builds still speak JSON-RPC and fail with
+// "Method not found ... JSON-RPC on public fullnodes has been deprecated".
+//
+//	sui 1.75.0          - first release whose CLI reads balances over gRPC (fix #26999)
+//	walrus 1.52.0       - first release that can run entirely on gRPC (fix #3526)
+//	site-builder 2.12.0 - first release off JSON-RPC-only client methods (fix #725)
+var (
+	minSuiVersion         = [3]int{1, 75, 0}
+	minWalrusVersion      = [3]int{1, 52, 0}
+	minSiteBuilderVersion = [3]int{2, 12, 0}
+)
+
+// ToolStatus describes one installed tool: where it resolved from, which version
+// answered, and whether that version is new enough.
+type ToolStatus struct {
+	Tool      string
+	Path      string
+	Version   string
+	Minimum   string
+	Installed bool
+	Outdated  bool
+}
+
+// InspectToolchain resolves sui, walrus and site-builder the same way walgo does
+// when it shells out, so a stale copy earlier in PATH shows up as itself rather
+// than as whatever the installer thinks is current.
+func InspectToolchain() []ToolStatus {
+	tools := []struct {
+		name string
+		min  [3]int
+	}{
+		{"sui", minSuiVersion},
+		{"walrus", minWalrusVersion},
+		{"site-builder", minSiteBuilderVersion},
+	}
+
+	statuses := make([]ToolStatus, 0, len(tools))
+	for _, tool := range tools {
+		status := ToolStatus{Tool: tool.name, Minimum: formatVersionParts(tool.min)}
+
+		path, err := deps.LookPath(tool.name)
+		if err != nil {
+			statuses = append(statuses, status)
+			continue
+		}
+		status.Installed = true
+		status.Path = path
+
+		version, err := GetCurrentVersion(tool.name)
+		if err != nil {
+			statuses = append(statuses, status)
+			continue
+		}
+		status.Version = version
+		status.Outdated = versionLess(parseVersionParts(version), tool.min)
+
+		statuses = append(statuses, status)
+	}
+
+	return statuses
+}
+
+// ToolchainProblems summarizes outdated tools from InspectToolchain output.
+// Missing tools are not reported here; callers handle those separately since
+// site-builder is only needed for on-chain deployments.
+func ToolchainProblems(statuses []ToolStatus) error {
+	var outdated []string
+	for _, status := range statuses {
+		if status.Outdated {
+			outdated = append(outdated, fmt.Sprintf("%s v%s (need v%s or newer)",
+				status.Tool, status.Version, status.Minimum))
+		}
+	}
+
+	if len(outdated) == 0 {
+		return nil
+	}
+
+	return fmt.Errorf(
+		"outdated tools detected: %s\n\n"+
+			"  Sui disabled JSON-RPC on public fullnodes on 2026-07-31. Older builds still\n"+
+			"  use it and fail with \"Method not found\" on every deployment.\n\n"+
+			"  To fix:\n"+
+			"    suiup install sui@mainnet\n"+
+			"    suiup install walrus@mainnet\n"+
+			"    suiup install site-builder@mainnet\n\n"+
+			"  If a tool still reports an old version afterwards, an older copy earlier in\n"+
+			"  PATH is winning; check the paths printed above.",
+		strings.Join(outdated, ", "),
+	)
+}
+
+// versionLess reports whether version a is older than version b.
+func versionLess(a, b [3]int) bool {
+	for i := range 3 {
+		if a[i] != b[i] {
+			return a[i] < b[i]
+		}
+	}
+	return false
+}
+
+// formatVersionParts renders a parsed version back as "major.minor.patch".
+func formatVersionParts(v [3]int) string {
+	return fmt.Sprintf("%d.%d.%d", v[0], v[1], v[2])
+}
+
+// CheckCompatibility verifies that installed walrus and site-builder versions can
+// still talk to Sui. Builds older than the minimums below rely on the retired
+// JSON-RPC API and fail on every deployment.
 func CheckCompatibility(walrusVersion, siteBuilderVersion string) error {
 	if walrusVersion == "" || siteBuilderVersion == "" {
 		return nil // can't check if versions are unknown
@@ -325,31 +502,33 @@ func CheckCompatibility(walrusVersion, siteBuilderVersion string) error {
 	walrusParts := parseVersionParts(walrusVersion)
 	sbParts := parseVersionParts(siteBuilderVersion)
 
-	walrusMajor := walrusParts[0]
-	sbMajor := sbParts[0]
+	walrusOutdated := versionLess(walrusParts, minWalrusVersion)
+	sbOutdated := versionLess(sbParts, minSiteBuilderVersion)
 
-	if sbMajor >= 2 && walrusMajor < 2 {
-		return fmt.Errorf(
-			"version incompatibility detected: site-builder v%s requires walrus v2.x, but walrus v%s is installed\n\n"+
-				"  This mismatch causes deployment failures (exit status 1).\n\n"+
-				"  To fix, try one of:\n"+
-				"    1. Update walrus:  suiup install walrus@testnet  (testnet may have v2)\n"+
-				"    2. Check suiup:    suiup show\n"+
-				"    3. Wait for walrus v2.x to be available on mainnet via suiup\n\n"+
-				"  See: https://github.com/ganbitlabs/walgo/issues/9",
-			siteBuilderVersion, walrusVersion,
-		)
+	if !walrusOutdated && !sbOutdated {
+		return nil
 	}
 
-	if walrusMajor >= 2 && sbMajor < 2 {
-		return fmt.Errorf(
-			"version incompatibility detected: walrus v%s requires site-builder v2.x, but site-builder v%s is installed\n\n"+
-				"  Update site-builder:  suiup install site-builder@mainnet",
-			walrusVersion, siteBuilderVersion,
-		)
+	var outdated []string
+	if walrusOutdated {
+		outdated = append(outdated, fmt.Sprintf("walrus v%s (need v%s or newer)",
+			walrusVersion, formatVersionParts(minWalrusVersion)))
+	}
+	if sbOutdated {
+		outdated = append(outdated, fmt.Sprintf("site-builder v%s (need v%s or newer)",
+			siteBuilderVersion, formatVersionParts(minSiteBuilderVersion)))
 	}
 
-	return nil
+	return fmt.Errorf(
+		"outdated tools detected: %s\n\n"+
+			"  Sui disabled JSON-RPC on public fullnodes on 2026-07-31. Older builds still\n"+
+			"  use it and fail with \"Method not found\" on every deployment.\n\n"+
+			"  To fix:\n"+
+			"    suiup install walrus@mainnet\n"+
+			"    suiup install site-builder@mainnet\n\n"+
+			"  See: https://docs.sui.io/develop/accessing-data/json-rpc-migration",
+		strings.Join(outdated, " and "),
+	)
 }
 
 // CheckInstalledCompatibility is a convenience function that reads installed versions

@@ -172,11 +172,16 @@ func GetBalance() (*BalanceInfo, error) {
 	return parseBalanceJSON(output)
 }
 
-// parseBalanceJSON parses the JSON output from `sui client balance --json`
-// Supports both old format (Sui <1.66) and new format (Sui 1.66+).
+// parseBalanceJSON parses the JSON output from `sui client balance --json`.
+// The shape has changed twice, so all three are supported:
 //
-// Old format: [[{"symbol":"SUI","decimals":9}, [coins...]], ...], bool]
-// New format: [[[{coinType,metadata:{symbol,decimals,...},treasury,...}, [coins...]], ...], bool]
+//	Sui <1.66:  [[[{"symbol":"SUI","decimals":9}, [coins...]], ...], bool]
+//	Sui 1.66+:  [[[{coinType,metadata:{symbol,decimals,...},treasury,...}, [coins...]], ...], bool]
+//	Sui 1.75+:  [[{metadata:{coinType,metadata:{symbol,decimals}},balance:{balance,addressBalance,coinBalance},coins:[]}, ...], bool]
+//
+// Since 1.75 an entry is an object rather than a [tokenInfo, coins] pair, and the
+// total lives in balance.balance because coins may be held as an address balance
+// rather than as coin objects.
 func parseBalanceJSON(jsonOutput string) (*BalanceInfo, error) {
 	var result interface{}
 	if err := json.Unmarshal([]byte(jsonOutput), &result); err != nil {
@@ -198,46 +203,20 @@ func parseBalanceJSON(jsonOutput string) (*BalanceInfo, error) {
 	info := &BalanceInfo{}
 
 	for _, entry := range entries {
-		entryArray, ok := entry.([]interface{})
-		if !ok || len(entryArray) < 2 {
-			continue
-		}
+		var symbol string
+		var tokenBalance float64
 
-		// First element is token info
-		tokenInfoMap, ok := entryArray[0].(map[string]interface{})
+		switch e := entry.(type) {
+		case []interface{}:
+			symbol, tokenBalance, ok = parseBalanceEntryPair(e)
+		case map[string]interface{}:
+			symbol, tokenBalance, ok = parseBalanceEntryObject(e)
+		default:
+			ok = false
+		}
 		if !ok {
 			continue
 		}
-
-		// Extract symbol and decimals - check both top-level (old format)
-		// and nested metadata (new Sui 1.66+ format)
-		symbol, decimals := extractTokenInfo(tokenInfoMap)
-
-		// Second element is array of coin balances
-		coinsArray, ok := entryArray[1].([]interface{})
-		if !ok {
-			continue
-		}
-
-		// Sum up all coins for this token
-		var totalBalance float64
-		for _, coin := range coinsArray {
-			coinMap, ok := coin.(map[string]interface{})
-			if !ok {
-				continue
-			}
-
-			balanceStr, _ := coinMap["balance"].(string)
-			var balance float64
-			if _, err := fmt.Sscanf(balanceStr, "%f", &balance); err != nil {
-				// Skip this balance if parsing fails
-				continue
-			}
-			totalBalance += balance
-		}
-
-		// Convert to token units (divide by 10^decimals)
-		tokenBalance := totalBalance / pow10(decimals)
 
 		switch symbol {
 		case "SUI":
@@ -248,6 +227,74 @@ func parseBalanceJSON(jsonOutput string) (*BalanceInfo, error) {
 	}
 
 	return info, nil
+}
+
+// parseBalanceEntryPair reads a pre-1.75 [tokenInfo, coins] entry.
+func parseBalanceEntryPair(entry []interface{}) (symbol string, balance float64, ok bool) {
+	if len(entry) < 2 {
+		return "", 0, false
+	}
+
+	tokenInfoMap, ok := entry[0].(map[string]interface{})
+	if !ok {
+		return "", 0, false
+	}
+	symbol, decimals := extractTokenInfo(tokenInfoMap)
+
+	coinsArray, ok := entry[1].([]interface{})
+	if !ok {
+		return "", 0, false
+	}
+
+	return symbol, sumCoinBalances(coinsArray) / pow10(decimals), true
+}
+
+// parseBalanceEntryObject reads a Sui 1.75+ balance entry object.
+func parseBalanceEntryObject(entry map[string]interface{}) (symbol string, balance float64, ok bool) {
+	tokenInfoMap, ok := entry["metadata"].(map[string]interface{})
+	if !ok {
+		return "", 0, false
+	}
+	symbol, decimals := extractTokenInfo(tokenInfoMap)
+
+	// The aggregate total covers both coin objects and the address balance.
+	var raw float64
+	if balanceMap, ok := entry["balance"].(map[string]interface{}); ok {
+		if balanceStr, ok := balanceMap["balance"].(string); ok {
+			if _, err := fmt.Sscanf(balanceStr, "%f", &raw); err != nil {
+				raw = 0
+			}
+		}
+	}
+
+	// Fall back to summing individual coin objects if no aggregate is present.
+	if raw == 0 {
+		if coinsArray, ok := entry["coins"].([]interface{}); ok {
+			raw = sumCoinBalances(coinsArray)
+		}
+	}
+
+	return symbol, raw / pow10(decimals), true
+}
+
+// sumCoinBalances totals the "balance" field of a list of coin objects.
+func sumCoinBalances(coins []interface{}) float64 {
+	var total float64
+	for _, coin := range coins {
+		coinMap, ok := coin.(map[string]interface{})
+		if !ok {
+			continue
+		}
+
+		balanceStr, _ := coinMap["balance"].(string)
+		var balance float64
+		if _, err := fmt.Sscanf(balanceStr, "%f", &balance); err != nil {
+			// Skip this balance if parsing fails
+			continue
+		}
+		total += balance
+	}
+	return total
 }
 
 // extractTokenInfo extracts symbol and decimals from a token info map.

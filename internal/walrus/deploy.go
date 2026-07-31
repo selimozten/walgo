@@ -48,11 +48,11 @@ func DeploySite(ctx context.Context, deployDir string, walrusCfg config.WalrusCo
 		}
 
 		options := CostOptions{
-			SiteSize:  totalSize,
-			Epochs:    epochs,
-			Network:   network,
-			FileCount: fileCount,
-			RPCURL:    "",
+			SiteSize:   totalSize,
+			Epochs:     epochs,
+			Network:    network,
+			FileCount:  fileCount,
+			GraphQLURL: "",
 		}
 
 		breakdown, err := CalculateCost(options)

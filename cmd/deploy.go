@@ -106,6 +106,13 @@ Example: walgo deploy --epochs 5`,
 			}
 		}
 
+		// Deployments follow the active Sui environment; fail early if walgo.yaml
+		// disagrees rather than deploying to the wrong network.
+		network, err := resolveDeployNetwork(walgoCfg.WalrusConfig.Network)
+		if err != nil {
+			return err
+		}
+
 		if !quiet {
 			fmt.Printf("%s Deploying to Walrus Sites...\n", icons.Rocket)
 			fmt.Println("  [1/5] Verifying site...")
@@ -131,6 +138,7 @@ Example: walgo deploy --epochs 5`,
 			PublishDir:  publishDir,
 			Epochs:      epochs,
 			WalgoCfg:    walgoCfg,
+			Network:     network,
 			Quiet:       quiet,
 			Verbose:     verbose,
 			ForceNew:    forceNew,
@@ -158,6 +166,11 @@ Example: walgo deploy --epochs 5`,
 			deployMetrics.UploadDuration = 0
 		}
 
+		// Dry-run stops after printing the plan; there is no object to report.
+		if dryRun {
+			return nil
+		}
+
 		if !quiet {
 			fmt.Println()
 			if result.IsUpdate {
@@ -168,12 +181,6 @@ Example: walgo deploy --epochs 5`,
 			fmt.Println()
 			fmt.Printf("%s Site Object ID: %s\n", icons.File, result.ObjectID)
 			fmt.Println()
-
-			network, err := sui.GetActiveEnv()
-			if err != nil {
-				fmt.Fprintf(os.Stderr, "%s Warning: Failed to get active network: %v\n", icons.Warning, err)
-				network = "testnet"
-			}
 
 			ui.PrintHeader(icons.Link, "View Your Object on the Sui Network")
 			fmt.Println()
