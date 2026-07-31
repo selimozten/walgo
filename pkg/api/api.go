@@ -560,7 +560,7 @@ type VersionResult struct {
 // GetVersion returns current version information
 func GetVersion() VersionResult {
 	return VersionResult{
-		Version:   "0.3.10",
+		Version:   "0.4.0",
 		GitCommit: "dev",
 		BuildDate: "unknown",
 	}

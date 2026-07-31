@@ -16,7 +16,7 @@ import (
 
 var (
 	// Version will be set during build time via ldflags
-	Version = "0.3.10"
+	Version = "0.4.0"
 	// GitCommit will be set during build time via ldflags
 	GitCommit = "dev"
 	// BuildDate will be set during build time via ldflags
