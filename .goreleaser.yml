@@ -19,11 +19,13 @@ builds:
       - amd64
       - arm64
     # All OS + all architectures supported
+    # main only holds func main(); the version lives in internal/buildinfo, which
+    # the CLI, the API and the desktop app all read.
     ldflags:
       - -s -w
-      - -X main.version={{.Version}}
-      - -X main.commit={{.Commit}}
-      - -X main.date={{.Date}}
+      - -X github.com/ganbitlabs/walgo/internal/buildinfo.version={{.Version}}
+      - -X github.com/ganbitlabs/walgo/internal/buildinfo.commit={{.FullCommit}}
+      - -X github.com/ganbitlabs/walgo/internal/buildinfo.buildDate={{.Date}}
 
 archives:
   - id: walgo-archives
