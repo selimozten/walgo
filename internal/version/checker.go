@@ -471,7 +471,7 @@ func ToolchainProblems(statuses []ToolStatus) error {
 			"    suiup install walrus@mainnet\n"+
 			"    suiup install site-builder@mainnet\n\n"+
 			"  If a tool still reports an old version afterwards, an older copy earlier in\n"+
-			"  PATH is winning; check the paths printed above.",
+			"  PATH is winning — check the paths printed above",
 		strings.Join(outdated, ", "),
 	)
 }
