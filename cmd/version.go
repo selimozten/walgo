@@ -10,17 +10,17 @@ import (
 	"strings"
 	"time"
 
+	"github.com/ganbitlabs/walgo/internal/buildinfo"
 	"github.com/ganbitlabs/walgo/internal/ui"
 	"github.com/spf13/cobra"
 )
 
+// Build details, resolved from ldflags or the embedded build info.
+// See internal/buildinfo.
 var (
-	// Version will be set during build time via ldflags
-	Version = "0.4.0"
-	// GitCommit will be set during build time via ldflags
-	GitCommit = "dev"
-	// BuildDate will be set during build time via ldflags
-	BuildDate = "unknown"
+	Version   = buildinfo.Version()
+	GitCommit = buildinfo.Commit()
+	BuildDate = buildinfo.BuildDate()
 )
 
 const (
@@ -121,7 +121,10 @@ func checkForUpdates() {
 func compareSemver(a, b string) int {
 	parse := func(input string) [3]int {
 		var result [3]int
-		clean := strings.SplitN(input, "-", 2)[0]
+		// Drop pre-release ("-rc1") and build metadata ("+dirty"), which the
+		// build-info fallback appends when the working tree was modified.
+		clean, _, _ := strings.Cut(input, "-")
+		clean, _, _ = strings.Cut(clean, "+")
 		parts := strings.Split(clean, ".")
 		for i := 0; i < len(result) && i < len(parts); i++ {
 			if n, err := strconv.Atoi(parts[i]); err == nil {

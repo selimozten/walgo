@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"github.com/ganbitlabs/walgo/internal/ai"
+	"github.com/ganbitlabs/walgo/internal/buildinfo"
 	"github.com/ganbitlabs/walgo/internal/compress"
 	"github.com/ganbitlabs/walgo/internal/config"
 	"github.com/ganbitlabs/walgo/internal/deployer"
@@ -560,9 +561,9 @@ type VersionResult struct {
 // GetVersion returns current version information
 func GetVersion() VersionResult {
 	return VersionResult{
-		Version:   "0.4.0",
-		GitCommit: "dev",
-		BuildDate: "unknown",
+		Version:   buildinfo.Version(),
+		GitCommit: buildinfo.Commit(),
+		BuildDate: buildinfo.BuildDate(),
 	}
 }
 

@@ -69,7 +69,13 @@ jobs:
       - name: Build Desktop App
         working-directory: ./desktop
         run: |
-          wails build -platform darwin/amd64 -clean
+          # Stamp the same build info the CLI gets from GoReleaser.
+          VERSION=${GITHUB_REF#refs/tags/v}
+          BUILD_DATE=$(date -u +%Y-%m-%dT%H:%M:%SZ)
+          LDFLAGS="-X github.com/ganbitlabs/walgo/internal/buildinfo.version=${VERSION}"
+          LDFLAGS="${LDFLAGS} -X github.com/ganbitlabs/walgo/internal/buildinfo.commit=${GITHUB_SHA}"
+          LDFLAGS="${LDFLAGS} -X github.com/ganbitlabs/walgo/internal/buildinfo.buildDate=${BUILD_DATE}"
+          wails build -platform darwin/amd64 -clean -ldflags "$LDFLAGS"
 
       - name: Sign and Package App
         working-directory: ./desktop/build/bin
@@ -121,7 +127,13 @@ jobs:
       - name: Build Desktop App
         working-directory: ./desktop
         run: |
-          wails build -platform darwin/arm64 -clean
+          # Stamp the same build info the CLI gets from GoReleaser.
+          VERSION=${GITHUB_REF#refs/tags/v}
+          BUILD_DATE=$(date -u +%Y-%m-%dT%H:%M:%SZ)
+          LDFLAGS="-X github.com/ganbitlabs/walgo/internal/buildinfo.version=${VERSION}"
+          LDFLAGS="${LDFLAGS} -X github.com/ganbitlabs/walgo/internal/buildinfo.commit=${GITHUB_SHA}"
+          LDFLAGS="${LDFLAGS} -X github.com/ganbitlabs/walgo/internal/buildinfo.buildDate=${BUILD_DATE}"
+          wails build -platform darwin/arm64 -clean -ldflags "$LDFLAGS"
 
       - name: Sign and Package App
         working-directory: ./desktop/build/bin
@@ -173,7 +185,13 @@ jobs:
       - name: Build Desktop App
         working-directory: ./desktop
         run: |
-          wails build -platform windows/amd64 -clean
+          # Stamp the same build info the CLI gets from GoReleaser.
+          VERSION=${GITHUB_REF#refs/tags/v}
+          BUILD_DATE=$(date -u +%Y-%m-%dT%H:%M:%SZ)
+          LDFLAGS="-X github.com/ganbitlabs/walgo/internal/buildinfo.version=${VERSION}"
+          LDFLAGS="${LDFLAGS} -X github.com/ganbitlabs/walgo/internal/buildinfo.commit=${GITHUB_SHA}"
+          LDFLAGS="${LDFLAGS} -X github.com/ganbitlabs/walgo/internal/buildinfo.buildDate=${BUILD_DATE}"
+          wails build -platform windows/amd64 -clean -ldflags "$LDFLAGS"
 
       - name: Package App
         working-directory: ./desktop/build/bin
@@ -218,7 +236,13 @@ jobs:
       - name: Build Desktop App
         working-directory: ./desktop
         run: |
-          wails build -platform windows/arm64 -clean
+          # Stamp the same build info the CLI gets from GoReleaser.
+          VERSION=${GITHUB_REF#refs/tags/v}
+          BUILD_DATE=$(date -u +%Y-%m-%dT%H:%M:%SZ)
+          LDFLAGS="-X github.com/ganbitlabs/walgo/internal/buildinfo.version=${VERSION}"
+          LDFLAGS="${LDFLAGS} -X github.com/ganbitlabs/walgo/internal/buildinfo.commit=${GITHUB_SHA}"
+          LDFLAGS="${LDFLAGS} -X github.com/ganbitlabs/walgo/internal/buildinfo.buildDate=${BUILD_DATE}"
+          wails build -platform windows/arm64 -clean -ldflags "$LDFLAGS"
 
       - name: Package App
         working-directory: ./desktop/build/bin
@@ -268,7 +292,13 @@ jobs:
       - name: Build Desktop App
         working-directory: ./desktop
         run: |
-          wails build -platform linux/amd64 -clean
+          # Stamp the same build info the CLI gets from GoReleaser.
+          VERSION=${GITHUB_REF#refs/tags/v}
+          BUILD_DATE=$(date -u +%Y-%m-%dT%H:%M:%SZ)
+          LDFLAGS="-X github.com/ganbitlabs/walgo/internal/buildinfo.version=${VERSION}"
+          LDFLAGS="${LDFLAGS} -X github.com/ganbitlabs/walgo/internal/buildinfo.commit=${GITHUB_SHA}"
+          LDFLAGS="${LDFLAGS} -X github.com/ganbitlabs/walgo/internal/buildinfo.buildDate=${BUILD_DATE}"
+          wails build -platform linux/amd64 -clean -ldflags "$LDFLAGS"
 
       - name: Package App
         working-directory: ./desktop/build/bin
