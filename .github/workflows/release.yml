@@ -68,6 +68,8 @@ jobs:
 
       - name: Build Desktop App
         working-directory: ./desktop
+        # Windows runners default to PowerShell, which cannot read this syntax.
+        shell: bash
         run: |
           # Stamp the same build info the CLI gets from GoReleaser.
           VERSION=${GITHUB_REF#refs/tags/v}
@@ -126,6 +128,8 @@ jobs:
 
       - name: Build Desktop App
         working-directory: ./desktop
+        # Windows runners default to PowerShell, which cannot read this syntax.
+        shell: bash
         run: |
           # Stamp the same build info the CLI gets from GoReleaser.
           VERSION=${GITHUB_REF#refs/tags/v}
@@ -184,6 +188,8 @@ jobs:
 
       - name: Build Desktop App
         working-directory: ./desktop
+        # Windows runners default to PowerShell, which cannot read this syntax.
+        shell: bash
         run: |
           # Stamp the same build info the CLI gets from GoReleaser.
           VERSION=${GITHUB_REF#refs/tags/v}
@@ -235,6 +241,8 @@ jobs:
 
       - name: Build Desktop App
         working-directory: ./desktop
+        # Windows runners default to PowerShell, which cannot read this syntax.
+        shell: bash
         run: |
           # Stamp the same build info the CLI gets from GoReleaser.
           VERSION=${GITHUB_REF#refs/tags/v}
@@ -291,6 +299,8 @@ jobs:
 
       - name: Build Desktop App
         working-directory: ./desktop
+        # Windows runners default to PowerShell, which cannot read this syntax.
+        shell: bash
         run: |
           # Stamp the same build info the CLI gets from GoReleaser.
           VERSION=${GITHUB_REF#refs/tags/v}
